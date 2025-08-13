@@ -43,7 +43,9 @@ export const useRoomStore = create<State & Actions>()(
   persist<State & Actions>(
     (set, get) => ({
       rooms: {},
-      selectedRoom: null,
+      selectedRoom: (() => {
+        try { return localStorage.getItem('lastSelectedRoom') } catch { return null }
+      })(),
   messages: {},
   owners: {},
   members: {},
@@ -55,7 +57,10 @@ export const useRoomStore = create<State & Actions>()(
         delete m[id]
         set({ rooms: r, messages: m, selectedRoom: get().selectedRoom === id ? null : get().selectedRoom })
       },
-      selectRoom: (id) => set({ selectedRoom: id }),
+      selectRoom: (id) => {
+        set({ selectedRoom: id })
+        try { if (id) localStorage.setItem('lastSelectedRoom', id); else localStorage.removeItem('lastSelectedRoom') } catch {}
+      },
       addRoomMessage: (id, msg) => {
         const list = get().messages[id] ? [...get().messages[id]] : []
         if (!list.some(m => m.id === msg.id)) {

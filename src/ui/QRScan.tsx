@@ -75,8 +75,8 @@ export function QRScan({ onResult, onClose }: { onResult: (text: string) => void
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'grid', placeItems: 'center' }}>
-      <div style={{ background: '#fff', padding: 16, borderRadius: 8, width: 360 }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'grid', placeItems: 'center', zIndex: 10000 }}>
+      <div style={{ background: 'var(--card)', color: 'var(--fg)', border: '1px solid var(--border)', padding: 16, borderRadius: 8, width: 360 }}>
         <h3 style={{ marginTop: 0 }}>Scan npub QR</h3>
         {supported ? (
           <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', borderRadius: 8, background: '#000' }} />

@@ -133,11 +133,13 @@ export function startNostrEngine(sk: string) {
             const roomId = evt.tags.find(t => t[0] === 'e')?.[1]
             if (roomId) {
               useRoomStore.getState().addRoom({ id: roomId })
-              // membership/owner gate: ignore messages for rooms we're not in
+              // membership/owner gate: if we know membership and we're not a member, ignore.
+              // If membership unknown yet, accept to avoid dropping messages before metadata arrives.
               const owner = useRoomStore.getState().owners[roomId]
               const mem = useRoomStore.getState().members[roomId]
+              const know = !!owner || !!(mem && Object.keys(mem).length)
               const isMember = owner === pk || !!(mem && mem[pk])
-              if (!isMember) return
+              if (know && !isMember) return
               let text: string | undefined
               let attachment: string | undefined
               let attachments: string[] | undefined
@@ -156,9 +158,12 @@ export function startNostrEngine(sk: string) {
                       if (ref && ref.enc && (ref.url || ref.ctInline)) {
                         let b64: string | null = null
                         if (typeof ref.url === 'string') {
-                          const key = parseMemUrl(ref.url)
-                          if (key) {
-                            const obj = await getObject(key)
+                          const memKey = parseMemUrl(ref.url)
+                          if (memKey) {
+                            const obj = await getObject(memKey)
+                            if (obj) b64 = obj.base64Data
+                          } else {
+                            const obj = await getObject(ref.url)
                             if (obj) b64 = obj.base64Data
                           }
                         }
@@ -233,6 +238,28 @@ export function startNostrEngine(sk: string) {
   for (const ws of pool.values()) {
     attachHandlers(ws)
   }
+}
+
+// Lightweight data refresh: re-send subscription REQs to all connected relays
+export function refreshSubscriptions() {
+  try {
+    const sk = localStorage.getItem('nostr_sk')
+    if (!sk) return
+    const pk = getPublicKey(hexToBytes(sk))
+    const urls = useRelayStore.getState().relays.filter(r => r.enabled).map(r => r.url)
+    const pool = getRelayPool(urls)
+    const sub = JSON.stringify(["REQ", "inbox", { kinds: [4], authors: [pk] }])
+    const sub2 = JSON.stringify(["REQ", "inbox2", { kinds: [4], '#p': [pk] }])
+    const subTyping = JSON.stringify(["REQ", "typing", { kinds: [20000], '#p': [pk] }])
+    const subRooms = JSON.stringify(["REQ", "rooms", { kinds: [40,41,42] }])
+    for (const ws of pool.values()) {
+      if (ws.readyState === ws.OPEN) {
+        try {
+          ws.send(sub); ws.send(sub2); ws.send(subTyping); ws.send(subRooms)
+        } catch {}
+      }
+    }
+  } catch {}
 }
 
 export async function sendDM(sk: string, to: string, payload: { t?: string; a?: any; as?: any[]; p?: string }) {
@@ -313,7 +340,7 @@ export async function sendRoom(sk: string, roomId: string, text?: string, opts?:
   const now = Math.floor(Date.now() / 1000)
   const evtIdSeed = Math.floor(Math.random() * 1e9)
   const processOne = async (d: any): Promise<any> => {
-    if (typeof d === 'string' && d.startsWith('data:') && opts?.p) {
+  if (typeof d === 'string' && d.startsWith('data:') && opts?.p) {
       const enc = await encryptDataURL(d, opts.p)
       const key = `${roomId}:${evtIdSeed}:${Math.random().toString(36).slice(2)}`
       const url = await putObject(key, enc.mime, enc.ct)

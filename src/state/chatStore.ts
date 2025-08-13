@@ -37,7 +37,9 @@ export const useChatStore = create<State & Actions>()(
   persist<State & Actions>(
     (set, get) => ({
       myPubkey: null,
-      selectedPeer: null,
+      selectedPeer: (() => {
+        try { return localStorage.getItem('lastSelectedPeer') } catch { return null }
+      })(),
       conversations: {},
       lastRead: {},
   blocked: {},
@@ -45,6 +47,7 @@ export const useChatStore = create<State & Actions>()(
       setMyPubkey: (pk: string | null) => set({ myPubkey: pk }),
       selectPeer: (pk: string | null) => {
         set({ selectedPeer: pk })
+        try { if (pk) localStorage.setItem('lastSelectedPeer', pk); else localStorage.removeItem('lastSelectedPeer') } catch {}
         if (pk) {
           // mark read to newest message when switching
           const msgs = get().conversations[pk] || []

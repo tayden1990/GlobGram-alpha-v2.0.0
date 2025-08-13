@@ -12,7 +12,8 @@
     "jsx": "react-jsx",
     "strict": true,
     "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true
+  "forceConsistentCasingInFileNames": true,
+  "types": ["node"]
   },
   "include": ["src"]
 }

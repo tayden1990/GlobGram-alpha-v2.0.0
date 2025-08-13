@@ -36,7 +36,7 @@ export function RelayManager() {
   const badge = (rs?: number) => rs === WebSocket.OPEN ? '🟢' : rs === WebSocket.CONNECTING ? '🟡' : '🔴'
 
   return (
-    <section style={{ marginTop: 12, padding: 12, border: '1px solid #eee', borderRadius: 8 }}>
+    <section style={{ marginTop: 12, padding: 12, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--card)', color: 'var(--fg)' }}>
       <h3 style={{ marginTop: 0 }}>Relays</h3>
       <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
         <input placeholder="wss://..." value={url} onChange={(e) => setUrl(e.target.value)} style={{ flex: 1 }} />

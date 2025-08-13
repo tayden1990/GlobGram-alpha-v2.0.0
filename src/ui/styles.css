@@ -1,0 +1,49 @@
+/* Base reset */
+* { box-sizing: border-box }
+html, body, #root { height: 100% }
+:root {
+	color-scheme: light dark;
+	--bg: #fafafa; --fg: #222; --card: #fff; --muted: #666; --border: #eee; --accent: #1976d2;
+	--selected: rgba(25, 118, 210, 0.12);
+	--bubble: #f2f2f2; --bubble-fg: #222;
+}
+[data-theme="dark"] {
+	--bg: #0f1115; --fg: #e7e7e7; --card: #161a22; --muted: #9aa4b2; --border: #222633; --accent: #64b5f6;
+	--selected: rgba(100, 181, 246, 0.16);
+	--bubble: #1f2430; --bubble-fg: #e7e7e7;
+}
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme]) { --bg: #0f1115; --fg: #e7e7e7; --card: #161a22; --muted: #9aa4b2; --border: #222633; --accent: #64b5f6; --selected: rgba(100, 181, 246, 0.16); --bubble: #1f2430; --bubble-fg: #e7e7e7; }
+}
+body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: var(--bg); color: var(--fg) }
+
+/* Make buttons and inputs finger-friendly */
+button { cursor: pointer; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--fg); padding: 8px 12px }
+button:active { transform: translateY(1px) }
+input, select { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--card); color: var(--fg) }
+
+/* Utility classes */
+.hidden { display: none !important }
+.row { display: flex; gap: 8px }
+.col { display: flex; flex-direction: column }
+.grow { flex: 1 }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 10px }
+.sticky-footer { position: sticky; bottom: 0; background: var(--card); z-index: 5; box-shadow: 0 -2px 12px rgba(0,0,0,0.06); padding-bottom: calc(env(safe-area-inset-bottom) + 12px) }
+.fab-menu { transition: opacity 180ms ease, transform 180ms ease; transform-origin: bottom right }
+.fab-menu.hidden { opacity: 0; transform: translateY(6px) scale(0.98); pointer-events: none }
+.sticky-top { position: sticky; top: 0; z-index: 10; background: var(--card) }
+
+/* Drawer slide-in animation */
+.drawer-overlay { background: rgba(0,0,0,0.35); animation: overlayFade 180ms ease }
+.drawer-panel { transform: translateX(-12px); opacity: 0; animation: drawerIn 180ms ease forwards }
+/* Reverse (slide-out) */
+.drawer-overlay.closing { animation: overlayFade 160ms ease reverse forwards }
+.drawer-panel.closing { animation: drawerIn 160ms ease reverse forwards }
+@keyframes overlayFade { from { opacity: 0 } to { opacity: 1 } }
+@keyframes drawerIn { to { transform: translateX(0); opacity: 1 } }
+
+/* Mobile tweaks */
+@media (max-width: 900px) {
+	h1 { font-size: 20px; margin: 10px 16px 0 }
+	p { margin: 4px 16px 8px; font-size: 13px }
+}

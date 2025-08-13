@@ -2,12 +2,17 @@ import { useEffect, useRef, useState } from 'react'
 import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools'
 import { bytesToHex, hexToBytes } from '../nostr/utils'
 import { useChatStore } from '../state/chatStore'
+import * as QRCode from 'qrcode'
+import { useToast } from '../ui/Toast'
 
 export function KeyManager() {
   const [sk, setSk] = useState<string | null>(null)
   const [pk, setPk] = useState<string | null>(null)
+  const [showQR, setShowQR] = useState(false)
   const setMyPubkey = useChatStore(s => s.setMyPubkey)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const qrCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const { show } = useToast()
 
   useEffect(() => {
     const stored = localStorage.getItem('nostr_sk')
@@ -33,8 +38,80 @@ export function KeyManager() {
     if (!sk || !pk) return
   const nsec = nip19.nsecEncode(hexToBytes(sk))
   const npub = nip19.npubEncode(pk)
-    await navigator.clipboard.writeText(`${npub}\n${nsec}`)
-    alert('Copied npub and nsec to clipboard')
+  await navigator.clipboard.writeText(`${npub}\n${nsec}`)
+  show('Copied npub and nsec', 'success')
+  }
+
+  const copyNpub = async () => {
+    if (!pk) return
+    const npub = nip19.npubEncode(pk)
+  try { await navigator.clipboard.writeText(npub); show('npub copied', 'success') } catch { show('Copy failed', 'error') }
+  }
+
+  const copyNsec = async () => {
+    if (!sk) return
+    const ok = confirm('Copy your nsec to clipboard? Keep it secret!')
+    if (!ok) return
+    const nsec = nip19.nsecEncode(hexToBytes(sk))
+  try { await navigator.clipboard.writeText(nsec); show('nsec copied', 'success') } catch { show('Copy failed', 'error') }
+  }
+
+  const shareNpub = async () => {
+    if (!pk) return
+    const npub = nip19.npubEncode(pk)
+    // Use Web Share API if available; fallback to copy
+    try {
+      // @ts-ignore
+      if (navigator.share) {
+        // @ts-ignore
+  await navigator.share({ title: 'My Nostr npub', text: npub })
+      } else {
+  await navigator.clipboard.writeText(npub)
+  show('npub copied (sharing unsupported)', 'success')
+      }
+    } catch {}
+  }
+
+  const copyHexPubkey = async () => {
+    if (!pk) return
+  try { await navigator.clipboard.writeText(pk); show('pubkey (hex) copied', 'success') } catch { show('Copy failed', 'error') }
+  }
+
+  const downloadQR = () => {
+    if (!pk) return
+    const canvas = qrCanvasRef.current
+  if (!canvas) { show('QR not ready', 'error'); return }
+    try {
+      const npub = nip19.npubEncode(pk)
+      const url = canvas.toDataURL('image/png')
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `npub-qr-${npub.slice(0, 12)}.png`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+  } catch { show('Failed to export QR', 'error') }
+  }
+
+  const copyQRToClipboard = async () => {
+    const canvas = qrCanvasRef.current
+  if (!canvas) { show('QR not ready', 'error'); return }
+    try {
+      const toBlob = (): Promise<Blob> => new Promise((resolve, reject) => {
+        try { canvas.toBlob(b => b ? resolve(b) : reject(new Error('blob')),'image/png') } catch (e) { reject(e) }
+      })
+      const blob = await toBlob()
+      // @ts-ignore - ClipboardItem may not be typed in older TS libs
+      if (navigator.clipboard && typeof window.ClipboardItem !== 'undefined') {
+        // @ts-ignore
+  await navigator.clipboard.write([new window.ClipboardItem({ 'image/png': blob })])
+  show('QR copied to clipboard', 'success')
+      } else {
+        // Fallback: open image in a new tab for manual copy
+        const url = URL.createObjectURL(blob)
+        window.open(url, '_blank')
+      }
+  } catch { show('Copy failed', 'error') }
   }
 
   const downloadBackup = () => {
@@ -59,6 +136,15 @@ export function KeyManager() {
     a.remove()
     URL.revokeObjectURL(url)
   }
+
+  // Render QR locally when modal opens
+  useEffect(() => {
+    if (!showQR || !pk) return
+    const npub = nip19.npubEncode(pk)
+    const canvas = qrCanvasRef.current
+    if (!canvas) return
+    try { QRCode.toCanvas(canvas, npub, { width: 220 }) } catch {}
+  }, [showQR, pk])
 
   // Password-encrypted backup using AES-GCM + PBKDF2
   const exportEncrypted = async () => {
@@ -118,9 +204,9 @@ export function KeyManager() {
         setSk(decoded.secretHex)
         setPk(pub)
         setMyPubkey(pub)
-        alert('Encrypted backup imported')
+  show('Encrypted backup imported', 'success')
       } catch {
-        alert('Failed to decrypt backup')
+  show('Failed to decrypt backup', 'error')
       }
     }
     input.click()
@@ -149,7 +235,7 @@ export function KeyManager() {
     } catch {}
     // basic hex validation
     if (!/^[0-9a-fA-F]{64}$/.test(secretHex)) {
-      alert('Invalid key format')
+  show('Invalid key format', 'error')
       return
     }
     const pub = getPublicKey(hexToBytes(secretHex))
@@ -190,7 +276,7 @@ export function KeyManager() {
         }
       }
       if (!secretHex || !/^[0-9a-fA-F]{64}$/.test(secretHex)) {
-        alert('Could not read a valid key from the selected file')
+  show('Could not read a valid key from the selected file', 'error')
         return
       }
       const pub = getPublicKey(hexToBytes(secretHex))
@@ -198,9 +284,9 @@ export function KeyManager() {
       setSk(secretHex)
       setPk(pub)
       setMyPubkey(pub)
-      alert('Account imported from file')
+  show('Account imported from file', 'success')
     } catch (e) {
-      alert('Failed to import file')
+  show('Failed to import file', 'error')
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
@@ -218,12 +304,39 @@ export function KeyManager() {
       <h2>Keys</h2>
       {pk ? (
         <div>
-          <div><b>pubkey:</b> {pk}</div>
-          <div><b>secret:</b> {sk?.slice(0, 8)}…</div>
-          <button onClick={clear}>Forget</button>
-          <button onClick={exportKeys} style={{ marginLeft: 8 }}>Copy npub/nsec</button>
-          <button onClick={downloadBackup} style={{ marginLeft: 8 }}>Export npub/nsec (file)</button>
-          <button onClick={exportEncrypted} style={{ marginLeft: 8 }}>Export (encrypted)</button>
+          <div style={{ display: 'grid', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <div><b>pubkey (hex):</b> <span style={{ fontFamily: 'monospace' }}>{pk}</span></div>
+              <button onClick={copyHexPubkey}>Copy hex</button>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <div><b>npub:</b> <span style={{ fontFamily: 'monospace' }}>{nip19.npubEncode(pk)}</span></div>
+              <button onClick={copyNpub}>Copy</button>
+              <button onClick={() => setShowQR(true)}>Show QR</button>
+              <button onClick={shareNpub}>Share</button>
+            </div>
+            <div><b>secret:</b> {sk?.slice(0, 8)}… <button onClick={copyNsec} style={{ marginLeft: 8 }}>Copy nsec</button></div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+              <button onClick={clear}>Forget</button>
+              <button onClick={exportKeys}>Copy npub/nsec</button>
+              <button onClick={downloadBackup}>Export npub/nsec (file)</button>
+              <button onClick={exportEncrypted}>Export (encrypted)</button>
+            </div>
+          </div>
+      {showQR && (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'grid', placeItems: 'center', zIndex: 50 }}>
+              <div style={{ background: '#fff', padding: 16, borderRadius: 8, width: 320, textAlign: 'center' }}>
+                <h3 style={{ marginTop: 0 }}>My npub QR</h3>
+        <canvas ref={qrCanvasRef} style={{ width: 220, height: 220, borderRadius: 4 }} />
+                <div style={{ fontSize: 12, marginTop: 8, wordBreak: 'break-all' }}>{nip19.npubEncode(pk)}</div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+                  <button onClick={copyQRToClipboard}>Copy to clipboard</button>
+                  <button onClick={downloadQR}>Download PNG</button>
+                  <button onClick={() => setShowQR(false)}>Close</button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
