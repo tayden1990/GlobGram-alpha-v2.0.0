@@ -6,8 +6,10 @@ import { sendRoom } from '../nostr/engine'
 import { blobToDataURL, dataURLSize } from '../nostr/utils'
 import { useToast } from './Toast'
 import { THUMB_SIZE, PRELOAD_ROOT_MARGIN } from './constants'
+import { useIsMobile } from './useIsMobile'
 
 export function RoomWindow() {
+	const isMobile = useIsMobile(900)
 	const roomId = useRoomStore(s => s.selectedRoom)
 	const roomMessages = useRoomStore(s => s.messages)
 	const myPubkey = useChatStore(s => s.myPubkey)
@@ -39,6 +41,9 @@ export function RoomWindow() {
 	const topSentinelRef = useRef<HTMLDivElement | null>(null)
 	const [isPreloading, setIsPreloading] = useState(false)
 	const [lightbox, setLightbox] = useState<null | { type: 'image'|'video'|'audio'|'file'; src: string; name?: string }>(null)
+	// footer height (desktop) to avoid overlap; mobile handled via CSS padding-bottom
+	const footerRef = useRef<HTMLElement | null>(null)
+	const [footerH, setFooterH] = useState<number>(180)
 
 	// Grid layout ensures footer has its own row and never overlaps the scroller
 	
@@ -47,6 +52,24 @@ export function RoomWindow() {
 		const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setLightbox(null) }
 		window.addEventListener('keydown', onKey)
 		return () => window.removeEventListener('keydown', onKey)
+	}, [])
+
+	// Track footer height and update spacer to prevent overlap on desktop
+	useEffect(() => {
+		if (!footerRef.current) return
+		const el = footerRef.current
+		const update = () => setFooterH(el.offsetHeight || 180)
+		update()
+		let ro: ResizeObserver | null = null
+		try {
+			ro = new ResizeObserver(() => update())
+			ro.observe(el as Element)
+		} catch {}
+		window.addEventListener('resize', update)
+		return () => {
+			window.removeEventListener('resize', update)
+			try { ro && ro.disconnect() } catch {}
+		}
 	}, [])
 
 	// virtualized items (newest N)
@@ -246,6 +269,8 @@ export function RoomWindow() {
 						)
 					})}
 				</div>
+				{/* Spacer to ensure last message isn't hidden behind footer on desktop */}
+				{!isMobile && <div aria-hidden style={{ height: footerH }} />}
 				{isPreloading && <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', padding: 6 }}>Loading…</div>}
 			</div>
 
@@ -266,7 +291,7 @@ export function RoomWindow() {
 				</div>
 			)}
 
-			<footer className="sticky-footer">
+			<footer ref={footerRef as any} className="sticky-footer">
 				<div style={{ width: '100%' }}>
 				<textarea rows={5} placeholder="Type a message" value={text} onChange={(e) => setText(e.target.value)} onKeyDown={async (e) => {
 					if (e.key === 'Enter' && !e.shiftKey) {
