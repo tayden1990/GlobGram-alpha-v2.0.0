@@ -309,7 +309,7 @@ export default function App() {
     <div style={{ fontFamily: 'system-ui, sans-serif', height: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--fg)', overflow: 'hidden' }}>
       <div className="sticky-top" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px', borderBottom: '1px solid var(--border)', background: 'var(--card)' }}>
         <h1 style={{ margin: 0, fontSize: 22 }}>GlobGram Alpha</h1>
-        <span style={{ color: 'var(--muted)' }}>Decentralized DMs over Nostr</span>
+        {/* <span style={{ color: 'var(--muted)' }}>Decentralized DMs over Nostr</span> */}
         <div style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, alignItems: 'center' }}>
           <button title="Share invite" onClick={async () => {
             // Ensure we have a key
