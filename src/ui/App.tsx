@@ -5,9 +5,10 @@ import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { useIsMobile } from './useIsMobile'
 import { useChatStore } from '../state/chatStore'
 import { useRoomStore } from '../state/roomStore'
-import { nip19 } from 'nostr-tools'
+import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools'
 import { bytesToHex } from '../nostr/utils'
-import { createRoom, refreshSubscriptions } from '../nostr/engine'
+import { createRoom, refreshSubscriptions, sendDM } from '../nostr/engine'
+import * as QRCode from 'qrcode'
 
 const ChatWindowLazy = lazy(() => import('.').then(m => ({ default: m.ChatWindow })))
 const RoomWindowLazy = lazy(() => import('.').then(m => ({ default: m.RoomWindow })))
@@ -22,6 +23,8 @@ export default function App() {
   const [theme, setTheme] = useState<'system'|'light'|'dark'>(() => (localStorage.getItem('theme') as any) || 'system')
   const [fabOpen, setFabOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [inviteOpen, setInviteOpen] = useState(false)
+  const [inviteUrl, setInviteUrl] = useState<string>('')
   const [chatListOpen, setChatListOpen] = useState(true)
   const [roomListOpen, setRoomListOpen] = useState(() => isMobile ? false : true)
   const [chatDrawerOpen, setChatDrawerOpen] = useState(false)
@@ -33,6 +36,8 @@ export default function App() {
   const roomSwipeRef = useRef({ x: 0, y: 0, active: false })
   const chatHandleRef = useRef<HTMLButtonElement | null>(null)
   const roomHandleRef = useRef<HTMLButtonElement | null>(null)
+  const inviteCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const setMyPubkey = useChatStore(s => s.setMyPubkey)
 
   // apply theme
   const applyTheme = (t: 'system'|'light'|'dark') => {
@@ -47,6 +52,58 @@ export default function App() {
   useEffect(() => {
     try { localStorage.setItem('activeTab', activeTab) } catch {}
   }, [activeTab])
+
+  // Draw QR when invite modal opens
+  useEffect(() => {
+    if (!inviteOpen || !inviteUrl) return
+    const canvas = inviteCanvasRef.current
+    if (!canvas) return
+    try {
+      // @ts-ignore types vary between versions; use two-arg form
+      QRCode.toCanvas(canvas, inviteUrl)
+    } catch {}
+  }, [inviteOpen, inviteUrl])
+
+  // Handle invite links: ?invite=<npub|hex>
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const invite = params.get('invite')
+    if (!invite) return
+    // Clean URL
+    try { window.history.replaceState({}, '', window.location.pathname + window.location.hash) } catch {}
+    (async () => {
+      // Ensure we only act once per inviter
+      let inviterHex = invite
+      try {
+        if (invite.startsWith('npub')) {
+          const dec = nip19.decode(invite)
+          inviterHex = typeof dec.data === 'string' ? dec.data : bytesToHex(dec.data as Uint8Array)
+        }
+      } catch {}
+      if (!/^[0-9a-fA-F]{64}$/.test(inviterHex)) return
+      const ackKey = `invite_ack_${inviterHex}`
+      if (localStorage.getItem(ackKey)) return
+      // Ensure we have an account
+      let sk = localStorage.getItem('nostr_sk')
+      if (!sk) {
+        const secret = generateSecretKey()
+        const hexd = bytesToHex(secret)
+        const pub = getPublicKey(secret)
+        localStorage.setItem('nostr_sk', hexd)
+        setMyPubkey(pub)
+        sk = hexd
+      }
+      // Send hello DM and focus chat
+      try {
+        // slight delay to allow engine to start
+        setTimeout(async () => {
+          await sendDM(sk!, inviterHex, { t: 'Hi, I am here from now' })
+          selectPeer(inviterHex)
+          localStorage.setItem(ackKey, '1')
+        }, 400)
+      } catch {}
+    })()
+  }, [])
 
   // Prefetch heavy panels just-in-time (removed dynamic import to avoid TS module warning in isolated checks)
 
@@ -83,11 +140,38 @@ export default function App() {
   }, [chatListOpen, roomListOpen, isMobile])
   return (
     <ToastProvider>
-    <div style={{ fontFamily: 'system-ui, sans-serif', height: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--fg)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px 0' }}>
+    <div style={{ fontFamily: 'system-ui, sans-serif', height: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--fg)', overflow: 'hidden' }}>
+      <div className="sticky-top" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px', borderBottom: '1px solid var(--border)', background: 'var(--card)' }}>
         <h1 style={{ margin: 0, fontSize: 22 }}>GlobGram Alpha</h1>
         <span style={{ color: 'var(--muted)' }}>Decentralized DMs over Nostr</span>
         <div style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+          <button title="Share invite" onClick={async () => {
+            // Ensure we have a key
+            let sk = localStorage.getItem('nostr_sk')
+            if (!sk) {
+              const secret = generateSecretKey()
+              const hexd = bytesToHex(secret)
+              const pub = getPublicKey(secret)
+              localStorage.setItem('nostr_sk', hexd)
+              setMyPubkey(pub)
+              sk = hexd
+            }
+            // Build invite URL with my npub
+            const pk = useChatStore.getState().myPubkey
+            if (!pk) return
+            const npub = nip19.npubEncode(pk)
+            const base = (import.meta as any).env?.BASE_URL || '/'
+            const link = `${window.location.origin}${base}?invite=${encodeURIComponent(npub)}`
+            setInviteUrl(link)
+            setInviteOpen(true)
+            try {
+              // @ts-ignore - Web Share API optional
+              if (navigator.share) {
+                // @ts-ignore
+                await navigator.share({ title: 'Connect on GlobGram', text: 'Join me on GlobGram. Tap the link to start a secure chat.', url: link })
+              }
+            } catch {}
+          }}>Connect safely with your friend</button>
           <label style={{ fontSize: 12, color: 'var(--muted)' }}>Theme</label>
           <select value={theme} onChange={(e) => applyTheme(e.target.value as any)}>
             <option value="system">System</option>
@@ -120,34 +204,61 @@ export default function App() {
           </div>
         </Modal>
       )}
+      {inviteOpen && (
+        <Modal onClose={() => setInviteOpen(false)}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <h3 style={{ margin: 0 }}>Invite a friend</h3>
+            <button onClick={() => setInviteOpen(false)} aria-label="Close">✖</button>
+          </div>
+          <p style={{ marginTop: 0 }}>Scan or share this link to connect directly with you:</p>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+            <canvas ref={inviteCanvasRef} width={200} height={200} style={{ borderRadius: 8, background: '#fff' }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 240 }}>
+              <input readOnly value={inviteUrl} style={{ width: '100%' }} />
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button onClick={async () => { try { await navigator.clipboard.writeText(inviteUrl); } catch {} }}>Copy link</button>
+                <button onClick={async () => {
+                  try {
+                    // @ts-ignore
+                    if (navigator.share) {
+                      // @ts-ignore
+                      await navigator.share({ title: 'Connect on GlobGram', text: 'Join me on GlobGram. Tap the link to start a secure chat.', url: inviteUrl })
+                    }
+                  } catch {}
+                }}>Share…</button>
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
       {/* Mobile-first single-pane with tabs and list drawers */}
       {isMobile ? (
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, margin: 16, gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', padding: 16, gap: 10 }}>
           <NostrEngine />
           <div role="tablist" aria-label="Main sections" style={{ display: 'flex', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 999, padding: 4 }}>
             <button role="tab" aria-selected={activeTab==='chats'} onClick={() => { setActiveTab('chats'); setRoomDrawerOpen(false) }} style={{ flex: 1, borderRadius: 999, padding: '8px 12px', background: activeTab==='chats'? 'var(--accent)' : 'transparent', color: activeTab==='chats'? '#fff':'var(--fg)', border: 'none' }}>Chats</button>
             <button role="tab" aria-selected={activeTab==='rooms'} onClick={() => { setActiveTab('rooms'); setChatDrawerOpen(false) }} style={{ flex: 1, borderRadius: 999, padding: '8px 12px', background: activeTab==='rooms'? 'var(--accent)' : 'transparent', color: activeTab==='rooms'? '#fff':'var(--fg)', border: 'none' }}>Rooms</button>
           </div>
-          <div style={{ flex: 1, border: '1px solid var(--border)', background: 'var(--card)', borderRadius: 8, overflow: 'hidden', position: 'relative' }}>
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', border: '1px solid var(--border)', background: 'var(--card)', borderRadius: 8, overflow: 'hidden', position: 'relative', height: 0 }}>
             {activeTab === 'chats' ? (
-              <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%' }}>
                 <div className="sticky-top" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 8px', borderBottom: '1px solid var(--border)', background: 'var(--card)' }}>
                   <button ref={chatButtonRef} title="Show chats" aria-label="Show chats list" onClick={() => setChatDrawerOpen(true)}>☰</button>
                   <div style={{ color: 'var(--muted)', fontSize: 12 }}>Chats</div>
                 </div>
-                <div style={{ flex: 1, minHeight: 0 }}>
+                <div style={{ flex: 1, minHeight: 0, height: 0 }}>
                   <Suspense fallback={<div style={{ padding: 16 }}>Loading…</div>}>
                     <ChatWindowLazy />
                   </Suspense>
                 </div>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%' }}>
                 <div className="sticky-top" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 8px', borderBottom: '1px solid var(--border)', background: 'var(--card)' }}>
                   <button ref={roomButtonRef} title="Show rooms" aria-label="Show rooms list" onClick={() => setRoomDrawerOpen(true)}>☰</button>
                   <div style={{ color: 'var(--muted)', fontSize: 12 }}>Rooms</div>
                 </div>
-                <div style={{ flex: 1, minHeight: 0 }}>
+                <div style={{ flex: 1, minHeight: 0, height: 0 }}>
                   <Suspense fallback={<div style={{ padding: 16 }}>Loading…</div>}>
                     <RoomWindowLazy />
                   </Suspense>
@@ -206,10 +317,10 @@ export default function App() {
         </div>
       ) : (
         // Desktop/tablet split view
-        <div style={{ display: 'flex', flex: 1, border: '1px solid var(--border)', background: 'var(--card)', borderRadius: 8, overflow: 'hidden', margin: 16 }}>
+        <div style={{ display: 'flex', flex: 1, border: '1px solid var(--border)', background: 'var(--card)', borderRadius: 8, overflow: 'hidden', margin: 16, minHeight: 0 }}>
           <NostrEngine />
-          <div style={{ display: 'flex', flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', flex: 1, minWidth: 0, minHeight: 0 }}>
+            <div style={{ display: 'flex', flex: 1, minWidth: 0, minHeight: 0 }}>
               {chatListOpen ? (
                 <ChatList onCollapse={() => { setChatListOpen(false); setTimeout(() => chatHandleRef.current?.focus(), 0) }} />
               ) : (
@@ -218,12 +329,14 @@ export default function App() {
                   <span style={{ fontSize: 10, color: 'var(--muted)' }}>Alt+1</span>
                 </div>
               )}
-              <Suspense fallback={<div style={{ padding: 16 }}>Loading…</div>}>
-                <ChatWindowLazy />
-              </Suspense>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+                <Suspense fallback={<div style={{ padding: 16 }}>Loading…</div>}>
+                  <ChatWindowLazy />
+                </Suspense>
+              </div>
             </div>
             <div style={{ width: 1, background: 'var(--border)' }} />
-            <div style={{ display: 'flex', flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', flex: 1, minWidth: 0, minHeight: 0 }}>
               {roomListOpen ? (
                 <RoomList onCollapse={() => { setRoomListOpen(false); setTimeout(() => roomHandleRef.current?.focus(), 0) }} />
               ) : (
@@ -232,9 +345,11 @@ export default function App() {
                   <span style={{ fontSize: 10, color: 'var(--muted)' }}>Alt+2</span>
                 </div>
               )}
-              <Suspense fallback={<div style={{ padding: 16 }}>Loading…</div>}>
-                <RoomWindowLazy />
-              </Suspense>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+                <Suspense fallback={<div style={{ padding: 16 }}>Loading…</div>}>
+                  <RoomWindowLazy />
+                </Suspense>
+              </div>
             </div>
           </div>
         </div>

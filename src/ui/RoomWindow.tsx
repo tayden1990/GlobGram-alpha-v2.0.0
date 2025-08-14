@@ -40,6 +40,9 @@ export function RoomWindow() {
 	const [isPreloading, setIsPreloading] = useState(false)
 	const [lightbox, setLightbox] = useState<null | { type: 'image'|'video'|'audio'|'file'; src: string; name?: string }>(null)
 
+	// Grid layout ensures footer has its own row and never overlaps the scroller
+	
+
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setLightbox(null) }
 		window.addEventListener('keydown', onKey)
@@ -51,8 +54,14 @@ export function RoomWindow() {
 	const rowVirtualizer = useVirtualizer({
 		count: items.length,
 		getScrollElement: () => scrollerRef.current,
-		estimateSize: () => 120,
+		estimateSize: () => 240,
 		overscan: 8,
+		// Ensure dynamic heights (images, wraps) are re-measured automatically
+		measureElement: (el: Element) => (el as HTMLElement).getBoundingClientRect().height,
+		getItemKey: (index) => {
+			const it: any = items[index]
+			return it?.id ?? it?.ts ?? index
+		}
 	})
 
 	function readableSize(bytes: number) {
@@ -84,9 +93,9 @@ export function RoomWindow() {
 	useEffect(() => {
 		const scroller = scrollerRef.current
 		if (!scroller) return
-		const distanceFromBottom = rowVirtualizer.getTotalSize() - scroller.scrollTop - scroller.clientHeight
+		const distanceFromBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
 		if (distanceFromBottom < 120) {
-			scroller.scrollTop = rowVirtualizer.getTotalSize()
+			scroller.scrollTop = scroller.scrollHeight
 		}
 	}, [msgs.length])
 
@@ -103,13 +112,13 @@ export function RoomWindow() {
 			if (entry && entry.isIntersecting && msgs.length > visibleCount && !loadingMoreRef.current) {
 				loadingMoreRef.current = true
 				setIsPreloading(true)
-				const prevTotal = rowVirtualizer.getTotalSize()
+				const prevTotal = root.scrollHeight
 				const prevTop = root.scrollTop
 				setVisibleCount(c => {
 					const next = Math.min(c + 50, msgs.length)
 					setTimeout(() => {
 						rowVirtualizer.measure()
-						const newTotal = rowVirtualizer.getTotalSize()
+						const newTotal = root.scrollHeight
 						root.scrollTop = newTotal - prevTotal + prevTop
 						loadingMoreRef.current = false
 						setIsPreloading(false)
@@ -122,7 +131,7 @@ export function RoomWindow() {
 		return () => obs.disconnect()
 	}, [msgs.length, visibleCount])
 
-	if (!roomId) return <section style={{ flex: 1, padding: 16 }}>Select a room</section>
+	if (!roomId) return <section style={{ flex: 1, padding: 16, height: '100%' }}>Select a room</section>
 
 	// cleanup on unmount
 	useEffect(() => {
@@ -135,7 +144,13 @@ export function RoomWindow() {
 	}, [])
 
 	return (
-		<section role="main" aria-label="Room messages" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
+		<section role="main" aria-label="Room messages" style={{ 
+			flex: 1, 
+			minHeight: 0, 
+			display: 'grid', 
+			gridTemplateRows: '1fr auto',
+			overflow: 'hidden'
+		}}
 			onDragOver={(e) => { e.preventDefault() }}
 			onDrop={async (e) => {
 				e.preventDefault()
@@ -147,44 +162,48 @@ export function RoomWindow() {
 				setAttachment(url)
 			}}
 		>
-					<header style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12, background: 'var(--card)' }}>
-						<div style={{ fontFamily: 'monospace' }}>Room {roomId.slice(0, 12)}…</div>
-						<label title="Encrypt media attachments with a passphrase" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
-							<input type="checkbox" checked={encOn} onChange={(e) => setEncOn(e.target.checked)} /> Encrypt media
-						</label>
-						{encOn && (
-							<input type="password" placeholder="media passphrase" value={encPass} onChange={e => setEncPass(e.target.value)} style={{ width: 160 }} />
-						)}
-					</header>
-			<div ref={scrollerRef} style={{ flex: 1, overflowY: 'auto', padding: 16, position: 'relative', background: 'var(--bg)', color: 'var(--fg)' }}>
+			<div ref={scrollerRef} className="scroll-y" style={{ 
+				minHeight: 0, 
+				height: '100%',
+				overflowY: 'auto', 
+				padding: 16, 
+				paddingBottom: 12, 
+				position: 'relative', 
+				background: 'var(--bg)', 
+				color: 'var(--fg)' 
+			}}>
 				<div ref={topSentinelRef} style={{ height: 1 }} />
-				<div style={{ height: rowVirtualizer.getTotalSize(), width: '100%', position: 'relative' }}>
+				<div style={{ height: Math.max(rowVirtualizer.getTotalSize(), scrollerRef.current?.clientHeight || 600), width: '100%', position: 'relative' }}>
 					{rowVirtualizer.getVirtualItems().map((vr) => {
 						const m = items[vr.index]
 						return (
 							<div
 								key={vr.key}
 								ref={rowVirtualizer.measureElement}
-								style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${vr.start}px)`, paddingBottom: 8 }}
+								style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${vr.start}px)`, paddingBottom: 8, boxSizing: 'border-box' }}
 							>
 								<div style={{ display: 'flex', justifyContent: m.from === myPubkey ? 'flex-end' : 'flex-start' }}>
-									<div style={{ maxWidth: 520 }}>
+									<div className="msg-grid" style={{ maxWidth: 520, display: 'grid', gridTemplateColumns: '1fr', gridAutoFlow: 'row', gridAutoRows: 'max-content', rowGap: 12, alignItems: 'start' }}>
 										{m.text && (
 											<div style={{ background: 'var(--bubble)', color: 'var(--bubble-fg)', borderRadius: 12, padding: '8px 10px' }}>{m.text}</div>
 										)}
 										{m.attachment?.startsWith('data:image/') && (
-											<div title="Open image" onClick={() => setLightbox({ type: 'image', src: m.attachment! })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: 'var(--border)', cursor: 'pointer' }}>
-												<img src={m.attachment} alt="image" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+											<div title="Open image" onClick={() => setLightbox({ type: 'image', src: m.attachment! })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: 'var(--border)', cursor: 'pointer', justifySelf: 'start' }}>
+												<img src={m.attachment} alt="image" loading="lazy" decoding="async" onLoad={() => rowVirtualizer.measure()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
 											</div>
 										)}
 										{m.attachment?.startsWith('data:video/') && (
-											<div title="Play video" onClick={() => setLightbox({ type: 'video', src: m.attachment! })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: '#000', position: 'relative', cursor: 'pointer' }}>
-												<video src={m.attachment} muted preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
+											<div title="Play video" onClick={() => setLightbox({ type: 'video', src: m.attachment! })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: '#000', position: 'relative', cursor: 'pointer', justifySelf: 'start' }}>
+												<video src={m.attachment} muted preload="metadata" onLoadedMetadata={() => rowVirtualizer.measure()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
 												<div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 28, textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>▶</div>
 											</div>
 										)}
+										{/* spacer to ensure separation from media above */}
+										<div style={{ height: 2 }} />
 										{m.attachment?.startsWith('data:audio/') && (
-											<button title="Play audio" onClick={() => setLightbox({ type: 'audio', src: m.attachment! })} style={{ padding: '6px 10px', borderRadius: 16, background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--fg)', cursor: 'pointer' }}>♫ Audio</button>
+											<div style={{ width: THUMB_SIZE, justifySelf: 'start' }}>
+												<button title="Play audio" onClick={() => setLightbox({ type: 'audio', src: m.attachment! })} className="msg-audio" style={{ width: '100%', padding: '6px 10px', borderRadius: 16, background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--fg)', cursor: 'pointer' }}>♫ Audio</button>
+											</div>
 										)}
 										{m.attachment && m.attachment.startsWith('data:') && !m.attachment.startsWith('data:image/') && !m.attachment.startsWith('data:video/') && !m.attachment.startsWith('data:audio/') && (
 											<div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -195,16 +214,21 @@ export function RoomWindow() {
 										)}
 										{m.attachments?.map((a: string, i: number) => (
 											a.startsWith('data:image/') ? (
-												<div key={i} title="Open image" onClick={() => setLightbox({ type: 'image', src: a })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: 'var(--border)', cursor: 'pointer' }}>
-													<img src={a} alt="image" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+												<div key={i} title="Open image" onClick={() => setLightbox({ type: 'image', src: a })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: 'var(--border)', cursor: 'pointer', justifySelf: 'start' }}>
+													<img src={a} alt="image" loading="lazy" decoding="async" onLoad={() => rowVirtualizer.measure()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
 												</div>
 											) : a.startsWith('data:video/') ? (
-												<div key={i} title="Play video" onClick={() => setLightbox({ type: 'video', src: a })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: '#000', position: 'relative', cursor: 'pointer' }}>
-													<video src={a} muted preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
+												<div key={i} title="Play video" onClick={() => setLightbox({ type: 'video', src: a })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: '#000', position: 'relative', cursor: 'pointer', justifySelf: 'start' }}>
+													<video src={a} muted preload="metadata" onLoadedMetadata={() => rowVirtualizer.measure()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
 													<div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 28, textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>▶</div>
 												</div>
 											) : a.startsWith('data:audio/') ? (
-												<button key={i} title="Play audio" onClick={() => setLightbox({ type: 'audio', src: a })} style={{ padding: '6px 10px', borderRadius: 16, background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--fg)', cursor: 'pointer' }}>♫ Audio</button>
+												<>
+													<div style={{ height: 2 }} />
+													<div style={{ width: THUMB_SIZE, justifySelf: 'start' }}>
+														<button key={i} title="Play audio" onClick={() => setLightbox({ type: 'audio', src: a })} className="msg-audio" style={{ width: '100%', padding: '6px 10px', borderRadius: 16, background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--fg)', cursor: 'pointer' }}>♫ Audio</button>
+													</div>
+												</>
 											) : a.startsWith('data:') ? (
 												<div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
 													<a href={a} download={filenameForDataUrl(a)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--accent)' }}>
@@ -213,7 +237,7 @@ export function RoomWindow() {
 												</div>
 											) : null
 										))}
-										<div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+										<div className="msg-meta" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
 											<div style={{ fontSize: 10, color: 'var(--muted)' }}>{new Date(m.ts * 1000).toLocaleTimeString()}</div>
 										</div>
 									</div>
@@ -242,9 +266,27 @@ export function RoomWindow() {
 				</div>
 			)}
 
-			<footer className="sticky-footer" style={{ borderTop: '1px solid var(--border)', padding: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-				<input placeholder="type a message" value={text} onChange={(e) => setText(e.target.value)} style={{ flex: 1 }} />
-				<input type="file" multiple onChange={async (e) => {
+			<footer className="sticky-footer">
+				<div style={{ width: '100%' }}>
+				<textarea rows={5} placeholder="Type a message" value={text} onChange={(e) => setText(e.target.value)} onKeyDown={async (e) => {
+					if (e.key === 'Enter' && !e.shiftKey) {
+						e.preventDefault()
+						const sk = localStorage.getItem('nostr_sk')
+						if (!sk || !roomId) return
+						const hasMedia = !!attachment || attachments.length > 0
+						const p = (encOn && hasMedia) ? encPass : undefined
+						if (encOn && hasMedia && !p) { show('Enter a media passphrase', 'error'); return }
+						if (!text && !attachment && attachments.length === 0) return
+						if (navigator.vibrate) try { navigator.vibrate(15) } catch {}
+						await sendRoom(sk, roomId, text || undefined, { a: attachment || undefined, as: attachments.length ? attachments : undefined, p })
+						setText('')
+						setAttachment(null)
+						setAttachments([])
+					}
+				}} style={{ width: '100%', resize: 'none', overflowY: 'auto', fontSize: 16, lineHeight: 1.35, background: 'var(--card)', color: 'var(--fg)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px' }} />
+				</div>
+				<div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', width: '100%' }}>
+				<input id="rw-file" type="file" multiple style={{ display: 'none' }} onChange={async (e) => {
 					const files = Array.from(e.target.files || [])
 					const urls: string[] = []
 					for (const file of files) {
@@ -255,7 +297,9 @@ export function RoomWindow() {
 					}
 					if (urls.length === 1) setAttachment(urls[0])
 					if (urls.length > 1) setAttachments(urls)
+					try { (e.target as HTMLInputElement).value = '' } catch {}
 				}} />
+				<button title="Attach files" onClick={() => (document.getElementById('rw-file') as HTMLInputElement)?.click()} style={{ padding: '6px 10px' }}>📎</button>
 				{/* camera photo capture */}
 				{!cameraOn ? (
 					<button title="Take photo" onClick={async () => {
@@ -367,6 +411,7 @@ export function RoomWindow() {
 				)}
 				{attachment && <span style={{ fontSize: 12 }}>attachment ready</span>}
 				{attachments.length > 0 && <span style={{ fontSize: 12 }}>{attachments.length} files ready</span>}
+				<div style={{ marginLeft: 'auto' }}>
 						<button style={{ minWidth: 88 }} onClick={async () => {
 					const sk = localStorage.getItem('nostr_sk')
 					if (!sk || !roomId) return
@@ -377,7 +422,9 @@ export function RoomWindow() {
 					setText('')
 					setAttachment(null)
 					setAttachments([])
-				}} disabled={!text && !attachment}>Send</button>
+				}} disabled={!text && !attachment && attachments.length===0}>Send</button>
+				</div>
+				</div>
 			</footer>
 		</section>
 	)

@@ -7,6 +7,38 @@ html, body, #root { height: 100% }
 	--selected: rgba(25, 118, 210, 0.12);
 	--bubble: #f2f2f2; --bubble-fg: #222;
 }
+
+	/* Ensure message content stacks one-per-row and media are block-level */
+	.msg-grid {
+		display: grid !important;
+		grid-auto-flow: row !important;
+		row-gap: 16px !important;
+		align-items: start !important;
+	}
+	.msg-grid > * { grid-column: 1 / -1 !important; position: relative }
+	.msg-grid img,
+	.msg-grid video {
+		display: block !important;
+	}
+	.msg-audio {
+		display: inline-flex;
+		align-self: start;
+		margin-top: 16px !important;
+	}
+	.msg-meta {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin-top: 8px;
+	}
+	.msg-meta .status {
+		font-size: 10px;
+		color: var(--muted);
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+	}
+	.msg-meta .status.failed { color: #d32f2f }
 [data-theme="dark"] {
 	--bg: #0f1115; --fg: #e7e7e7; --card: #161a22; --muted: #9aa4b2; --border: #222633; --accent: #64b5f6;
 	--selected: rgba(100, 181, 246, 0.16);
@@ -17,10 +49,101 @@ html, body, #root { height: 100% }
 }
 body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: var(--bg); color: var(--fg) }
 
+/* Scroll helpers for mobile */
+.scroll-y {
+	overflow-y: auto !important;
+	-webkit-overflow-scrolling: touch !important;
+	overscroll-behavior: contain !important;
+	touch-action: pan-y !important;
+}
+
+/* Mobile specific scrolling fixes */
+@media (max-width: 900px) {
+	/* Force entire mobile layout chain to have proper heights */
+	#root {
+		height: 100dvh !important;
+	}
+	
+	/* Force conversation containers to have proper height on mobile */
+	section[aria-label="Direct messages"],
+	section[aria-label="Room messages"] {
+		height: 100% !important;
+	}
+	
+	/* Force conversation area to take available space on mobile */
+	section[aria-label="Direct messages"] > div[class="scroll-y"],
+	section[aria-label="Room messages"] > div[class="scroll-y"] {
+		height: 100% !important;
+		min-height: 0 !important;
+		overflow-y: auto !important;
+		position: relative !important;
+		/* Add padding to prevent content from being hidden behind fixed footer */
+		padding-bottom: 200px !important;
+		/* Force hardware acceleration for smooth scrolling */
+		transform: translateZ(0);
+		will-change: scroll-position;
+		box-sizing: border-box !important;
+	}
+	
+	/* Ensure footer stays visible on mobile */
+	.sticky-footer {
+		position: fixed !important;
+		bottom: 0 !important;
+		left: 0 !important;
+		right: 0 !important;
+		z-index: 30 !important;
+		background: var(--card) !important;
+		border-top: 1px solid var(--border) !important;
+		padding: 12px !important;
+		padding-bottom: calc(env(safe-area-inset-bottom) + 16px) !important;
+		box-shadow: 0 -2px 12px rgba(0,0,0,0.1) !important;
+	}
+	
+	/* Make textarea smaller on mobile */
+	.sticky-footer textarea {
+		height: 60px !important;
+		min-height: 60px !important;
+		max-height: 120px !important;
+		font-size: 16px !important;
+		border-radius: 8px !important;
+		width: 100% !important;
+		box-sizing: border-box !important;
+	}
+	
+	/* Ensure send button is visible */
+	.sticky-footer button {
+		padding: 8px 16px !important;
+		min-width: 60px !important;
+	}
+	
+	/* Ensure Send button is always visible and accessible */
+	.sticky-footer button[style*="minWidth"] {
+		flex-shrink: 0 !important;
+		min-width: 88px !important;
+	}
+	
+	/* Ensure footer button row wraps properly on mobile */
+	.sticky-footer > div + div {
+		display: flex !important;
+		flex-wrap: wrap !important;
+		gap: 8px !important;
+		align-items: center !important;
+		justify-content: space-between !important;
+		width: 100% !important;
+	}
+	
+	/* Adjust FAB position to avoid overlap with footer */
+	div[style*="position: fixed"][style*="bottom: 16px"][style*="right: 16px"] {
+		bottom: 100px !important; /* Move FAB container above footer */
+	}
+}
+html, body { overscroll-behavior-y: none }
+
 /* Make buttons and inputs finger-friendly */
 button { cursor: pointer; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--fg); padding: 8px 12px }
 button:active { transform: translateY(1px) }
-input, select { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--card); color: var(--fg) }
+input, select, textarea { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--card); color: var(--fg) }
+textarea::placeholder { color: var(--muted) }
 
 /* Utility classes */
 .hidden { display: none !important }
@@ -28,10 +151,44 @@ input, select { border: 1px solid var(--border); border-radius: 8px; padding: 8p
 .col { display: flex; flex-direction: column }
 .grow { flex: 1 }
 .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px }
-.sticky-footer { position: sticky; bottom: 0; background: var(--card); z-index: 5; box-shadow: 0 -2px 12px rgba(0,0,0,0.06); padding-bottom: calc(env(safe-area-inset-bottom) + 12px) }
 .fab-menu { transition: opacity 180ms ease, transform 180ms ease; transform-origin: bottom right }
 .fab-menu.hidden { opacity: 0; transform: translateY(6px) scale(0.98); pointer-events: none }
 .sticky-top { position: sticky; top: 0; z-index: 10; background: var(--card) }
+
+/* Footer styles */
+.sticky-footer { 
+	position: sticky; 
+	bottom: 0; 
+	background: var(--card); 
+	z-index: 20; 
+	box-shadow: 0 -2px 12px rgba(0,0,0,0.06); 
+	padding: 12px;
+	padding-bottom: calc(env(safe-area-inset-bottom) + 12px);
+	display: flex; 
+	flex-direction: column; 
+	gap: 8px; 
+	align-items: stretch;
+	box-sizing: border-box;
+	border-top: 1px solid var(--border);
+}
+
+/* Footer button layout */
+.sticky-footer > div + div { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; width: 100% }
+.sticky-footer textarea { height: 120px !important; min-height: 120px !important; max-height: 260px !important; resize: none !important; font-size: 16px; line-height: 1.35; padding: 10px 12px; background: var(--card); color: var(--fg); border: 1px solid var(--border); border-radius: 8px }
+.sticky-footer input[type="file"] { display: none !important }
+
+/* Ensure correct layout even if footer class changes: target main sections */
+section[aria-label="Direct messages"] footer,
+section[aria-label="Room messages"] footer {
+	display: flex !important;
+	flex-direction: column !important;
+	gap: 8px !important;
+}
+/* Remove conflicting section-specific textarea rules - let mobile CSS handle it */
+section[aria-label="Direct messages"] input[type="file"],
+section[aria-label="Room messages"] input[type="file"] {
+	display: none !important;
+}
 
 /* Drawer slide-in animation */
 .drawer-overlay { background: rgba(0,0,0,0.35); animation: overlayFade 180ms ease }

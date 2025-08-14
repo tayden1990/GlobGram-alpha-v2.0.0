@@ -9,7 +9,8 @@ export type ChatMessage = {
   text?: string
   attachment?: string // data URL (legacy single)
   attachments?: string[] // data URLs (new multi)
-  status?: 'pending' | 'sent' | 'failed'
+  status?: 'pending' | 'sent' | 'delivered' | 'failed'
+  error?: string
 }
 
 type State = {
@@ -29,7 +30,7 @@ type Actions = {
   removeMessage: (peer: string, id: string) => void
   clearConversation: (peer: string) => void
   setBlocked: (peer: string, enabled: boolean) => void
-  updateMessageStatus: (peer: string, id: string, status: ChatMessage['status']) => void
+  updateMessageStatus: (peer: string, id: string, status: ChatMessage['status'], error?: string) => void
   setTyping: (peer: string, typing: boolean) => void
 }
 
@@ -92,9 +93,9 @@ export const useChatStore = create<State & Actions>()(
         else delete b[peer]
         set({ blocked: b })
       },
-      updateMessageStatus: (peer: string, id: string, status: ChatMessage['status']) => {
+      updateMessageStatus: (peer: string, id: string, status: ChatMessage['status'], error?: string) => {
         const convs = { ...get().conversations }
-        const list = (convs[peer] || []).map(m => m.id === id ? { ...m, status } : m)
+        const list = (convs[peer] || []).map(m => m.id === id ? { ...m, status, error: status === 'failed' ? (error || m.error) : undefined } : m)
         convs[peer] = list
         set({ conversations: convs })
       },

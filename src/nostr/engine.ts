@@ -19,17 +19,56 @@ export function startNostrEngine(sk: string) {
       ws.send(sub2)
   ws.send(subTyping)
   ws.send(subRooms)
+      ws.send(subReceipts)
     }
     ws.onmessage = async (ev) => {
       try {
         const data = JSON.parse(ev.data as string)
   if (Array.isArray(data) && data[0] === 'EVENT') {
           const evt = data[2] as Event
+          // delivery receipts (custom kind 10001)
+          if (evt.kind === (10001 as any)) {
+            const refId = evt.tags.find(t => t[0] === 'e')?.[1]
+            const pTo = evt.tags.find(t => t[0] === 'p')?.[1]
+            // Only accept receipts targeted to us and for a message we sent
+            if (pTo === pk && refId) {
+              // find peer from our conversations where this id exists and we are the sender
+              try {
+                const convs = useChatStore.getState().conversations
+                for (const [peer, list] of Object.entries(convs)) {
+                  const msg = list.find(m => m.id === refId)
+                  if (msg && msg.from === pk) {
+                    useChatStore.getState().updateMessageStatus(peer, refId, 'delivered')
+                    break
+                  }
+                }
+              } catch {}
+            }
+            return
+          }
           if (evt.kind === 4 && !seen.has(evt.id)) {
             seen.add(evt.id)
             const pTag = evt.tags.find(t => t[0] === 'p')?.[1] || ''
             const peerPk = evt.pubkey === pk ? pTag : evt.pubkey
             const txt = await nip04.decrypt(sk, peerPk, evt.content)
+            // If this DM is a receipt envelope { r: <eventId> }, mark delivered and skip adding a message
+            try {
+              const maybeReceipt = JSON.parse(txt)
+              if (maybeReceipt && typeof maybeReceipt.r === 'string') {
+                const refId = maybeReceipt.r as string
+                try {
+                  const convs = useChatStore.getState().conversations
+                  for (const [peer, list] of Object.entries(convs)) {
+                    const msg = list.find(m => m.id === refId)
+                    if (msg && msg.from === pk) {
+                      useChatStore.getState().updateMessageStatus(peer, refId, 'delivered')
+                      break
+                    }
+                  }
+                } catch {}
+                return
+              }
+            } catch {}
             let text: string | undefined
             let attachment: string | undefined
             let attachments: string[] | undefined
@@ -106,6 +145,40 @@ export function startNostrEngine(sk: string) {
               attachments,
             }
             if (!isBlocked) addMessage(peerPk, message)
+            // Also send an encrypted DM receipt back ({ r: evt.id }) so relays that drop custom kinds still allow delivery acks
+            try {
+              if (evt.pubkey !== pk) {
+                const receiptBody = JSON.stringify({ r: evt.id })
+                const ct = await nip04.encrypt(sk, evt.pubkey, receiptBody)
+                const receiptTemplate: EventTemplate = { kind: 4, created_at: Math.floor(Date.now()/1000), content: ct, tags: [["p", evt.pubkey]] }
+                const rEvt = finalizeEvent(receiptTemplate, hexToBytes(sk))
+                const pub = JSON.stringify(["EVENT", rEvt])
+                const urls = useRelayStore.getState().relays.filter(r => r.enabled).map(r => r.url)
+                const pool2 = getRelayPool(urls)
+                for (const ws2 of pool2.values()) {
+                  if (ws2.readyState === ws2.OPEN) ws2.send(pub)
+                  else if (ws2.readyState === ws2.CONNECTING) {
+                    try { ws2.addEventListener('open', () => ws2.send(pub), { once: true } as any) } catch {}
+                  }
+                }
+              }
+            } catch {}
+            // send a delivery receipt back to sender (kind 10001) with tag e:evt.id and p:sender
+            try {
+              if (evt.pubkey !== pk) {
+                const receipt: EventTemplate = { kind: 10001 as any, created_at: Math.floor(Date.now()/1000), content: 'delivered', tags: [["e", evt.id], ["p", evt.pubkey]] }
+                const rEvt = finalizeEvent(receipt, hexToBytes(sk))
+                const pub = JSON.stringify(["EVENT", rEvt])
+                const urls = useRelayStore.getState().relays.filter(r => r.enabled).map(r => r.url)
+                const pool2 = getRelayPool(urls)
+                for (const ws2 of pool2.values()) {
+                  if (ws2.readyState === ws2.OPEN) ws2.send(pub)
+                  else if (ws2.readyState === ws2.CONNECTING) {
+                    try { ws2.addEventListener('open', () => ws2.send(pub), { once: true } as any) } catch {}
+                  }
+                }
+              }
+            } catch {}
           } else if (evt.kind === 20000) {
             if (evt.pubkey !== pk) {
               const setTyping = useChatStore.getState().setTyping
@@ -218,6 +291,7 @@ export function startNostrEngine(sk: string) {
         ws.send(sub2)
         ws.send(subTyping)
         ws.send(subRooms)
+        ws.send(subReceipts)
       } catch {}
     }
   }
@@ -234,6 +308,7 @@ export function startNostrEngine(sk: string) {
   const sub2 = JSON.stringify(["REQ", "inbox2", { kinds: [4], '#p': [pk] }])
   const subTyping = JSON.stringify(["REQ", "typing", { kinds: [20000], '#p': [pk] }])
   const subRooms = JSON.stringify(["REQ", "rooms", { kinds: [40,41,42] }])
+  const subReceipts = JSON.stringify(["REQ", "receipts", { kinds: [10001 as any], '#p': [pk] }])
 
   for (const ws of pool.values()) {
     attachHandlers(ws)
@@ -252,10 +327,11 @@ export function refreshSubscriptions() {
     const sub2 = JSON.stringify(["REQ", "inbox2", { kinds: [4], '#p': [pk] }])
     const subTyping = JSON.stringify(["REQ", "typing", { kinds: [20000], '#p': [pk] }])
     const subRooms = JSON.stringify(["REQ", "rooms", { kinds: [40,41,42] }])
+  const subReceipts = JSON.stringify(["REQ", "receipts", { kinds: [10001 as any], '#p': [pk] }])
     for (const ws of pool.values()) {
       if (ws.readyState === ws.OPEN) {
         try {
-          ws.send(sub); ws.send(sub2); ws.send(subTyping); ws.send(subRooms)
+      ws.send(sub); ws.send(sub2); ws.send(subTyping); ws.send(subRooms); ws.send(subReceipts)
         } catch {}
       }
     }
@@ -285,7 +361,13 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
   const template: EventTemplate = { kind: 4, created_at: now, content: ciphertext, tags: [["p", to]] }
   const evt = finalizeEvent(template, hexToBytes(sk))
   const pub = JSON.stringify(["EVENT", evt])
-  const once: Record<string, boolean> = {}
+  // add pending message immediately to avoid race with fast OK acks
+  const me = getPublicKey(hexToBytes(sk))
+  const addMessage = useChatStore.getState().addMessage
+  addMessage(to, { id: evt.id, from: me, to, ts: now, text: payload.t, attachment: payload.a, attachments: payload.as, status: 'pending' })
+  let acked = false
+  let lastReason: string | undefined
+  const handlers: Array<{ ws: WebSocket, fn: (ev: MessageEvent) => void }> = []
   for (const ws of pool.values()) {
     if (ws.readyState === ws.OPEN) {
       ws.send(pub)
@@ -293,22 +375,40 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
         try {
           const data = JSON.parse((ev.data as string) || 'null')
           if (Array.isArray(data) && data[0] === 'OK' && data[1] === evt.id) {
-            if (once[evt.id]) return
-            once[evt.id] = true
             const ok = !!data[2]
-            useChatStore.getState().updateMessageStatus(to, evt.id, ok ? 'sent' : 'failed')
-            ws.removeEventListener('message', handler as any)
+            if (ok) {
+              if (acked) return
+              acked = true
+              useChatStore.getState().updateMessageStatus(to, evt.id, 'sent')
+              ws.removeEventListener('message', handler as any)
+              try { for (const h of handlers) h.ws.removeEventListener('message', h.fn as any) } catch {}
+            } else {
+              const reason = typeof data[3] === 'string' ? data[3] : undefined
+              if (reason) lastReason = reason
+            }
           }
         } catch {}
       }
-      try { ws.addEventListener('message', handler as any) } catch {}
+      try { ws.addEventListener('message', handler as any); handlers.push({ ws, fn: handler }) } catch {}
     } else if (ws.readyState === ws.CONNECTING) {
       try { ws.addEventListener('open', () => ws.send(pub), { once: true } as any) } catch {}
     }
   }
-  const me = getPublicKey(hexToBytes(sk))
-  const addMessage = useChatStore.getState().addMessage
-  addMessage(to, { id: evt.id, from: me, to, ts: now, text: payload.t, attachment: payload.a, attachments: payload.as, status: 'pending' })
+  // fallback: if no relay OK after 15s, mark as failed
+  try {
+    setTimeout(() => {
+      try {
+        if (acked) return
+        const conv = useChatStore.getState().conversations[to] || []
+        const found = conv.find(m => m.id === evt.id)
+        if (found && found.status === 'pending') {
+          useChatStore.getState().updateMessageStatus(to, evt.id, 'failed', lastReason || 'No relay acknowledgement')
+        }
+        try { for (const h of handlers) h.ws.removeEventListener('message', h.fn as any) } catch {}
+      } catch {}
+    }, 15000)
+  } catch {}
+  // message already added above
 }
 
 export async function sendTyping(sk: string, to: string) {

@@ -41,6 +41,9 @@ export function ChatWindow() {
   const topSentinelRef = useRef<HTMLDivElement | null>(null)
   const [isPreloading, setIsPreloading] = useState(false)
   const [lightbox, setLightbox] = useState<null | { type: 'image'|'video'|'audio'|'file'; src: string; name?: string }>(null)
+  
+  // Grid layout ensures footer has its own row and never overlaps the scroller
+  
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setLightbox(null) }
     window.addEventListener('keydown', onKey)
@@ -52,8 +55,14 @@ export function ChatWindow() {
   const rowVirtualizer = useVirtualizer({
     count: items.length,
     getScrollElement: () => scrollerRef.current,
-    estimateSize: () => 120,
+    estimateSize: () => 240,
     overscan: 8,
+    // Ensure dynamic heights (images, wraps) are re-measured automatically
+    measureElement: (el: Element) => (el as HTMLElement).getBoundingClientRect().height,
+    getItemKey: (index) => {
+      const it = items[index] as any
+      return it?.id ?? it?.ts ?? index
+    }
   })
 
   function readableSize(bytes: number) {
@@ -85,9 +94,9 @@ export function ChatWindow() {
   useEffect(() => {
     const scroller = scrollerRef.current
     if (!scroller) return
-    const distanceFromBottom = rowVirtualizer.getTotalSize() - scroller.scrollTop - scroller.clientHeight
+    const distanceFromBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
     if (distanceFromBottom < 120) {
-      scroller.scrollTop = rowVirtualizer.getTotalSize()
+      scroller.scrollTop = scroller.scrollHeight
     }
   }, [msgs.length])
 
@@ -104,13 +113,13 @@ export function ChatWindow() {
       if (entry && entry.isIntersecting && msgs.length > visibleCount && !loadingMoreRef.current) {
         loadingMoreRef.current = true
         setIsPreloading(true)
-        const prevTotal = rowVirtualizer.getTotalSize()
+        const prevTotal = root.scrollHeight
         const prevTop = root.scrollTop
         setVisibleCount(c => {
           const next = Math.min(c + 50, msgs.length)
           setTimeout(() => {
             rowVirtualizer.measure()
-            const newTotal = rowVirtualizer.getTotalSize()
+            const newTotal = root.scrollHeight
             root.scrollTop = newTotal - prevTotal + prevTop
             loadingMoreRef.current = false
             setIsPreloading(false)
@@ -140,7 +149,7 @@ export function ChatWindow() {
     return () => { try { unsub() } catch {} }
   }, [selectedPeer])
 
-  if (!selectedPeer) return <section style={{ flex: 1, padding: 16 }}>Select a chat</section>
+  if (!selectedPeer) return <section style={{ flex: 1, padding: 16, height: '100%' }}>Select a chat</section>
 
   // cleanup on unmount
   useEffect(() => {
@@ -153,7 +162,13 @@ export function ChatWindow() {
   }, [])
 
   return (
-    <section role="main" aria-label="Direct messages" style={{ flex: 1, display: 'flex', flexDirection: 'column' }} onDragOver={(e) => { e.preventDefault(); }} onDrop={async (e) => {
+  <section role="main" aria-label="Direct messages" style={{ 
+    flex: 1, 
+    minHeight: 0, 
+    display: 'grid', 
+    gridTemplateRows: '1fr auto',
+    overflow: 'hidden'
+  }} onDragOver={(e) => { e.preventDefault(); }} onDrop={async (e) => {
       e.preventDefault()
       const f = e.dataTransfer?.files?.[0]
       if (!f) return
@@ -162,48 +177,48 @@ export function ChatWindow() {
       if (dataURLSize(url) > 2 * 1024 * 1024) { show('Encoded file too large', 'error'); return }
       setAttachment(url)
     }}>
-  <header style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12, background: 'var(--card)' }}>
-        <div style={{ fontFamily: 'monospace' }}>Chat with {selectedPeer.slice(0, 12)}…</div>
-        <label style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <input type="checkbox" checked={!!blocked[selectedPeer]} onChange={(e) => setBlocked(selectedPeer, e.target.checked)} /> Block
-        </label>
-        <button onClick={() => { if (confirm('Clear entire conversation?')) clearConversation(selectedPeer) }}>Clear</button>
-        <label title="Encrypt media attachments with a passphrase" style={{ marginLeft: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <input type="checkbox" checked={encOn} onChange={(e) => setEncOn(e.target.checked)} /> Encrypt media
-        </label>
-        {encOn && (
-          <input type="password" placeholder="media passphrase" value={encPass} onChange={e => setEncPass(e.target.value)} style={{ width: 160 }} />
-        )}
-      </header>
-  <div ref={scrollerRef} style={{ flex: 1, overflowY: 'auto', padding: 16, position: 'relative', background: 'var(--bg)', color: 'var(--fg)' }}>
+  <div ref={scrollerRef} className="scroll-y" style={{ 
+    minHeight: 0, 
+    height: '100%',
+    overflowY: 'auto', 
+    padding: 16, 
+    paddingBottom: 12, 
+    position: 'relative', 
+    background: 'var(--bg)', 
+    color: 'var(--fg)' 
+  }}>
         <div ref={topSentinelRef} style={{ height: 1 }} />
-        <div style={{ height: rowVirtualizer.getTotalSize(), width: '100%', position: 'relative' }}>
+  <div style={{ height: Math.max(rowVirtualizer.getTotalSize(), scrollerRef.current?.clientHeight || 600), width: '100%', position: 'relative' }}>
           {rowVirtualizer.getVirtualItems().map((vr) => {
             const m = items[vr.index]
             return (
               <div
                 key={vr.key}
                 ref={rowVirtualizer.measureElement}
-                style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${vr.start}px)`, paddingBottom: 8 }}
+                style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${vr.start}px)`, paddingBottom: 8, boxSizing: 'border-box' }}
               >
                 <div style={{ display: 'flex', justifyContent: m.from === myPubkey ? 'flex-end' : 'flex-start' }}>
-                  <div style={{ maxWidth: 520 }}>
+                  <div className="msg-grid" style={{ maxWidth: 520, display: 'grid', gridTemplateColumns: '1fr', gridAutoFlow: 'row', gridAutoRows: 'max-content', rowGap: 12, alignItems: 'start' }}>
                     {m.text && (
                       <div style={{ background: 'var(--bubble)', color: 'var(--bubble-fg)', borderRadius: 12, padding: '8px 10px' }}>{m.text}</div>
                     )}
           {m.attachment?.startsWith('data:image/') && (
-                      <div title="Open image" onClick={() => setLightbox({ type: 'image', src: m.attachment! })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: 'var(--border)', cursor: 'pointer' }}>
-            <img src={m.attachment} alt="image" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                      <div title="Open image" onClick={() => setLightbox({ type: 'image', src: m.attachment! })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: 'var(--border)', cursor: 'pointer', justifySelf: 'start' }}>
+            <img src={m.attachment} alt="image" loading="lazy" decoding="async" onLoad={() => rowVirtualizer.measure()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                       </div>
                     )}
           {m.attachment?.startsWith('data:video/') && (
-                      <div title="Play video" onClick={() => setLightbox({ type: 'video', src: m.attachment! })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: '#000', position: 'relative', cursor: 'pointer' }}>
-            <video src={m.attachment} muted preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
+                      <div title="Play video" onClick={() => setLightbox({ type: 'video', src: m.attachment! })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: '#000', position: 'relative', cursor: 'pointer', justifySelf: 'start' }}>
+            <video src={m.attachment} muted preload="metadata" onLoadedMetadata={() => rowVirtualizer.measure()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
                         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 28, textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>▶</div>
                       </div>
                     )}
+                    {/* spacer to ensure separation from media above */}
+                    <div style={{ height: 2 }} />
                     {m.attachment?.startsWith('data:audio/') && (
-                      <button title="Play audio" onClick={() => setLightbox({ type: 'audio', src: m.attachment! })} style={{ padding: '6px 10px', borderRadius: 16, background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--fg)', cursor: 'pointer' }}>♫ Audio</button>
+                      <div style={{ width: THUMB_SIZE, justifySelf: 'start' }}>
+                        <button title="Play audio" onClick={() => setLightbox({ type: 'audio', src: m.attachment! })} className="msg-audio" style={{ width: '100%', padding: '6px 10px', borderRadius: 16, background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--fg)', cursor: 'pointer' }}>♫ Audio</button>
+                      </div>
                     )}
                     {m.attachment && m.attachment.startsWith('data:') && !m.attachment.startsWith('data:image/') && !m.attachment.startsWith('data:video/') && !m.attachment.startsWith('data:audio/') && (
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -237,16 +252,21 @@ export function ChatWindow() {
                     )}
                     {m.attachments?.map((a, i) => (
                       a.startsWith('data:image/') ? (
-                        <div key={i} title="Open image" onClick={() => setLightbox({ type: 'image', src: a })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: 'var(--border)', cursor: 'pointer' }}>
-                          <img src={a} alt="image" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                        <div key={i} title="Open image" onClick={() => setLightbox({ type: 'image', src: a })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: 'var(--border)', cursor: 'pointer', justifySelf: 'start' }}>
+                          <img src={a} alt="image" loading="lazy" decoding="async" onLoad={() => rowVirtualizer.measure()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                         </div>
                       ) : a.startsWith('data:video/') ? (
-                        <div key={i} title="Play video" onClick={() => setLightbox({ type: 'video', src: a })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: '#000', position: 'relative', cursor: 'pointer' }}>
-                          <video src={a} muted preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
+                        <div key={i} title="Play video" onClick={() => setLightbox({ type: 'video', src: a })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: '#000', position: 'relative', cursor: 'pointer', justifySelf: 'start' }}>
+                          <video src={a} muted preload="metadata" onLoadedMetadata={() => rowVirtualizer.measure()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
                           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 28, textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>▶</div>
                         </div>
                       ) : a.startsWith('data:audio/') ? (
-                        <button key={i} title="Play audio" onClick={() => setLightbox({ type: 'audio', src: a })} style={{ padding: '6px 10px', borderRadius: 16, background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--fg)', cursor: 'pointer' }}>♫ Audio</button>
+                        <>
+                          <div style={{ height: 2 }} />
+                          <div style={{ width: THUMB_SIZE, justifySelf: 'start' }}>
+                            <button key={i} title="Play audio" onClick={() => setLightbox({ type: 'audio', src: a })} className="msg-audio" style={{ width: '100%', padding: '6px 10px', borderRadius: 16, background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--fg)', cursor: 'pointer' }}>♫ Audio</button>
+                          </div>
+                        </>
                       ) : a.startsWith('data:') ? (
                         <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                           <a href={a} download={filenameForDataUrl(a)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--accent)' }}>
@@ -278,9 +298,37 @@ export function ChatWindow() {
                         </div>
                       ) : null
                     ))}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                    <div className="msg-meta" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                       <div style={{ fontSize: 10, color: 'var(--muted)' }}>{new Date(m.ts * 1000).toLocaleTimeString()}</div>
-                      {m.status && <span style={{ fontSize: 10, color: m.status==='failed'? '#d32f2f':'var(--muted)' }}>{m.status}</span>}
+            {m.status && (
+                        <span style={{ fontSize: 10, color: m.status==='failed'? '#d32f2f':'var(--muted)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          {m.status === 'pending' && <span title="Sending">⏳</span>}
+              {m.status === 'sent' && <span title="Sent">✓</span>}
+              {m.status === 'delivered' && <span title="Delivered">✓✓</span>}
+              {m.status === 'failed' && <span title="Failed">⚠</span>}
+              <span>{m.status === 'pending' ? 'Sending…' : m.status === 'sent' ? 'Sent' : m.status === 'delivered' ? 'Delivered' : 'Failed'}</span>
+                          {m.status === 'failed' && m.error && (
+                            <span style={{ color: '#d32f2f' }}>({m.error})</span>
+                          )}
+                        </span>
+                      )}
+                      {m.status === 'failed' && (
+                        <button
+                          style={{ fontSize: 10 }}
+                          onClick={async () => {
+                            const sk = localStorage.getItem('nostr_sk')
+                            if (!sk) return
+                            if (blocked[selectedPeer]) { show('This contact is blocked', 'error'); return }
+                            const hasMedia = !!m.attachment || (m.attachments && m.attachments.length > 0)
+                            const p = (encOn && hasMedia) ? encPass : undefined
+                            if (encOn && hasMedia && !p) { show('Enter a media passphrase', 'error'); return }
+                            // Replace the failed message with a fresh send
+                            removeMessage(selectedPeer, m.id)
+                            await sendDM(sk, selectedPeer, { t: m.text || undefined, a: m.attachment || undefined, as: (m.attachments && m.attachments.length ? m.attachments : undefined), p })
+                          }}
+                          title={m.error ? `Retry sending (reason: ${m.error})` : 'Retry sending'}
+                        >Retry</button>
+                      )}
                       <button style={{ fontSize: 10 }} onClick={() => {
                         if (confirm('Delete this message locally?')) removeMessage(selectedPeer, m.id)
                       }}>Delete</button>
@@ -291,8 +339,177 @@ export function ChatWindow() {
             )
           })}
         </div>
-  {isPreloading && <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', padding: 6 }}>Loading…</div>}
+        {isPreloading && <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', padding: 6 }}>Loading…</div>}
       </div>
+  <footer className="sticky-footer">
+        <div style={{ width: '100%' }}>
+          <textarea rows={5} placeholder="Type a message" value={text} onChange={async (e) => {
+            setText(e.target.value)
+            const sk = localStorage.getItem('nostr_sk')
+            if (sk && e.target.value.trim()) {
+              try { await sendTyping(sk, selectedPeer) } catch {}
+            }
+          }} onKeyDown={async (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              const sk = localStorage.getItem('nostr_sk')
+              if (!sk) return
+              if (blocked[selectedPeer]) { show('This contact is blocked', 'error'); return }
+              const hasMedia = !!attachment || attachments.length > 0
+              const p = (encOn && hasMedia) ? encPass : undefined
+              if (encOn && hasMedia && !p) { show('Enter a media passphrase', 'error'); return }
+              if (!text && !attachment && attachments.length === 0) return
+              if (navigator.vibrate) try { navigator.vibrate(15) } catch {}
+              await sendDM(sk, selectedPeer, { t: text || undefined, a: attachment || undefined, as: attachments.length ? attachments : undefined, p })
+              setText('')
+              setAttachment(null)
+              setAttachments([])
+            }
+          }} style={{ width: '100%', resize: 'none', overflowY: 'auto', fontSize: 16, lineHeight: 1.35, background: 'var(--card)', color: 'var(--fg)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px' }} />
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', width: '100%' }}>
+          <input id="cw-file" type="file" multiple style={{ display: 'none' }} onChange={async (e) => {
+            const files = Array.from(e.target.files || [])
+            const urls: string[] = []
+            for (const file of files) {
+              if (file.size > 2 * 1024 * 1024) { show('File too large (>2MB)', 'error'); continue }
+              const url = await blobToDataURL(file)
+              if (dataURLSize(url) > 2 * 1024 * 1024) { show('Encoded file too large', 'error'); continue }
+              urls.push(url)
+            }
+            if (urls.length === 1) setAttachment(urls[0])
+            if (urls.length > 1) setAttachments(urls)
+            // clear for same-file reselect
+            try { (e.target as HTMLInputElement).value = '' } catch {}
+          }} />
+          <button title="Attach files" onClick={() => (document.getElementById('cw-file') as HTMLInputElement)?.click()} style={{ padding: '6px 10px' }}>📎</button>
+          {/* camera photo capture */}
+          {!cameraOn ? (
+            <button title="Take photo" onClick={async () => {
+              if (!navigator.mediaDevices) { show('Camera unsupported', 'error'); return }
+              try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+                cameraStreamRef.current = stream
+                setCameraOn(true)
+                setTimeout(() => {
+                  if (cameraVideoRef.current) cameraVideoRef.current.srcObject = stream
+                }, 0)
+              } catch {
+                show('Failed to access camera', 'error')
+              }
+            }}>📷</button>
+          ) : (
+            <>
+              <video ref={cameraVideoRef} autoPlay muted style={{ width: 120, height: 72, background: '#000', borderRadius: 6 }} />
+              <button title="Capture" onClick={async () => {
+                const video = cameraVideoRef.current
+                const stream = cameraStreamRef.current
+                if (!video || !stream) return
+                const w = video.videoWidth || 640
+                const h = video.videoHeight || 360
+                const canvas = document.createElement('canvas')
+                canvas.width = w
+                canvas.height = h
+                const ctx = canvas.getContext('2d')
+                if (ctx) {
+                  ctx.drawImage(video, 0, 0, w, h)
+                  const url = canvas.toDataURL('image/jpeg', 0.9)
+                  if (dataURLSize(url) > 2 * 1024 * 1024) { show('Photo too large', 'error'); return }
+                  setAttachment(url)
+                }
+                stream.getTracks().forEach(t => t.stop())
+                setCameraOn(false)
+                cameraStreamRef.current = null
+              }}>📸</button>
+              <button title="Cancel" onClick={() => {
+                const stream = cameraStreamRef.current
+                if (stream) stream.getTracks().forEach(t => t.stop())
+                setCameraOn(false)
+                cameraStreamRef.current = null
+              }}>✖️</button>
+            </>
+          )}
+          {/* voice recording */}
+          {!recording ? (
+            <button onClick={async () => {
+              if (!navigator.mediaDevices || typeof MediaRecorder === 'undefined') { show('Recording unsupported', 'error'); return }
+              const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+              const mr = new MediaRecorder(stream)
+              mediaRecorderRef.current = mr
+              chunksRef.current = []
+              mr.ondataavailable = (ev) => { if (ev.data.size) chunksRef.current.push(ev.data) }
+              mr.onstop = async () => {
+                const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
+                if (blob.size > 1024 * 1024) { setRecording(false); show('Voice note too large (>1MB)', 'error'); return }
+                const url = await blobToDataURL(blob)
+                if (dataURLSize(url) > 1024 * 1024) { setRecording(false); show('Encoded audio too large', 'error'); return }
+                setAttachment(url)
+                setRecording(false)
+              }
+              mr.start()
+              setRecording(true)
+            }}>🎙️</button>
+          ) : (
+            <button onClick={() => {
+              const mr = mediaRecorderRef.current
+              if (mr && mr.state !== 'inactive') mr.stop()
+              if (mr) mr.stream.getTracks().forEach(t => t.stop())
+            }}>⏹️</button>
+          )}
+          {/* video recording */}
+          {!videoRecording ? (
+            <button title="Record video" onClick={async () => {
+              if (!navigator.mediaDevices || typeof MediaRecorder === 'undefined') { show('Recording unsupported', 'error'); return }
+              try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+                videoStreamRef.current = stream
+                const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus') ? 'video/webm;codecs=vp8,opus' : 'video/webm'
+                const mr = new MediaRecorder(stream, { mimeType: mime })
+                videoRecorderRef.current = mr
+                videoChunksRef.current = []
+                mr.ondataavailable = (ev) => { if (ev.data.size) videoChunksRef.current.push(ev.data) }
+                mr.onstop = async () => {
+                  const blob = new Blob(videoChunksRef.current, { type: 'video/webm' })
+                  if (blob.size > 2 * 1024 * 1024) { setVideoRecording(false); stream.getTracks().forEach(t => t.stop()); show('Video too large (>2MB)', 'error'); return }
+                  const url = await blobToDataURL(blob)
+                  if (dataURLSize(url) > 2 * 1024 * 1024) { setVideoRecording(false); stream.getTracks().forEach(t => t.stop()); show('Encoded video too large', 'error'); return }
+                  setAttachment(url)
+                  setVideoRecording(false)
+                  stream.getTracks().forEach(t => t.stop())
+                  videoStreamRef.current = null
+                }
+                mr.start()
+                setVideoRecording(true)
+              } catch {
+                show('Failed to access camera', 'error')
+              }
+            }}>🎥</button>
+          ) : (
+            <button title="Stop video" onClick={() => {
+              const mr = videoRecorderRef.current
+              if (mr && mr.state !== 'inactive') mr.stop()
+              const stream = videoStreamRef.current
+              if (stream) stream.getTracks().forEach(t => t.stop())
+            }}>⏹️</button>
+          )}
+          {attachment && <span style={{ fontSize: 12 }}>attachment ready</span>}
+          {attachments.length > 0 && <span style={{ fontSize: 12 }}>{attachments.length} files ready</span>}
+          <div style={{ marginLeft: 'auto' }}>
+            <button style={{ minWidth: 88 }} onClick={async () => {
+              if (navigator.vibrate) try { navigator.vibrate(15) } catch {}
+              const sk = localStorage.getItem('nostr_sk')
+              if (!sk) return
+              if (blocked[selectedPeer]) { show('This contact is blocked', 'error'); return }
+              const p = (encOn && (attachment || attachments.length)) ? encPass : undefined
+              if (encOn && (attachment || attachments.length) && !p) { show('Enter a media passphrase', 'error'); return }
+              await sendDM(sk, selectedPeer, { t: text || undefined, a: attachment || undefined, as: attachments.length ? attachments : undefined, p })
+              setText('')
+              setAttachment(null)
+              setAttachments([])
+            }} disabled={!text && !attachment && attachments.length===0}>Send</button>
+          </div>
+        </div>
+      </footer>
       {/* virtualized list with intersection preloading */}
       {lightbox && (
         <div onClick={() => setLightbox(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -310,152 +527,6 @@ export function ChatWindow() {
           <button onClick={() => setLightbox(null)} style={{ position: 'fixed', top: 16, right: 16, fontSize: 18, background: 'var(--card)', color: 'var(--fg)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 10px', cursor: 'pointer' }}>✖</button>
         </div>
       )}
-  <footer className="sticky-footer" style={{ borderTop: '1px solid var(--border)', padding: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <input placeholder="type a message" value={text} onChange={async (e) => {
-          setText(e.target.value)
-          const sk = localStorage.getItem('nostr_sk')
-          if (sk && e.target.value.trim()) {
-            try { await sendTyping(sk, selectedPeer) } catch {}
-          }
-        }} style={{ flex: 1 }} />
-    <input type="file" multiple onChange={async (e) => {
-          const f = e.target.files?.[0]
-          if (!f) return
-          const files = Array.from(e.target.files || [])
-          const urls: string[] = []
-          for (const file of files) {
-      if (file.size > 2 * 1024 * 1024) { show('File too large (>2MB)', 'error'); continue }
-            const url = await blobToDataURL(file)
-      if (dataURLSize(url) > 2 * 1024 * 1024) { show('Encoded file too large', 'error'); continue }
-            urls.push(url)
-          }
-          if (urls.length === 1) setAttachment(urls[0])
-          if (urls.length > 1) setAttachments(urls)
-        }} />
-        {/* camera photo capture */}
-        {!cameraOn ? (
-          <button title="Take photo" onClick={async () => {
-            if (!navigator.mediaDevices) { show('Camera unsupported', 'error'); return }
-            try {
-              const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-              cameraStreamRef.current = stream
-              setCameraOn(true)
-              setTimeout(() => {
-                if (cameraVideoRef.current) cameraVideoRef.current.srcObject = stream
-              }, 0)
-            } catch {
-              show('Failed to access camera', 'error')
-            }
-          }}>📷</button>
-        ) : (
-          <>
-            <video ref={cameraVideoRef} autoPlay muted style={{ width: 120, height: 72, background: '#000', borderRadius: 6 }} />
-            <button title="Capture" onClick={async () => {
-              const video = cameraVideoRef.current
-              const stream = cameraStreamRef.current
-              if (!video || !stream) return
-              const w = video.videoWidth || 640
-              const h = video.videoHeight || 360
-              const canvas = document.createElement('canvas')
-              canvas.width = w
-              canvas.height = h
-              const ctx = canvas.getContext('2d')
-              if (ctx) {
-                ctx.drawImage(video, 0, 0, w, h)
-                const url = canvas.toDataURL('image/jpeg', 0.9)
-                if (dataURLSize(url) > 2 * 1024 * 1024) { show('Photo too large', 'error'); return }
-                setAttachment(url)
-              }
-              stream.getTracks().forEach(t => t.stop())
-              setCameraOn(false)
-              cameraStreamRef.current = null
-            }}>📸</button>
-            <button title="Cancel" onClick={() => {
-              const stream = cameraStreamRef.current
-              if (stream) stream.getTracks().forEach(t => t.stop())
-              setCameraOn(false)
-              cameraStreamRef.current = null
-            }}>✖️</button>
-          </>
-          )}
-        {/* voice recording */}
-        {!recording ? (
-          <button onClick={async () => {
-            if (!navigator.mediaDevices || typeof MediaRecorder === 'undefined') { show('Recording unsupported', 'error'); return }
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-            const mr = new MediaRecorder(stream)
-            mediaRecorderRef.current = mr
-            chunksRef.current = []
-            mr.ondataavailable = (ev) => { if (ev.data.size) chunksRef.current.push(ev.data) }
-            mr.onstop = async () => {
-              const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
-              if (blob.size > 1024 * 1024) { setRecording(false); show('Voice note too large (>1MB)', 'error'); return }
-              const url = await blobToDataURL(blob)
-              if (dataURLSize(url) > 1024 * 1024) { setRecording(false); show('Encoded audio too large', 'error'); return }
-              setAttachment(url)
-              setRecording(false)
-            }
-            mr.start()
-            setRecording(true)
-          }}>🎙️</button>
-        ) : (
-          <button onClick={() => {
-            const mr = mediaRecorderRef.current
-            if (mr && mr.state !== 'inactive') mr.stop()
-            if (mr) mr.stream.getTracks().forEach(t => t.stop())
-          }}>⏹️</button>
-        )}
-        {/* video recording */}
-        {!videoRecording ? (
-          <button title="Record video" onClick={async () => {
-            if (!navigator.mediaDevices || typeof MediaRecorder === 'undefined') { show('Recording unsupported', 'error'); return }
-            try {
-              const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-              videoStreamRef.current = stream
-              const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus') ? 'video/webm;codecs=vp8,opus' : 'video/webm'
-              const mr = new MediaRecorder(stream, { mimeType: mime })
-              videoRecorderRef.current = mr
-              videoChunksRef.current = []
-              mr.ondataavailable = (ev) => { if (ev.data.size) videoChunksRef.current.push(ev.data) }
-              mr.onstop = async () => {
-                const blob = new Blob(videoChunksRef.current, { type: 'video/webm' })
-                if (blob.size > 2 * 1024 * 1024) { setVideoRecording(false); stream.getTracks().forEach(t => t.stop()); show('Video too large (>2MB)', 'error'); return }
-                const url = await blobToDataURL(blob)
-                if (dataURLSize(url) > 2 * 1024 * 1024) { setVideoRecording(false); stream.getTracks().forEach(t => t.stop()); show('Encoded video too large', 'error'); return }
-                setAttachment(url)
-                setVideoRecording(false)
-                stream.getTracks().forEach(t => t.stop())
-                videoStreamRef.current = null
-              }
-              mr.start()
-              setVideoRecording(true)
-            } catch {
-              show('Failed to access camera', 'error')
-            }
-          }}>🎥</button>
-        ) : (
-          <button title="Stop video" onClick={() => {
-            const mr = videoRecorderRef.current
-            if (mr && mr.state !== 'inactive') mr.stop()
-            const stream = videoStreamRef.current
-            if (stream) stream.getTracks().forEach(t => t.stop())
-          }}>⏹️</button>
-        )}
-        {attachment && <span style={{ fontSize: 12 }}>attachment ready</span>}
-        {attachments.length > 0 && <span style={{ fontSize: 12 }}>{attachments.length} files ready</span>}
-        <button style={{ minWidth: 88 }} onClick={async () => {
-          if (navigator.vibrate) try { navigator.vibrate(15) } catch {}
-          const sk = localStorage.getItem('nostr_sk')
-          if (!sk) return
-          if (blocked[selectedPeer]) { show('This contact is blocked', 'error'); return }
-          const p = (encOn && (attachment || attachments.length)) ? encPass : undefined
-          if (encOn && (attachment || attachments.length) && !p) { show('Enter a media passphrase', 'error'); return }
-          await sendDM(sk, selectedPeer, { t: text || undefined, a: attachment || undefined, as: attachments.length ? attachments : undefined, p })
-          setText('')
-          setAttachment(null)
-          setAttachments([])
-        }} disabled={!text && !attachment}>Send</button>
-      </footer>
-    </section>
+  </section>
   )
 }

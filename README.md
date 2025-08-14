@@ -32,11 +32,17 @@ Outputs to `dist/`.
 
 This repo includes a GitHub Actions workflow that builds and deploys the app to GitHub Pages when you push to `main`.
 
-Steps (one-time):
-- In GitHub: Settings → Pages → Build and deployment → Source: GitHub Actions
+One-time repo setup:
+- GitHub → Settings → Pages → Build and deployment → Source: GitHub Actions
 
-On the next push to `main`, the site will be deployed at:
-`https://<your-username>.github.io/<this-repo-name>/`
+Notes:
+- The Vite config automatically sets `base` from `REPO_NAME` in CI, so assets resolve correctly at `/<repo>/`.
+- A SPA 404 fallback is added by the workflow, so client-side routes work on refresh.
+
+Publish:
+1. Commit and push to `main`.
+2. Wait for the "Deploy to GitHub Pages" workflow to finish.
+3. Visit: `https://<your-username>.github.io/<this-repo-name>/`
 
 ## Release builds
 
@@ -53,3 +59,7 @@ git push --follow-tags
 - Keys are stored only in your browser localStorage.
 - This is a demo; use test keys and avoid sharing secrets.
 - Relays are public infra; messages are encrypted but metadata is visible.
+
+## License
+
+MIT — see `LICENSE`.
