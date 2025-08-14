@@ -366,6 +366,7 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
   const addMessage = useChatStore.getState().addMessage
   addMessage(to, { id: evt.id, from: me, to, ts: now, text: payload.t, attachment: payload.a, attachments: payload.as, status: 'pending' })
   let acked = false
+  let ackCount = 0
   let lastReason: string | undefined
   const handlers: Array<{ ws: WebSocket, fn: (ev: MessageEvent) => void }> = []
   for (const ws of pool.values()) {
@@ -377,6 +378,7 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
           if (Array.isArray(data) && data[0] === 'OK' && data[1] === evt.id) {
             const ok = !!data[2]
             if (ok) {
+              ackCount += 1
               if (acked) return
               acked = true
               useChatStore.getState().updateMessageStatus(to, evt.id, 'sent')
@@ -394,6 +396,28 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
       try { ws.addEventListener('open', () => ws.send(pub), { once: true } as any) } catch {}
     }
   }
+  // If no relay ACK within 3s, retry once to all enabled relays
+  try {
+    setTimeout(() => {
+      try {
+        if (acked) return
+        for (const ws of pool.values()) {
+          if (ws.readyState === ws.OPEN) ws.send(pub)
+        }
+      } catch {}
+    }, 3000)
+  } catch {}
+  // Second retry at 7s if still no ACK
+  try {
+    setTimeout(() => {
+      try {
+        if (acked) return
+        for (const ws of pool.values()) {
+          if (ws.readyState === ws.OPEN) ws.send(pub)
+        }
+      } catch {}
+    }, 7000)
+  } catch {}
   // fallback: if no relay OK after 15s, mark as failed
   try {
     setTimeout(() => {
@@ -402,11 +426,12 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
         const conv = useChatStore.getState().conversations[to] || []
         const found = conv.find(m => m.id === evt.id)
         if (found && found.status === 'pending') {
-          useChatStore.getState().updateMessageStatus(to, evt.id, 'failed', lastReason || 'No relay acknowledgement')
+      const reason = lastReason || (ackCount > 0 ? `Partial acks: ${ackCount}` : 'No relay acknowledgement')
+      useChatStore.getState().updateMessageStatus(to, evt.id, 'failed', reason)
         }
         try { for (const h of handlers) h.ws.removeEventListener('message', h.fn as any) } catch {}
       } catch {}
-    }, 15000)
+    }, 20000)
   } catch {}
   // message already added above
 }
