@@ -6,6 +6,7 @@ import { useIsMobile } from './useIsMobile'
 import { useChatStore } from '../state/chatStore'
 import { useRoomStore } from '../state/roomStore'
 import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools'
+import { hexToBytes } from '../nostr/utils'
 import { bytesToHex } from '../nostr/utils'
 import { createRoom, refreshSubscriptions, sendDM } from '../nostr/engine'
 import * as QRCode from 'qrcode'
@@ -25,6 +26,15 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [inviteOpen, setInviteOpen] = useState(false)
   const [inviteUrl, setInviteUrl] = useState<string>('')
+  // Onboarding state
+  const [onboardingOpen, setOnboardingOpen] = useState<boolean>(() => {
+    try { return !localStorage.getItem('onboarding_done') } catch { return true }
+  })
+  const [obStep, setObStep] = useState<number>(0)
+  const [notifStatus, setNotifStatus] = useState<'idle'|'granted'|'denied'|'unsupported'>('idle')
+  const [micStatus, setMicStatus] = useState<'idle'|'granted'|'denied'|'unsupported'>('idle')
+  const [camStatus, setCamStatus] = useState<'idle'|'granted'|'denied'|'unsupported'>('idle')
+  const [keyReady, setKeyReady] = useState<boolean>(() => !!localStorage.getItem('nostr_sk'))
   const [chatListOpen, setChatListOpen] = useState(true)
   const [roomListOpen, setRoomListOpen] = useState(() => isMobile ? false : true)
   const [chatDrawerOpen, setChatDrawerOpen] = useState(false)
@@ -38,6 +48,7 @@ export default function App() {
   const roomHandleRef = useRef<HTMLButtonElement | null>(null)
   const inviteCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const setMyPubkey = useChatStore(s => s.setMyPubkey)
+  const keyFileRef = useRef<HTMLInputElement | null>(null)
 
   // apply theme
   const applyTheme = (t: 'system'|'light'|'dark') => {
@@ -140,6 +151,161 @@ export default function App() {
   }, [chatListOpen, roomListOpen, isMobile])
   return (
     <ToastProvider>
+      {/* Onboarding overlay */}
+      {onboardingOpen && (
+        <div role="dialog" aria-modal="true" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ width: 'min(720px, 96vw)', maxHeight: '92vh', overflow: 'auto', background: 'var(--card)', color: 'var(--fg)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: '0 10px 32px rgba(0,0,0,0.35)', padding: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <h2 style={{ margin: 0 }}>Welcome to GlobGram</h2>
+              <button onClick={() => setOnboardingOpen(false)} aria-label="Close">✖</button>
+            </div>
+            {obStep === 0 && (
+              <div>
+                <h3>Step 1 — Notifications</h3>
+                <p>Allow notifications to get message alerts.</p>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button onClick={async () => {
+                    try {
+                      // @ts-ignore
+                      if (!('Notification' in window)) { setNotifStatus('unsupported'); return }
+                      // @ts-ignore
+                      const r = await Notification.requestPermission()
+                      setNotifStatus(r === 'granted' ? 'granted' : 'denied')
+                    } catch { setNotifStatus('unsupported') }
+                  }}>Allow notifications</button>
+                  <span style={{ color: 'var(--muted)', fontSize: 12 }}>
+                    {notifStatus === 'idle' && 'Not requested yet'}
+                    {notifStatus === 'granted' && 'Granted'}
+                    {notifStatus === 'denied' && 'Denied'}
+                    {notifStatus === 'unsupported' && 'Not supported'}
+                  </span>
+                  <div style={{ marginLeft: 'auto' }}>
+                    <button onClick={() => setObStep(1)}>Next →</button>
+                  </div>
+                </div>
+              </div>
+            )}
+            {obStep === 1 && (
+              <div>
+                <h3>Step 2 — Microphone</h3>
+                <p>Enable microphone to record voice notes.</p>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button onClick={async () => {
+                    try {
+                      if (!navigator.mediaDevices?.getUserMedia) { setMicStatus('unsupported'); return }
+                      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+                      try { stream.getTracks().forEach(t => t.stop()) } catch {}
+                      setMicStatus('granted')
+                    } catch { setMicStatus('denied') }
+                  }}>Allow microphone</button>
+                  <span style={{ color: 'var(--muted)', fontSize: 12 }}>
+                    {micStatus === 'idle' && 'Not requested yet'}
+                    {micStatus === 'granted' && 'Granted'}
+                    {micStatus === 'denied' && 'Denied'}
+                    {micStatus === 'unsupported' && 'Not supported'}
+                  </span>
+                  <div style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8 }}>
+                    <button onClick={() => setObStep(0)}>← Back</button>
+                    <button onClick={() => setObStep(2)}>Next →</button>
+                  </div>
+                </div>
+              </div>
+            )}
+            {obStep === 2 && (
+              <div>
+                <h3>Step 3 — Camera</h3>
+                <p>Enable camera to take photos and record videos.</p>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button onClick={async () => {
+                    try {
+                      if (!navigator.mediaDevices?.getUserMedia) { setCamStatus('unsupported'); return }
+                      const stream = await navigator.mediaDevices.getUserMedia({ video: true })
+                      try { stream.getTracks().forEach(t => t.stop()) } catch {}
+                      setCamStatus('granted')
+                    } catch { setCamStatus('denied') }
+                  }}>Allow camera</button>
+                  <span style={{ color: 'var(--muted)', fontSize: 12 }}>
+                    {camStatus === 'idle' && 'Not requested yet'}
+                    {camStatus === 'granted' && 'Granted'}
+                    {camStatus === 'denied' && 'Denied'}
+                    {camStatus === 'unsupported' && 'Not supported'}
+                  </span>
+                  <div style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8 }}>
+                    <button onClick={() => setObStep(1)}>← Back</button>
+                    <button onClick={() => setObStep(3)}>Next →</button>
+                  </div>
+                </div>
+              </div>
+            )}
+            {obStep === 3 && (
+              <div>
+                <h3>Step 4 — Your key</h3>
+                <p>Generate a new key or import an existing one (hex or nsec). It stays in your browser.</p>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button onClick={() => {
+                    const secret = generateSecretKey()
+                    const hexd = bytesToHex(secret)
+                    const pub = getPublicKey(secret)
+                    try { localStorage.setItem('nostr_sk', hexd) } catch {}
+                    setMyPubkey(pub)
+                    setKeyReady(true)
+                  }}>Generate new key</button>
+                  <button onClick={() => keyFileRef.current?.click()}>Import from file…</button>
+                  <input ref={keyFileRef} type="file" accept=".txt,.json,.key" style={{ display: 'none' }} onChange={async (e) => {
+                    const f = e.target.files?.[0]
+                    if (!f) return
+                    try {
+                      const txt = await f.text()
+                      let sk = txt.trim()
+                      try {
+                        const j = JSON.parse(txt)
+                        if (typeof j?.sk === 'string') sk = j.sk.trim()
+                      } catch {}
+                      if (sk.startsWith('nsec')) {
+                        try {
+                          const dec = nip19.decode(sk)
+                          const data = dec.data as Uint8Array
+                          sk = bytesToHex(data)
+                        } catch {}
+                      }
+                      if (!/^[0-9a-fA-F]{64}$/.test(sk)) { alert('Invalid key format. Provide 64-char hex or nsec.'); return }
+                      const pub = getPublicKey(hexToBytes(sk))
+                      try { localStorage.setItem('nostr_sk', sk) } catch {}
+                      setMyPubkey(pub)
+                      setKeyReady(true)
+                    } catch {
+                      alert('Failed to read key file')
+                    } finally {
+                      try { (e.target as HTMLInputElement).value = '' } catch {}
+                    }
+                  }} />
+                  {keyReady ? <span style={{ color: 'var(--muted)', fontSize: 12 }}>Key ready ✓</span> : <span style={{ color: 'var(--muted)', fontSize: 12 }}>No key yet</span> }
+                  <div style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8 }}>
+                    <button onClick={() => setObStep(2)}>← Back</button>
+                    <button disabled={!keyReady} onClick={() => setObStep(4)}>Next →</button>
+                  </div>
+                </div>
+              </div>
+            )}
+            {obStep === 4 && (
+              <div>
+                <h3>Step 5 — Quick guide</h3>
+                <ul>
+                  <li>Use “Connect safely with your friend” to share an invite link or QR.</li>
+                  <li>Start a chat and send text or media; press Enter to send (Shift+Enter for new line).</li>
+                  <li>Optionally encrypt media with a passphrase for extra protection.</li>
+                  <li>Statuses: ⏳ Sending, ✓ Sent, ✓✓ Delivered. Retry on failures.</li>
+                  <li>On mobile, only the conversation area scrolls; header/footer stay pinned.</li>
+                </ul>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                  <button onClick={() => setObStep(3)}>← Back</button>
+                  <button onClick={() => { try { localStorage.setItem('onboarding_done', '1') } catch {}; setOnboardingOpen(false) }}>Finish</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     <div style={{ fontFamily: 'system-ui, sans-serif', height: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--fg)', overflow: 'hidden' }}>
       <div className="sticky-top" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px', borderBottom: '1px solid var(--border)', background: 'var(--card)' }}>
         <h1 style={{ margin: 0, fontSize: 22 }}>GlobGram Alpha</h1>
