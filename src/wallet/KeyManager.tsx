@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools'
 import { bytesToHex, hexToBytes } from '../nostr/utils'
 import { useChatStore } from '../state/chatStore'
-import * as QRCode from 'qrcode'
 import { useToast } from '../ui/Toast'
 
 export function KeyManager() {
@@ -137,13 +136,21 @@ export function KeyManager() {
     URL.revokeObjectURL(url)
   }
 
-  // Render QR locally when modal opens
+  // Render QR locally when modal opens (lazy-load qrcode)
   useEffect(() => {
     if (!showQR || !pk) return
     const npub = nip19.npubEncode(pk)
     const canvas = qrCanvasRef.current
     if (!canvas) return
-    try { QRCode.toCanvas(canvas, npub, { width: 220 }) } catch {}
+    ;(async () => {
+      try {
+        const q = await import('qrcode')
+        const toCanvas = (q as any).toCanvas || (q as any).default?.toCanvas
+        if (typeof toCanvas === 'function') {
+          toCanvas(canvas, npub, { width: 220 })
+        }
+      } catch {}
+    })()
   }, [showQR, pk])
 
   // Password-encrypted backup using AES-GCM + PBKDF2

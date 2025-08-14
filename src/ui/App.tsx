@@ -10,7 +10,7 @@ import { hexToBytes } from '../nostr/utils'
 import { bytesToHex } from '../nostr/utils'
 import { createRoom, refreshSubscriptions, sendDM } from '../nostr/engine'
 import { useSettingsStore } from './settingsStore'
-import * as QRCode from 'qrcode'
+// Lazy-load QRCode only when needed to reduce initial bundle size
 
 const ChatWindowLazy = lazy(() => import('.').then(m => ({ default: m.ChatWindow })))
 const RoomWindowLazy = lazy(() => import('.').then(m => ({ default: m.RoomWindow })))
@@ -52,6 +52,13 @@ export default function App() {
   const powMining = useSettingsStore(s => s.powMining)
   const setPowMining = useSettingsStore(s => s.setPowMining)
   const keyFileRef = useRef<HTMLInputElement | null>(null)
+  // PWA install prompt handling
+  const [installAvailable, setInstallAvailable] = useState(false)
+  const installPromptRef = useRef<any>(null)
+  const [installStatus, setInstallStatus] = useState<'idle'|'accepted'|'dismissed'|'installed'>('idle')
+  // SW version/update state
+  const [updateAvailable, setUpdateAvailable] = useState(false)
+  const [swVersion, setSwVersion] = useState<string | null>(null)
 
   // apply theme
   const applyTheme = (t: 'system'|'light'|'dark') => {
@@ -72,11 +79,71 @@ export default function App() {
     if (!inviteOpen || !inviteUrl) return
     const canvas = inviteCanvasRef.current
     if (!canvas) return
-    try {
-      // @ts-ignore types vary between versions; use two-arg form
-      QRCode.toCanvas(canvas, inviteUrl)
-    } catch {}
+    ;(async () => {
+      try {
+        const q = await import('qrcode')
+        const toCanvas = (q as any).toCanvas || (q as any).default?.toCanvas
+        if (typeof toCanvas === 'function') {
+          toCanvas(canvas, inviteUrl)
+        }
+      } catch {}
+    })()
   }, [inviteOpen, inviteUrl])
+
+  // Capture PWA install prompt and installed event
+  useEffect(() => {
+    const onBip = (e: any) => {
+      try { e.preventDefault() } catch {}
+      installPromptRef.current = e
+      setInstallAvailable(true)
+    }
+    const onInstalled = () => {
+      setInstallStatus('installed')
+      setInstallAvailable(false)
+    }
+    window.addEventListener('beforeinstallprompt', onBip as any)
+    window.addEventListener('appinstalled', onInstalled as any)
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onBip as any)
+      window.removeEventListener('appinstalled', onInstalled as any)
+    }
+  }, [])
+
+  // Check for PWA updates on initial open and show Update button
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return
+    const onMsg = (e: MessageEvent) => {
+      const data: any = e.data
+      if (data && data.type === 'VERSION') {
+        setSwVersion(String(data.version || ''))
+      }
+    }
+    navigator.serviceWorker.addEventListener('message', onMsg as any)
+    // Ask SW for its version immediately
+    try { navigator.serviceWorker.controller?.postMessage({ type: 'GET_VERSION' }) } catch {}
+    // Also trigger an update check
+    navigator.serviceWorker.getRegistrations().then(regs => {
+      regs.forEach(reg => reg.update().catch(()=>{}))
+    }).catch(()=>{})
+    // If a new worker is waiting, surface update
+    navigator.serviceWorker.getRegistration().then(reg => {
+      if (!reg) return
+      const handle = () => {
+        if (reg.waiting) setUpdateAvailable(true)
+      }
+      handle()
+      reg.addEventListener('updatefound', () => {
+        const nw = reg.installing
+        if (!nw) return
+        nw.addEventListener('statechange', () => {
+          if (nw.state === 'installed' && navigator.serviceWorker.controller) setUpdateAvailable(true)
+        })
+      })
+    }).catch(()=>{})
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', onMsg as any)
+    }
+  }, [])
 
   // Handle invite links: ?invite=<npub|hex>
   useEffect(() => {
@@ -292,7 +359,35 @@ export default function App() {
             )}
             {obStep === 4 && (
               <div>
-                <h3>Step 5 — Quick guide</h3>
+                <h3>Step 5 — Install the app</h3>
+                <p>Install GlobGram to your device for a faster, more app-like experience.</p>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button disabled={!installAvailable} title={installAvailable? 'Install the app' : 'Install prompt not available yet'} onClick={async () => {
+                    const prompt = installPromptRef.current
+                    if (!prompt) { setInstallStatus('idle'); return }
+                    try {
+                      prompt.prompt()
+                      const choice = await prompt.userChoice
+                      if (choice?.outcome === 'accepted') setInstallStatus('accepted')
+                      else setInstallStatus('dismissed')
+                    } catch {}
+                  }}>Install app</button>
+                  <span style={{ color: 'var(--muted)', fontSize: 12 }}>
+                    {installStatus === 'idle' && (installAvailable ? 'Ready to install' : 'Waiting for install prompt…')}
+                    {installStatus === 'accepted' && 'Install accepted'}
+                    {installStatus === 'dismissed' && 'Install dismissed'}
+                    {installStatus === 'installed' && 'Installed ✓'}
+                  </span>
+                  <div style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8 }}>
+                    <button onClick={() => setObStep(3)}>← Back</button>
+                    <button onClick={() => setObStep(5)}>Next →</button>
+                  </div>
+                </div>
+              </div>
+            )}
+            {obStep === 5 && (
+              <div>
+                <h3>Step 6 — Quick guide</h3>
                 <ul>
                   <li>Use “Connect safely with your friend” to share an invite link or QR.</li>
                   <li>Start a chat and send text or media; press Enter to send (Shift+Enter for new line).</li>
@@ -301,7 +396,7 @@ export default function App() {
                   <li>On mobile, only the conversation area scrolls; header/footer stay pinned.</li>
                 </ul>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                  <button onClick={() => setObStep(3)}>← Back</button>
+                  <button onClick={() => setObStep(4)}>← Back</button>
                   <button onClick={() => { try { localStorage.setItem('onboarding_done', '1') } catch {}; setOnboardingOpen(false) }}>Finish</button>
                 </div>
               </div>
@@ -310,7 +405,8 @@ export default function App() {
         </div>
       )}
     <div style={{ fontFamily: 'system-ui, sans-serif', height: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--fg)', overflow: 'hidden' }}>
-      <div className="sticky-top" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px', borderBottom: '1px solid var(--border)', background: 'var(--card)' }}>
+      <div className="sticky-top" style={{ display: 'flex', flexDirection: 'column', gap: 0, borderBottom: '1px solid var(--border)', background: 'var(--card)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px' }}>
         <h1 style={{ margin: 0, fontSize: 22 }}>GlobGram Alpha</h1>
         {/* <span style={{ color: 'var(--muted)' }}>Decentralized DMs over Nostr</span> */}
         <div style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, alignItems: 'center' }}>
@@ -349,6 +445,26 @@ export default function App() {
           </select>
           <button aria-label="Open settings" title="Settings" onClick={() => setSettingsOpen(true)}>⚙️</button>
         </div>
+        </div>
+        {updateAvailable && (
+          <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderTop: '1px solid var(--border)', background: 'var(--card)', color: 'var(--fg)' }}>
+            <span style={{ fontSize: 13 }}>A new version is available{swVersion ? ` (${swVersion})` : ''}.</span>
+            <button onClick={async () => {
+              try {
+                const reg = await navigator.serviceWorker.getRegistration()
+                if (reg?.waiting) {
+                  // Tell waiting SW to activate
+                  reg.waiting.postMessage({ type: 'SKIP_WAITING' })
+                  // Wait a tick then reload
+                  setTimeout(() => window.location.reload(), 250)
+                } else {
+                  window.location.reload()
+                }
+              } catch { window.location.reload() }
+            }}>Update</button>
+            <button onClick={() => setUpdateAvailable(false)} style={{ marginLeft: 'auto' }}>Dismiss</button>
+          </div>
+        )}
       </div>
       {/* Settings modal keeps Keys and Relays compact and out of the main layout */}
       {settingsOpen && (
