@@ -28,6 +28,7 @@ type Actions = {
   addMessage: (peer: string, msg: ChatMessage) => void
   markRead: (peer: string) => void
   removeMessage: (peer: string, id: string) => void
+  updateMessageId: (peer: string, oldId: string, newId: string) => void
   clearConversation: (peer: string) => void
   setBlocked: (peer: string, enabled: boolean) => void
   updateMessageStatus: (peer: string, id: string, status: ChatMessage['status'], error?: string) => void
@@ -79,6 +80,12 @@ export const useChatStore = create<State & Actions>()(
       removeMessage: (peer: string, id: string) => {
         const convs = { ...get().conversations }
         const list = (convs[peer] || []).filter(m => m.id !== id)
+        convs[peer] = list
+        set({ conversations: convs })
+      },
+      updateMessageId: (peer: string, oldId: string, newId: string) => {
+        const convs = { ...get().conversations }
+        const list = (convs[peer] || []).map(m => m.id === oldId ? { ...m, id: newId } : m)
         convs[peer] = list
         set({ conversations: convs })
       },

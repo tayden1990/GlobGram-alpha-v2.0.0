@@ -359,7 +359,7 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
   const body = JSON.stringify({ t: payload.t, a: outA, as: outAs, p: payload.p })
   const ciphertext = await nip04.encrypt(sk, to, body)
   const template: EventTemplate = { kind: 4, created_at: now, content: ciphertext, tags: [["p", to]] }
-  const evt = finalizeEvent(template, hexToBytes(sk))
+  let evt: any = finalizeEvent(template, hexToBytes(sk))
   const pub = JSON.stringify(["EVENT", evt])
   // add pending message immediately to avoid race with fast OK acks
   const me = getPublicKey(hexToBytes(sk))
@@ -368,6 +368,7 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
   let acked = false
   let ackCount = 0
   let lastReason: string | undefined
+  let powBitsRequired: number | null = null
   const handlers: Array<{ ws: WebSocket, fn: (ev: MessageEvent) => void }> = []
   for (const ws of pool.values()) {
     if (ws.readyState === ws.OPEN) {
@@ -386,7 +387,14 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
               try { for (const h of handlers) h.ws.removeEventListener('message', h.fn as any) } catch {}
             } else {
               const reason = typeof data[3] === 'string' ? data[3] : undefined
-              if (reason) lastReason = reason
+              if (reason) {
+                lastReason = reason
+                // detect NIP-13 PoW requirement in reason, e.g., "pow: 28 bits needed"
+                const m = /(pow)\s*:\s*(\d+)\s*bits/i.exec(reason)
+                if (m) {
+                  powBitsRequired = parseInt(m[2], 10)
+                }
+              }
             }
           }
         } catch {}
@@ -394,6 +402,28 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
       try { ws.addEventListener('message', handler as any); handlers.push({ ws, fn: handler }) } catch {}
     } else if (ws.readyState === ws.CONNECTING) {
       try { ws.addEventListener('open', () => ws.send(pub), { once: true } as any) } catch {}
+    }
+  }
+  // If relay requested PoW, try to re-mine with a nonce tag and resend
+  if (!acked && powBitsRequired && powBitsRequired > 0) {
+    try {
+      // Update status to show we're working
+      useChatStore.getState().updateMessageStatus(to, evt.id, 'pending', `Mining ${powBitsRequired} bits…`)
+      const { newEvt } = await mineEventWithPow(evt, powBitsRequired)
+      const oldId = evt.id
+      evt = newEvt
+      // Update local message id so receipts/acks match
+      try { useChatStore.getState().updateMessageId(to, oldId, evt.id) } catch {}
+      const pub2 = JSON.stringify(["EVENT", evt])
+      for (const ws of pool.values()) {
+        if (ws.readyState === ws.OPEN) ws.send(pub2)
+        else if (ws.readyState === ws.CONNECTING) {
+          try { ws.addEventListener('open', () => ws.send(pub2), { once: true } as any) } catch {}
+        }
+      }
+    } catch (e) {
+      // If mining failed, keep lastReason as failure message
+      if (!lastReason) lastReason = (e as Error)?.message || 'PoW mining failed'
     }
   }
   // If no relay ACK within 3s, retry once to all enabled relays
@@ -418,7 +448,7 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
       } catch {}
     }, 7000)
   } catch {}
-  // fallback: if no relay OK after 15s, mark as failed
+  // fallback: if no relay OK after 15-20s, mark as failed
   try {
     setTimeout(() => {
       try {
@@ -426,14 +456,58 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
         const conv = useChatStore.getState().conversations[to] || []
         const found = conv.find(m => m.id === evt.id)
         if (found && found.status === 'pending') {
-      const reason = lastReason || (ackCount > 0 ? `Partial acks: ${ackCount}` : 'No relay acknowledgement')
-      useChatStore.getState().updateMessageStatus(to, evt.id, 'failed', reason)
+          const reason = lastReason || (powBitsRequired ? `PoW required (${powBitsRequired} bits)` : (ackCount > 0 ? `Partial acks: ${ackCount}` : 'No relay acknowledgement'))
+          useChatStore.getState().updateMessageStatus(to, evt.id, 'failed', reason)
         }
         try { for (const h of handlers) h.ws.removeEventListener('message', h.fn as any) } catch {}
       } catch {}
     }, 20000)
   } catch {}
   // message already added above
+}
+
+// Simple NIP-13 PoW miner: adds/updates a nonce tag and created_at to meet difficulty
+async function mineEventWithPow(evt: any, bits: number): Promise<{ newEvt: any }> {
+  const prefix = '0'.repeat(Math.floor(bits / 4)) // hex nibble approximation
+  const targetZeros = bits
+  const baseTags = (evt.tags || []).filter((t: any[]) => t[0] !== 'nonce')
+  let nonce = 0
+  let newEvt: Event = evt
+  const skStored = localStorage.getItem('nostr_sk')
+  if (!skStored) throw new Error('No key for PoW')
+  const skBytes = hexToBytes(skStored)
+  const start = Date.now()
+  // Limit mining to ~5 seconds to keep UI responsive
+  while (Date.now() - start < 5000) {
+    const created = Math.floor(Date.now() / 1000)
+    const tags = [...baseTags, ['nonce', String(nonce), String(targetZeros)]]
+    const template: EventTemplate = { kind: evt.kind, created_at: created, content: evt.content, tags }
+    const candidate: Event = finalizeEvent(template, skBytes)
+    // Quick check: number of leading zero bits via hex prefix check first, then exact if close
+    if (candidate.id.startsWith(prefix)) {
+      if (leadingZeroBits(candidate.id) >= targetZeros) {
+        newEvt = candidate
+        return { newEvt }
+      }
+    }
+    nonce++
+  }
+  throw new Error('PoW time limit exceeded')
+}
+
+function leadingZeroBits(hexId: string): number {
+  const hex = hexId.toLowerCase()
+  let bits = 0
+  for (let i = 0; i < hex.length; i++) {
+    const n = parseInt(hex[i], 16)
+    if (n === 0) { bits += 4; continue }
+    // 1xxx -> 0 leading, 0xxx cases handled above
+    if (n < 8) { bits += 3; break }
+    if (n < 4) { bits += 2; break }
+    if (n < 2) { bits += 1; break }
+    break
+  }
+  return bits
 }
 
 export async function sendTyping(sk: string, to: string) {
