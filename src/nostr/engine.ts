@@ -6,6 +6,7 @@ import { putObject, getObject, parseMemUrl } from '../services/upload'
 import { useChatStore, type ChatMessage } from '../state/chatStore'
 import { useRelayStore } from '../state/relayStore'
 import { useRoomStore } from '../state/roomStore'
+import { useSettingsStore } from '../ui/settingsStore'
 
 export function startNostrEngine(sk: string) {
   const pk = getPublicKey(hexToBytes(sk))
@@ -406,6 +407,15 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
   }
   // If relay requested PoW, try to re-mine with a nonce tag and resend
   if (!acked && powBitsRequired && powBitsRequired > 0) {
+    const miningEnabled = (() => { try { return useSettingsStore.getState().powMining } catch { return true } })()
+    if (!miningEnabled) {
+      const reason = `PoW required (${powBitsRequired} bits) but disabled in Settings`
+      try { useChatStore.getState().updateMessageStatus(to, evt.id, 'failed', reason) } catch {}
+      // prevent further retries/timeouts and cleanup listeners
+      acked = true
+      try { for (const h of handlers) h.ws.removeEventListener('message', h.fn as any) } catch {}
+      return
+    }
     try {
       // Update status to show we're working
       useChatStore.getState().updateMessageStatus(to, evt.id, 'pending', `Mining ${powBitsRequired} bits…`)

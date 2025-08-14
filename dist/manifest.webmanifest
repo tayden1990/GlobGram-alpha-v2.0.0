@@ -1,6 +1,7 @@
 {
   "name": "GlobGram Alpha",
   "short_name": "GlobGram",
+  "description": "Decentralized DMs over Nostr",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",

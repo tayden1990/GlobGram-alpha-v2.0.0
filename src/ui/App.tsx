@@ -9,6 +9,7 @@ import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools'
 import { hexToBytes } from '../nostr/utils'
 import { bytesToHex } from '../nostr/utils'
 import { createRoom, refreshSubscriptions, sendDM } from '../nostr/engine'
+import { useSettingsStore } from './settingsStore'
 import * as QRCode from 'qrcode'
 
 const ChatWindowLazy = lazy(() => import('.').then(m => ({ default: m.ChatWindow })))
@@ -48,6 +49,8 @@ export default function App() {
   const roomHandleRef = useRef<HTMLButtonElement | null>(null)
   const inviteCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const setMyPubkey = useChatStore(s => s.setMyPubkey)
+  const powMining = useSettingsStore(s => s.powMining)
+  const setPowMining = useSettingsStore(s => s.setPowMining)
   const keyFileRef = useRef<HTMLInputElement | null>(null)
 
   // apply theme
@@ -365,6 +368,16 @@ export default function App() {
               <summary style={{ cursor: 'pointer', userSelect: 'none' }}>Relays</summary>
               <div style={{ marginTop: 8 }}>
                 <RelayManager />
+              </div>
+            </details>
+            <details open>
+              <summary style={{ cursor: 'pointer', userSelect: 'none' }}>Preferences</summary>
+              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <input type="checkbox" checked={powMining} onChange={(e) => setPowMining(e.target.checked)} />
+                  Enable PoW mining (for relays that require NIP-13)
+                </label>
+                <button onClick={() => { try { localStorage.removeItem('onboarding_done') } catch {}; window.location.reload() }}>Run onboarding again</button>
               </div>
             </details>
           </div>
