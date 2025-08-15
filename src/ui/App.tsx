@@ -305,6 +305,15 @@ export default function App() {
       if (d?.type === 'chat' && d?.id === selectedPeer) ready = true
     }
     window.addEventListener('panel-ready', onReady as any)
+    // Poll DOM for chat pane presence as an additional readiness signal
+    const checkDom = () => {
+      try {
+        const pane = document.querySelector('section[aria-label="Direct messages"] .scroll-y')
+        if (pane) ready = true
+      } catch {}
+    }
+    checkDom()
+    const poll = window.setInterval(checkDom, 200)
     const t1 = window.setTimeout(() => {
       const overlays = document.querySelectorAll('.drawer-overlay')
       if (overlays.length) {
@@ -316,15 +325,17 @@ export default function App() {
     }, 250)
     const t2 = window.setTimeout(() => {
       if (!ready) {
+        const global = 'autoReloadedOnce'
         const key = `reloaded_for_chat_${selectedPeer}`
-        if (!sessionStorage.getItem(key)) {
+        if (!sessionStorage.getItem(global) && !sessionStorage.getItem(key)) {
           try { log('Nav.selectPeer.notReady -> hardReloadOnce') } catch {}
+          try { sessionStorage.setItem(global, '1') } catch {}
           try { sessionStorage.setItem(key, '1') } catch {}
           try { window.location.reload() } catch {}
         }
       }
-    }, 1400)
-    return () => { window.removeEventListener('panel-ready', onReady as any); window.clearTimeout(t1); window.clearTimeout(t2) }
+    }, 2500)
+    return () => { window.removeEventListener('panel-ready', onReady as any); window.clearTimeout(t1); window.clearTimeout(t2); window.clearInterval(poll) }
   }, [selectedPeer])
 
   // Auto-collapse any drawers/lists on room selection; prefer panel-ready then hard-reload once if needed
@@ -342,6 +353,15 @@ export default function App() {
       if (d?.type === 'room' && String(d?.id) === String(selectedRoom)) ready = true
     }
     window.addEventListener('panel-ready', onReady as any)
+    // Poll DOM for room pane presence as an additional readiness signal
+    const checkDom = () => {
+      try {
+        const pane = document.querySelector('section[aria-label="Room messages"] .scroll-y')
+        if (pane) ready = true
+      } catch {}
+    }
+    checkDom()
+    const poll = window.setInterval(checkDom, 200)
     const t1 = window.setTimeout(() => {
       const overlays = document.querySelectorAll('.drawer-overlay')
       if (overlays.length) {
@@ -353,15 +373,17 @@ export default function App() {
     }, 250)
     const t2 = window.setTimeout(() => {
       if (!ready) {
+        const global = 'autoReloadedOnce'
         const key = `reloaded_for_room_${selectedRoom}`
-        if (!sessionStorage.getItem(key)) {
+        if (!sessionStorage.getItem(global) && !sessionStorage.getItem(key)) {
           try { log('Nav.selectRoom.notReady -> hardReloadOnce') } catch {}
+          try { sessionStorage.setItem(global, '1') } catch {}
           try { sessionStorage.setItem(key, '1') } catch {}
           try { window.location.reload() } catch {}
         }
       }
-    }, 1400)
-    return () => { window.removeEventListener('panel-ready', onReady as any); window.clearTimeout(t1); window.clearTimeout(t2) }
+    }, 2500)
+    return () => { window.removeEventListener('panel-ready', onReady as any); window.clearTimeout(t1); window.clearTimeout(t2); window.clearInterval(poll) }
   }, [selectedRoom])
   return (
     <ToastProvider>
