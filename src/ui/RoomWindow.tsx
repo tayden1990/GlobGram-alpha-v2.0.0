@@ -44,6 +44,9 @@ export function RoomWindow() {
 	// footer height (desktop) to avoid overlap; mobile handled via CSS padding-bottom
 	const footerRef = useRef<HTMLElement | null>(null)
 	const [footerH, setFooterH] = useState<number>(180)
+	// preparing/progress state
+	const [preparing, setPreparing] = useState(false)
+	const [prepProgress, setPrepProgress] = useState(0)
 
 	// Grid layout ensures footer has its own row and never overlaps the scroller
 	
@@ -180,9 +183,11 @@ export function RoomWindow() {
 				const f = e.dataTransfer?.files?.[0]
 				if (!f) return
 				if (f.size > 2 * 1024 * 1024) { show('File too large (>2MB)', 'error'); return }
-				const url = await blobToDataURL(f)
+				setPreparing(true); setPrepProgress(0)
+				const url = await blobToDataURL(f, (p) => setPrepProgress(p))
 				if (dataURLSize(url) > 2 * 1024 * 1024) { show('Encoded file too large', 'error'); return }
 				setAttachment(url)
+				setPreparing(false); setPrepProgress(1)
 			}}
 		>
 			<div ref={scrollerRef} className="scroll-y" style={{ 
@@ -316,12 +321,14 @@ export function RoomWindow() {
 					const urls: string[] = []
 					for (const file of files) {
 						if (file.size > 2 * 1024 * 1024) { show('File too large (>2MB)', 'error'); continue }
-						const url = await blobToDataURL(file)
+						setPreparing(true); setPrepProgress(0)
+						const url = await blobToDataURL(file, (p) => setPrepProgress(p))
 						if (dataURLSize(url) > 2 * 1024 * 1024) { show('Encoded file too large', 'error'); continue }
 						urls.push(url)
 					}
 					if (urls.length === 1) setAttachment(urls[0])
 					if (urls.length > 1) setAttachments(urls)
+					setPreparing(false); setPrepProgress(1)
 					try { (e.target as HTMLInputElement).value = '' } catch {}
 				}} />
 				<button title="Attach files" onClick={() => (document.getElementById('rw-file') as HTMLInputElement)?.click()} style={{ padding: '6px 10px' }}>📎</button>
@@ -383,10 +390,12 @@ export function RoomWindow() {
 						mr.onstop = async () => {
 							const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
 							if (blob.size > 1024 * 1024) { setRecording(false); show('Voice note too large (>1MB)', 'error'); return }
-							const url = await blobToDataURL(blob)
+							setPreparing(true); setPrepProgress(0)
+							const url = await blobToDataURL(blob, (p) => setPrepProgress(p))
 							if (dataURLSize(url) > 1024 * 1024) { setRecording(false); show('Encoded audio too large', 'error'); return }
 							setAttachment(url)
 							setRecording(false)
+							setPreparing(false); setPrepProgress(1)
 						}
 						mr.start()
 						setRecording(true)
@@ -413,12 +422,14 @@ export function RoomWindow() {
 							mr.onstop = async () => {
 								const blob = new Blob(videoChunksRef.current, { type: 'video/webm' })
 								if (blob.size > 2 * 1024 * 1024) { setVideoRecording(false); stream.getTracks().forEach(t => t.stop()); show('Video too large (>2MB)', 'error'); return }
-								const url = await blobToDataURL(blob)
+								setPreparing(true); setPrepProgress(0)
+								const url = await blobToDataURL(blob, (p) => setPrepProgress(p))
 								if (dataURLSize(url) > 2 * 1024 * 1024) { setVideoRecording(false); stream.getTracks().forEach(t => t.stop()); show('Encoded video too large', 'error'); return }
 								setAttachment(url)
 								setVideoRecording(false)
 								stream.getTracks().forEach(t => t.stop())
 								videoStreamRef.current = null
+								setPreparing(false); setPrepProgress(1)
 							}
 							mr.start()
 							setVideoRecording(true)
@@ -434,7 +445,15 @@ export function RoomWindow() {
 						if (stream) stream.getTracks().forEach(t => t.stop())
 					}}>⏹️</button>
 				)}
-				{attachment && <span style={{ fontSize: 12 }}>attachment ready</span>}
+				{preparing && (
+					<span style={{ fontSize: 12, color: 'var(--muted)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+						<span style={{ width: 120, height: 6, background: 'var(--border)', borderRadius: 4, overflow: 'hidden', display: 'inline-block' }}>
+							<span style={{ display: 'block', height: '100%', width: `${Math.round(prepProgress*100)}%`, background: 'var(--accent)' }} />
+						</span>
+						Preparing… {Math.round(prepProgress*100)}%
+					</span>
+				)}
+				{attachment && !preparing && <span style={{ fontSize: 12 }}>attachment ready</span>}
 				{attachments.length > 0 && <span style={{ fontSize: 12 }}>{attachments.length} files ready</span>}
 				<div style={{ marginLeft: 'auto' }}>
 						<button style={{ minWidth: 88 }} onClick={async () => {
@@ -447,7 +466,7 @@ export function RoomWindow() {
 					setText('')
 					setAttachment(null)
 					setAttachments([])
-				}} disabled={!text && !attachment && attachments.length===0}>Send</button>
+				}} disabled={preparing || (!text && !attachment && attachments.length===0)}>Send</button>
 				</div>
 				</div>
 			</footer>

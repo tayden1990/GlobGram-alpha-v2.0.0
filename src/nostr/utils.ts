@@ -13,11 +13,16 @@ export function bytesToHex(bytes: Uint8Array): string {
     .join('')
 }
 
-export function blobToDataURL(blob: Blob): Promise<string> {
+export function blobToDataURL(blob: Blob, onProgress?: (progress01: number) => void): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(reader.result as string)
     reader.onerror = reject
+    reader.onprogress = (e: ProgressEvent<FileReader>) => {
+      if (onProgress && e.lengthComputable && e.total > 0) {
+        try { onProgress(Math.min(1, Math.max(0, e.loaded / e.total))) } catch {}
+      }
+    }
     reader.readAsDataURL(blob)
   })
 }

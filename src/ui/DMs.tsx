@@ -44,6 +44,9 @@ export function DMs() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [isPreloading, setIsPreloading] = useState(false)
   const [lightbox, setLightbox] = useState<null | { type: 'image'|'video'|'audio'; src: string }>(null)
+  // preparing/progress
+  const [preparing, setPreparing] = useState(false)
+  const [prepProgress, setPrepProgress] = useState(0)
   // Close lightbox on Escape
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setLightbox(null) }
@@ -262,12 +265,14 @@ export function DMs() {
     const urls: string[] = []
     for (const file of files) {
       if (file.size > 2 * 1024 * 1024) { show('File too large (>2MB)', 'error'); continue }
-      const url = await blobToDataURL(file)
+      setPreparing(true); setPrepProgress(0)
+      const url = await blobToDataURL(file, (p) => setPrepProgress(p))
       if (dataURLSize(url) > 2 * 1024 * 1024) { show('Encoded file too large', 'error'); continue }
       urls.push(url)
     }
     if (urls.length === 1) setAttachment(urls[0])
     if (urls.length > 1) setAttachments(urls)
+    setPreparing(false); setPrepProgress(1)
   }
 
   const startRecording = async () => {
@@ -289,7 +294,8 @@ export function DMs() {
           setRecording(false)
           return
         }
-        const url = await blobToDataURL(blob)
+  setPreparing(true); setPrepProgress(0)
+  const url = await blobToDataURL(blob, (p) => setPrepProgress(p))
         if (dataURLSize(url) > 1024 * 1024) {
           show('Encoded audio too large', 'error')
           setRecording(false)
@@ -297,6 +303,7 @@ export function DMs() {
         }
         setAttachment(url)
         setRecording(false)
+  setPreparing(false); setPrepProgress(1)
       }
       mr.start()
       setRecording(true)
@@ -324,7 +331,15 @@ export function DMs() {
         ) : (
           <button onClick={stopRecording} title="Stop recording">⏹️</button>
         )}
-  {attachment && (<span style={{ fontSize: 12, color: 'var(--fg)' }}>attachment ready</span>)}
+  {preparing && (
+    <span style={{ fontSize: 12, color: 'var(--muted)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      <span style={{ width: 120, height: 6, background: 'var(--border)', borderRadius: 4, overflow: 'hidden', display: 'inline-block' }}>
+        <span style={{ display: 'block', height: '100%', width: `${Math.round(prepProgress*100)}%`, background: 'var(--accent)' }} />
+      </span>
+      Preparing… {Math.round(prepProgress*100)}%
+    </span>
+  )}
+  {attachment && !preparing && (<span style={{ fontSize: 12, color: 'var(--fg)' }}>attachment ready</span>)}
   {attachments.length > 0 && (<span style={{ fontSize: 12, color: 'var(--fg)' }}>{attachments.length} files ready</span>)}
         <label title="Encrypt media attachments with a passphrase" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
           <input type="checkbox" checked={encOn} onChange={(e) => setEncOn(e.target.checked)} /> Encrypt media
@@ -332,7 +347,7 @@ export function DMs() {
         {encOn && (
           <input type="password" placeholder="media passphrase" value={encPass} onChange={(e) => setEncPass(e.target.value)} style={{ width: 160 }} />
         )}
-        <button onClick={send} disabled={!sk || !peer || (!msg && !attachment && attachments.length===0)}>Send</button>
+  <button onClick={send} disabled={preparing || !sk || !peer || (!msg && !attachment && attachments.length===0)}>Send</button>
       </div>
       {(attachment || attachments.length>0) && (
         <div style={{ marginTop: 8, display: 'flex', gap: 12, alignItems: 'center' }}>
@@ -358,12 +373,14 @@ export function DMs() {
           const urls: string[] = []
           for (const f of files) {
             if (f.size > 2 * 1024 * 1024) { show('File too large (>2MB)', 'error'); continue }
-            const url = await blobToDataURL(f)
+            setPreparing(true); setPrepProgress(0)
+            const url = await blobToDataURL(f, (p) => setPrepProgress(p))
             if (dataURLSize(url) > 2 * 1024 * 1024) { show('Encoded file too large', 'error'); continue }
             urls.push(url)
           }
           if (urls.length === 1) setAttachment(urls[0])
           if (urls.length > 1) setAttachments(urls)
+          setPreparing(false); setPrepProgress(1)
         }}
       >
         <div ref={topSentinelRef} style={{ height: 1 }} />
