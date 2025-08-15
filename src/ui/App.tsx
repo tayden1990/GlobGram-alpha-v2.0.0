@@ -595,7 +595,7 @@ export default function App() {
         </div>
         {/* <span style={{ color: 'var(--muted)' }}>Decentralized DMs over Nostr</span> */}
         <div style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, alignItems: 'center' }}>
-          <button title="Share invite" onClick={async () => {
+            <button title="Invite a friend" aria-label="Invite a friend" onClick={async () => {
             // Ensure we have a key
             let sk = localStorage.getItem('nostr_sk')
             if (!sk) {
@@ -615,37 +615,37 @@ export default function App() {
             setInviteUrl(link)
             setInviteOpen(true)
             try {
-              const message = 'Join me on GlobGram. Tap the link to start a secure chat.'
+              const message = "Let's chat securely on GlobGram. Open this link to connect with me."
               // @ts-ignore - Web Share API optional
               if (navigator.share) {
-                try { log('Invite.share.attempt') } catch {}
-                // Some platforms hide `text` when `url` is present. Try both, then fallback to text+link.
-                const payloads: any[] = [
-                  { title: 'Connect on GlobGram', text: message, url: link },
-                  { title: 'Connect on GlobGram', text: `${message}\n${link}` },
-                ]
-                let shared = false
-                for (const p of payloads) {
-                  try {
-                    const can = (navigator as any).canShare ? (navigator as any).canShare(p) : true
-                    if (can) { await (navigator as any).share(p); shared = true; break }
-                  } catch {
-                    // try next payload
-                  }
+              try { log('Invite.share.attempt') } catch {}
+              // Some platforms hide `text` when `url` is present. Try both, then fallback to text+link.
+              const payloads: any[] = [
+                { title: 'Chat with me on GlobGram', text: message, url: link },
+                { title: 'Chat with me on GlobGram', text: `${message}\n${link}` },
+              ]
+              let shared = false
+              for (const p of payloads) {
+                try {
+                const can = (navigator as any).canShare ? (navigator as any).canShare(p) : true
+                if (can) { await (navigator as any).share(p); shared = true; break }
+                } catch {
+                // try next payload
                 }
-                if (!shared) {
-                  try { await navigator.clipboard.writeText(`${message}\n${link}`) } catch {}
-                  alert('Invite text copied to clipboard.')
-                } else {
-                  try { log('Invite.share.success') } catch {}
-                }
+              }
+              if (!shared) {
+                try { await navigator.clipboard.writeText(`${message}\n${link}`) } catch {}
+                alert('Invite link copied to clipboard.')
               } else {
-                try { await navigator.clipboard.writeText(`Join me on GlobGram. Tap the link to start a secure chat.\n${link}`) } catch {}
-                try { log('Invite.share.unsupported') } catch {}
-                alert('Invite text copied to clipboard.')
+                try { log('Invite.share.success') } catch {}
+              }
+              } else {
+              try { await navigator.clipboard.writeText(`${message}\n${link}`) } catch {}
+              try { log('Invite.share.unsupported') } catch {}
+              alert('Invite link copied to clipboard.')
               }
             } catch (e: any) { try { log(`Invite.share.error: ${e?.message||e}`) } catch {} }
-          }}>Connect safely with your friend</button>
+            }}>Invite a friend</button>
           <label style={{ fontSize: 8, color: 'var(--muted)' }}>Theme</label>
           <select value={theme} onChange={(e) => applyTheme(e.target.value as any)}>
             <option value="system">System</option>
