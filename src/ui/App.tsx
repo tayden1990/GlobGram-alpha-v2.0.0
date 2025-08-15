@@ -615,14 +615,34 @@ export default function App() {
             setInviteUrl(link)
             setInviteOpen(true)
             try {
+              const message = 'Join me on GlobGram. Tap the link to start a secure chat.'
               // @ts-ignore - Web Share API optional
               if (navigator.share) {
-                // @ts-ignore
                 try { log('Invite.share.attempt') } catch {}
-                await navigator.share({ title: 'Connect on GlobGram', text: 'Join me on GlobGram. Tap the link to start a secure chat.', url: link })
-                try { log('Invite.share.success') } catch {}
+                // Some platforms hide `text` when `url` is present. Try both, then fallback to text+link.
+                const payloads: any[] = [
+                  { title: 'Connect on GlobGram', text: message, url: link },
+                  { title: 'Connect on GlobGram', text: `${message}\n${link}` },
+                ]
+                let shared = false
+                for (const p of payloads) {
+                  try {
+                    const can = (navigator as any).canShare ? (navigator as any).canShare(p) : true
+                    if (can) { await (navigator as any).share(p); shared = true; break }
+                  } catch {
+                    // try next payload
+                  }
+                }
+                if (!shared) {
+                  try { await navigator.clipboard.writeText(`${message}\n${link}`) } catch {}
+                  alert('Invite text copied to clipboard.')
+                } else {
+                  try { log('Invite.share.success') } catch {}
+                }
               } else {
+                try { await navigator.clipboard.writeText(`Join me on GlobGram. Tap the link to start a secure chat.\n${link}`) } catch {}
                 try { log('Invite.share.unsupported') } catch {}
+                alert('Invite text copied to clipboard.')
               }
             } catch (e: any) { try { log(`Invite.share.error: ${e?.message||e}`) } catch {} }
           }}>Connect safely with your friend</button>
@@ -803,14 +823,33 @@ export default function App() {
                 <button onClick={async () => { try { await navigator.clipboard.writeText(inviteUrl); } catch {} }}>Copy link</button>
                 <button onClick={async () => {
                   try {
+                    const message = 'Join me on GlobGram. Tap the link to start a secure chat.'
                     // @ts-ignore
                     if (navigator.share) {
-                      // @ts-ignore
                       try { log('InviteModal.share.attempt') } catch {}
-                      await navigator.share({ title: 'Connect on GlobGram', text: 'Join me on GlobGram. Tap the link to start a secure chat.', url: inviteUrl })
-                      try { log('InviteModal.share.success') } catch {}
+                      const payloads: any[] = [
+                        { title: 'Connect on GlobGram', text: message, url: inviteUrl },
+                        { title: 'Connect on GlobGram', text: `${message}\n${inviteUrl}` },
+                      ]
+                      let shared = false
+                      for (const p of payloads) {
+                        try {
+                          const can = (navigator as any).canShare ? (navigator as any).canShare(p) : true
+                          if (can) { await (navigator as any).share(p); shared = true; break }
+                        } catch {
+                          // try next
+                        }
+                      }
+                      if (!shared) {
+                        try { await navigator.clipboard.writeText(`${message}\n${inviteUrl}`) } catch {}
+                        alert('Invite text copied to clipboard.')
+                      } else {
+                        try { log('InviteModal.share.success') } catch {}
+                      }
                     } else {
+                      try { await navigator.clipboard.writeText(`${message}\n${inviteUrl}`) } catch {}
                       try { log('InviteModal.share.unsupported') } catch {}
+                      alert('Invite text copied to clipboard.')
                     }
                   } catch (e: any) { try { log(`InviteModal.share.error: ${e?.message||e}`) } catch {} }
                 }}>Share…</button>
