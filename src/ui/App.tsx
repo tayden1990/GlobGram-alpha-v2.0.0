@@ -591,7 +591,7 @@ export default function App() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px' }}>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
           <Logo size={28} animated title="GlobGram" />
-          <h1 style={{ margin: 0, fontSize: 22 }}>GlobGram Alpha</h1>
+          <h1 style={{ margin: 0, fontSize: 16 }}>GlobGram Alpha</h1>
         </div>
         {/* <span style={{ color: 'var(--muted)' }}>Decentralized DMs over Nostr</span> */}
         <div style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, alignItems: 'center' }}>
@@ -646,7 +646,7 @@ export default function App() {
               }
             } catch (e: any) { try { log(`Invite.share.error: ${e?.message||e}`) } catch {} }
           }}>Connect safely with your friend</button>
-          <label style={{ fontSize: 12, color: 'var(--muted)' }}>Theme</label>
+          <label style={{ fontSize: 8, color: 'var(--muted)' }}>Theme</label>
           <select value={theme} onChange={(e) => applyTheme(e.target.value as any)}>
             <option value="system">System</option>
             <option value="light">Light</option>
