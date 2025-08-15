@@ -8,12 +8,13 @@ type Props = {
 }
 
 export function Logo({ size = 64, animated = false, title = 'GlobGram', style }: Props) {
-  const [src, setSrc] = useState<string>('/branding/logo.png')
+  const base = (import.meta as any).env?.BASE_URL || '/'
+  const [src, setSrc] = useState<string>(`${base}branding/logo.png`)
   const cls = animated ? 'app-logo app-logo-anim' : 'app-logo'
   return (
     <img
       src={src}
-      onError={() => setSrc('/icons/icon.svg')}
+      onError={() => setSrc(`${base}icons/icon.svg`)}
       alt={title}
       width={size}
       height={size}
