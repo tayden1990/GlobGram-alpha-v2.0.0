@@ -42,6 +42,20 @@
 				"$eslint-stylish"
 			],
 			"group": "build"
+		},
+		{
+			"label": "vite-build",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"build"
+			],
+			"problemMatcher": [
+				"$tsc",
+				"$eslint-stylish"
+			],
+			"group": "build"
 		}
 	]
 }

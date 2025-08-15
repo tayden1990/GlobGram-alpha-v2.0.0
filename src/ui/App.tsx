@@ -55,10 +55,14 @@ export default function App() {
   // PWA install prompt handling
   const [installAvailable, setInstallAvailable] = useState(false)
   const installPromptRef = useRef<any>(null)
-  const [installStatus, setInstallStatus] = useState<'idle'|'accepted'|'dismissed'|'installed'>('idle')
+  const [installStatus, setInstallStatus] = useState<'idle'|'prompting'|'accepted'|'dismissed'|'installed'>('idle')
+  const [installError, setInstallError] = useState<string | null>(null)
+  const [bipCapturedAt, setBipCapturedAt] = useState<number | null>(null)
+  const [isStandalone, setIsStandalone] = useState<boolean>(false)
   // SW version/update state
   const [updateAvailable, setUpdateAvailable] = useState(false)
   const [swVersion, setSwVersion] = useState<string | null>(null)
+  const [updateCountdown, setUpdateCountdown] = useState<number | null>(null)
 
   // apply theme
   const applyTheme = (t: 'system'|'light'|'dark') => {
@@ -96,13 +100,20 @@ export default function App() {
       try { e.preventDefault() } catch {}
       installPromptRef.current = e
       setInstallAvailable(true)
+      setBipCapturedAt(Date.now())
     }
     const onInstalled = () => {
       setInstallStatus('installed')
       setInstallAvailable(false)
+      setIsStandalone(true)
     }
     window.addEventListener('beforeinstallprompt', onBip as any)
     window.addEventListener('appinstalled', onInstalled as any)
+    // initial display-mode detection
+    try {
+      const standalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true
+      if (standalone) { setIsStandalone(true); setInstallAvailable(false); setInstallStatus('installed') }
+    } catch {}
     return () => {
       window.removeEventListener('beforeinstallprompt', onBip as any)
       window.removeEventListener('appinstalled', onInstalled as any)
@@ -144,6 +155,34 @@ export default function App() {
       navigator.serviceWorker.removeEventListener('message', onMsg as any)
     }
   }, [])
+
+  // Start a short countdown to auto-apply updates
+  useEffect(() => {
+    if (!updateAvailable) { setUpdateCountdown(null); return }
+    setUpdateCountdown(5)
+    const id = setInterval(() => {
+      setUpdateCountdown((n) => {
+        if (n === null) return null
+        if (n <= 1) {
+          clearInterval(id)
+          ;(async () => {
+            try {
+              const reg = await navigator.serviceWorker.getRegistration()
+              if (reg?.waiting) {
+                reg.waiting.postMessage({ type: 'SKIP_WAITING' })
+                setTimeout(() => window.location.reload(), 200)
+              } else {
+                window.location.reload()
+              }
+            } catch { window.location.reload() }
+          })()
+          return 0
+        }
+        return n - 1
+      })
+    }, 1000)
+    return () => clearInterval(id)
+  }, [updateAvailable])
 
   // Handle invite links: ?invite=<npub|hex>
   useEffect(() => {
@@ -362,22 +401,73 @@ export default function App() {
                 <h3>Step 5 — Install the app</h3>
                 <p>Install GlobGram to your device for a faster, more app-like experience.</p>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <button disabled={!installAvailable} title={installAvailable? 'Install the app' : 'Install prompt not available yet'} onClick={async () => {
-                    const prompt = installPromptRef.current
-                    if (!prompt) { setInstallStatus('idle'); return }
-                    try {
-                      prompt.prompt()
-                      const choice = await prompt.userChoice
-                      if (choice?.outcome === 'accepted') setInstallStatus('accepted')
-                      else setInstallStatus('dismissed')
-                    } catch {}
-                  }}>Install app</button>
+                  <button
+                    disabled={!installAvailable || isStandalone}
+                    title={isStandalone ? 'Already installed' : (installAvailable ? 'Install the app' : 'Install prompt not available yet')}
+                    onClick={async () => {
+                      setInstallError(null)
+                      const prompt = installPromptRef.current
+                      if (!prompt) { setInstallStatus('idle'); return }
+                      try {
+                        setInstallStatus('prompting')
+                        await prompt.prompt()
+                        const choice = await prompt.userChoice
+                        if (choice?.outcome === 'accepted') setInstallStatus('accepted')
+                        else setInstallStatus('dismissed')
+                      } catch (err: any) {
+                        setInstallStatus('dismissed')
+                        setInstallError(String(err?.message || err || 'Install prompt was blocked'))
+                      } finally {
+                        // The prompt can only be used once.
+                        installPromptRef.current = null
+                        setInstallAvailable(false)
+                      }
+                    }}
+                  >Install app</button>
                   <span style={{ color: 'var(--muted)', fontSize: 12 }}>
-                    {installStatus === 'idle' && (installAvailable ? 'Ready to install' : 'Waiting for install prompt…')}
+                    {isStandalone && 'Installed ✓'}
+                    {!isStandalone && installStatus === 'idle' && (installAvailable ? 'Ready to install' : 'Waiting for install prompt…')}
+                    {installStatus === 'prompting' && 'Showing prompt…'}
                     {installStatus === 'accepted' && 'Install accepted'}
                     {installStatus === 'dismissed' && 'Install dismissed'}
                     {installStatus === 'installed' && 'Installed ✓'}
                   </span>
+                  {installError && (
+                    <div style={{ color: 'var(--danger, #e57373)', fontSize: 12 }}>
+                      {installError}
+                    </div>
+                  )}
+                  {!installAvailable && (
+                    <div style={{ width: '100%', color: 'var(--muted)', fontSize: 12 }}>
+                      <div>Tip: the install prompt appears when the app meets PWA criteria. Try these:</div>
+                      <ul style={{ margin: '6px 0 0 18px', padding: 0 }}>
+                        <li>Reload once so the service worker takes control.</li>
+                        <li>Use HTTPS or localhost; avoid private windows.</li>
+                        <li>Not already installed and opened in app mode.</li>
+                        <li>
+                          {(() => {
+                            const ua = navigator.userAgent.toLowerCase()
+                            const isiOS = /iphone|ipad|ipod/.test(ua)
+                            const isChromium = /chrome|edg|crios/.test(ua)
+                            if (isiOS) return 'On iOS Safari: Share → Add to Home Screen.'
+                            if (isChromium) return 'On Chrome/Edge desktop: click the “Install” icon in the address bar.'
+                            return 'Use your browser menu to Install/Add to Home Screen.'
+                          })()}
+                        </li>
+                      </ul>
+                      <div style={{ marginTop: 6 }}>
+                        <button onClick={() => {
+                          try { navigator.serviceWorker.controller?.postMessage({ type: 'GET_VERSION' }) } catch {}
+                          navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.update().catch(()=>{}))).catch(()=>{})
+                        }}>Check again</button>
+                        <button onClick={() => window.location.reload()} style={{ marginLeft: 8 }}>Reload</button>
+                      </div>
+                      <div style={{ marginTop: 6, opacity: 0.8 }}>
+                        Readiness: {isSecureContext ? 'secure' : 'insecure'} · SW: {navigator.serviceWorker?.controller ? 'controlled' : 'no controller yet'} ·
+                        BIP: {bipCapturedAt ? new Date(bipCapturedAt).toLocaleTimeString() : 'not yet'}
+                      </div>
+                    </div>
+                  )}
                   <div style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8 }}>
                     <button onClick={() => setObStep(3)}>← Back</button>
                     <button onClick={() => setObStep(5)}>Next →</button>
@@ -448,21 +538,19 @@ export default function App() {
         </div>
         {updateAvailable && (
           <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderTop: '1px solid var(--border)', background: 'var(--card)', color: 'var(--fg)' }}>
-            <span style={{ fontSize: 13 }}>A new version is available{swVersion ? ` (${swVersion})` : ''}.</span>
+            <span style={{ fontSize: 13 }}>A new version is available{swVersion ? ` (${swVersion})` : ''}. {updateCountdown !== null ? `Updating in ${updateCountdown}s…` : ''}</span>
             <button onClick={async () => {
               try {
                 const reg = await navigator.serviceWorker.getRegistration()
                 if (reg?.waiting) {
-                  // Tell waiting SW to activate
                   reg.waiting.postMessage({ type: 'SKIP_WAITING' })
-                  // Wait a tick then reload
-                  setTimeout(() => window.location.reload(), 250)
+                  setTimeout(() => window.location.reload(), 200)
                 } else {
                   window.location.reload()
                 }
               } catch { window.location.reload() }
-            }}>Update</button>
-            <button onClick={() => setUpdateAvailable(false)} style={{ marginLeft: 'auto' }}>Dismiss</button>
+            }}>Update now</button>
+            <button onClick={() => { setUpdateAvailable(false); setUpdateCountdown(null) }} style={{ marginLeft: 'auto' }}>Dismiss</button>
           </div>
         )}
       </div>

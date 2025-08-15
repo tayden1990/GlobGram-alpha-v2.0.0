@@ -1,5 +1,5 @@
 // Bump these on releases
-const APP_VERSION = '2025-08-15-1'
+const APP_VERSION = '2025-08-15-3'
 const CACHE_NAME = 'globgram-v2'
 
 function scopeUrl(path) {
