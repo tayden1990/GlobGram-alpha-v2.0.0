@@ -169,6 +169,15 @@ export function RoomWindow() {
 		}
 	}, [])
 
+	// Signal to the app shell that the room panel is mounted and ready after a selection change
+	useEffect(() => {
+		if (!roomId) return
+		try {
+			const ev = new CustomEvent('panel-ready', { detail: { type: 'room', id: roomId, at: Date.now() } })
+			window.dispatchEvent(ev)
+		} catch {}
+	}, [roomId])
+
 	return (
 		<section role="main" aria-label="Room messages" style={{ 
 			flex: 1, 

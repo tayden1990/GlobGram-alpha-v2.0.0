@@ -289,7 +289,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [chatListOpen, roomListOpen, isMobile])
 
-  // Auto-collapse any drawers/lists on chat selection; force-close stuck overlays and hard-reload as last resort
+  // Auto-collapse any drawers/lists on chat selection; prefer panel-ready event, else hard-reload once as last resort
   useEffect(() => {
     if (!selectedPeer) return
     try { log(`Nav.selectPeer ${selectedPeer.slice(0, 12)}…`) } catch {}
@@ -298,29 +298,36 @@ export default function App() {
     // Close drawers/side lists proactively
     setChatDrawerOpen(false)
     setChatListOpen(false)
-    // Give React a moment; then verify overlays are gone
+    // Listen for panel-ready; if not received quickly, reload once (per-target guard)
+    let ready = false
+    const onReady = (e: any) => {
+      const d = e?.detail
+      if (d?.type === 'chat' && d?.id === selectedPeer) ready = true
+    }
+    window.addEventListener('panel-ready', onReady as any)
     const t1 = window.setTimeout(() => {
       const overlays = document.querySelectorAll('.drawer-overlay')
       if (overlays.length) {
         try { log('UI.drawerOverlay.stuck.afterPeerSelect -> forceClose') } catch {}
         setChatDrawerOpen(false)
         setRoomDrawerOpen(false)
-        // As a visual safety, hide any leftover overlay nodes
         overlays.forEach(el => { (el as HTMLElement).style.display = 'none' })
       }
     }, 250)
-    // If somehow still stuck, last-resort reload
     const t2 = window.setTimeout(() => {
-      const overlays = document.querySelectorAll('.drawer-overlay')
-      if (overlays.length) {
-        try { log('UI.drawerOverlay.stuck.afterPeerSelect -> hardReload') } catch {}
-        try { window.location.reload() } catch {}
+      if (!ready) {
+        const key = `reloaded_for_chat_${selectedPeer}`
+        if (!sessionStorage.getItem(key)) {
+          try { log('Nav.selectPeer.notReady -> hardReloadOnce') } catch {}
+          try { sessionStorage.setItem(key, '1') } catch {}
+          try { window.location.reload() } catch {}
+        }
       }
     }, 1400)
-    return () => { window.clearTimeout(t1); window.clearTimeout(t2) }
+    return () => { window.removeEventListener('panel-ready', onReady as any); window.clearTimeout(t1); window.clearTimeout(t2) }
   }, [selectedPeer])
 
-  // Auto-collapse any drawers/lists on room selection; force-close stuck overlays and hard-reload as last resort
+  // Auto-collapse any drawers/lists on room selection; prefer panel-ready then hard-reload once if needed
   useEffect(() => {
     if (!selectedRoom) return
     try { log(`Nav.selectRoom ${String(selectedRoom).slice(0, 18)}…`) } catch {}
@@ -329,7 +336,12 @@ export default function App() {
     // Close drawers/side lists proactively
     setRoomDrawerOpen(false)
     setRoomListOpen(false)
-    // Give React a moment; then verify overlays are gone
+    let ready = false
+    const onReady = (e: any) => {
+      const d = e?.detail
+      if (d?.type === 'room' && String(d?.id) === String(selectedRoom)) ready = true
+    }
+    window.addEventListener('panel-ready', onReady as any)
     const t1 = window.setTimeout(() => {
       const overlays = document.querySelectorAll('.drawer-overlay')
       if (overlays.length) {
@@ -339,15 +351,17 @@ export default function App() {
         overlays.forEach(el => { (el as HTMLElement).style.display = 'none' })
       }
     }, 250)
-    // If somehow still stuck, last-resort reload
     const t2 = window.setTimeout(() => {
-      const overlays = document.querySelectorAll('.drawer-overlay')
-      if (overlays.length) {
-        try { log('UI.drawerOverlay.stuck.afterRoomSelect -> hardReload') } catch {}
-        try { window.location.reload() } catch {}
+      if (!ready) {
+        const key = `reloaded_for_room_${selectedRoom}`
+        if (!sessionStorage.getItem(key)) {
+          try { log('Nav.selectRoom.notReady -> hardReloadOnce') } catch {}
+          try { sessionStorage.setItem(key, '1') } catch {}
+          try { window.location.reload() } catch {}
+        }
       }
     }, 1400)
-    return () => { window.clearTimeout(t1); window.clearTimeout(t2) }
+    return () => { window.removeEventListener('panel-ready', onReady as any); window.clearTimeout(t1); window.clearTimeout(t2) }
   }, [selectedRoom])
   return (
     <ToastProvider>

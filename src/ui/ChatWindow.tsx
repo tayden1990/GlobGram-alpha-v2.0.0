@@ -188,6 +188,15 @@ export function ChatWindow() {
     }
   }, [])
 
+  // Signal to the app shell that the chat panel is mounted and ready after a selection change
+  useEffect(() => {
+    if (!selectedPeer) return
+    try {
+      const ev = new CustomEvent('panel-ready', { detail: { type: 'chat', id: selectedPeer, at: Date.now() } })
+      window.dispatchEvent(ev)
+    } catch {}
+  }, [selectedPeer])
+
   return (
   <section role="main" aria-label="Direct messages" style={{ 
     flex: 1, 
