@@ -1,5 +1,8 @@
 import { KeyManager } from '../wallet'
-import { ChatList, NostrEngine, RelayManager, RoomList } from '.'
+import { ChatList } from './ChatList'
+import { NostrEngine } from './NostrEngine'
+import { RelayManager } from './RelayManager'
+import { RoomList } from './RoomList'
 import { ToastProvider } from './Toast'
 import Logo from './Logo'
 import Splash from './Splash'
@@ -15,8 +18,8 @@ import { useSettingsStore } from './settingsStore'
 import { getLogs, clearLogs, onLog, log, setLogMinLevel, getPersistedLogsText, clearPersistedLogs } from './logger'
 // Lazy-load QRCode only when needed to reduce initial bundle size
 
-const ChatWindowLazy = lazy(() => import('.').then(m => ({ default: m.ChatWindow })))
-const RoomWindowLazy = lazy(() => import('.').then(m => ({ default: m.RoomWindow })))
+const ChatWindowLazy = lazy(() => import('./ChatWindow').then(m => ({ default: m.ChatWindow })))
+const RoomWindowLazy = lazy(() => import('./RoomWindow').then(m => ({ default: m.RoomWindow })))
 
 export default function App() {
   const isMobile = useIsMobile(900)

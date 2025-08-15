@@ -80,16 +80,32 @@ export const useRoomStore = create<State & Actions>()(
         set({ messages: { ...get().messages, [id]: list } })
       },
       setRoomMeta: (id, meta) => {
+        const prev = get().rooms[id] || { id }
+        const next = { ...prev, ...meta }
+        const changed = (prev.name !== next.name) || (prev.about !== next.about) || (prev.picture !== next.picture)
+        if (!changed) return
         try { log(`roomStore.setRoomMeta ${id.slice(0,8)}… keys=${Object.keys(meta).join(',')}`) } catch {}
-        const r = get().rooms[id] || { id }
-        set({ rooms: { ...get().rooms, [id]: { ...r, ...meta } } })
+        set({ rooms: { ...get().rooms, [id]: next } })
       },
       clearRoom: (id) => { try { log(`roomStore.clearRoom ${id.slice(0,8)}…`) } catch {}; set({ messages: { ...get().messages, [id]: [] } }) },
-      setOwner: (id, owner) => { try { log(`roomStore.setOwner ${id.slice(0,8)}… -> ${owner.slice(0,8)}…`) } catch {}; set({ owners: { ...get().owners, [id]: owner } }) },
+      setOwner: (id, owner) => {
+        const cur = get().owners[id]
+        if (cur === owner) return
+        try { log(`roomStore.setOwner ${id.slice(0,8)}… -> ${owner.slice(0,8)}…`) } catch {}
+        set({ owners: { ...get().owners, [id]: owner } })
+      },
       setMembers: (id, arr) => {
-        try { log(`roomStore.setMembers ${id.slice(0,8)}… count=${arr.length}`) } catch {}
+        const prev = get().members[id] || {}
         const setMap: Record<string, true> = {}
         for (const m of arr) setMap[m] = true
+        // shallow compare membership sets
+        const sameSize = Object.keys(prev).length === Object.keys(setMap).length
+        let equal = sameSize
+        if (equal) {
+          for (const k of Object.keys(setMap)) { if (!prev[k]) { equal = false; break } }
+        }
+        if (equal) return
+        try { log(`roomStore.setMembers ${id.slice(0,8)}… count=${arr.length}`) } catch {}
         set({ members: { ...get().members, [id]: setMap } })
       },
       addMember: (id, member) => {

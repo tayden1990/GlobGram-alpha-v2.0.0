@@ -10,6 +10,15 @@ import { useSettingsStore } from '../ui/settingsStore'
 import { log } from '../ui/logger'
 import { emitToast } from '../ui/Toast'
 
+// Stable per-session room subscription id and per-relay active state to prevent duplicate REQs
+let ROOM_SUB_ID: string | null = null
+const activeRoomSubs = new Map<string, { roomId: string | null, subId: string }>() // key: relay url
+
+function getOrCreateRoomSubId(pk: string) {
+  if (!ROOM_SUB_ID) ROOM_SUB_ID = `roomCur:${pk.slice(0, 8)}:${Math.random().toString(36).slice(2, 8)}`
+  return ROOM_SUB_ID
+}
+
 export function startNostrEngine(sk: string) {
   const pk = getPublicKey(hexToBytes(sk))
   const urls = useRelayStore.getState().relays.filter(r => r.enabled).map(r => r.url)
@@ -32,22 +41,38 @@ export function startNostrEngine(sk: string) {
   // Only subscribe globally to channel metadata (40/41); avoid flooding all messages (42)
   const subRoomsMeta = JSON.stringify(["REQ", SUBS.roomsMeta, { kinds: [40,41] }])
   const subReceipts = JSON.stringify(["REQ", SUBS.receipts, { kinds: [10001 as any], '#p': [pk] }])
-  // Maintain a focused subscription for currently selected room messages
+  // Maintain a focused subscription for currently selected room messages, deduped per relay
   const updateCurrentRoomSub = (roomId: string | null) => {
     try {
+      const subId = getOrCreateRoomSubId(pk)
       for (const [url, ws] of pool.entries()) {
-        try { ws.send(JSON.stringify(["CLOSE", SUBS.roomCur])) } catch {}
-        if (!roomId) continue
+        const active = activeRoomSubs.get(url)
+        // If already subscribed to same room with same sub id, skip
+        if (active && active.subId === subId && active.roomId === roomId) {
+          log(`Skip roomCur (active) @ ${url} room=${roomId ? roomId.slice(0,8)+'…' : 'null'}`)
+          continue
+        }
+        // Close previous sub id on this relay if present
+        try {
+          const prev = active?.subId || subId
+          ws.send(JSON.stringify(["CLOSE", prev]))
+        } catch {}
+        // If no room selected, just record cleared state and continue
+        if (!roomId) {
+          activeRoomSubs.set(url, { roomId: null, subId })
+          continue
+        }
         const since = Math.floor(Date.now()/1000) - 7*24*60*60 // last 7 days
-        const req = JSON.stringify(["REQ", SUBS.roomCur, { kinds: [42], '#e': [roomId], since }])
-        try { ws.send(req); log(`Subscribe roomCur -> ${url} room=${roomId.slice(0,8)}…`) } catch {}
+        const req = JSON.stringify(["REQ", subId, { kinds: [42], '#e': [roomId], since }])
+        try { ws.send(req); log(`Subscribe roomCur -> ${url} room=${roomId.slice(0,8)}… id=${subId}`) } catch {}
+        activeRoomSubs.set(url, { roomId, subId })
       }
     } catch {}
   }
   // react to relay changes at runtime
   const attachHandlers = (url: string, ws: WebSocket) => {
     ws.onopen = () => {
-      log(`Subscribe -> ${url} (inbox/typing/roomsMeta/receipts/roomCur)`)    
+  log(`Subscribe -> ${url} (inbox/typing/roomsMeta/receipts/roomCur)`)    
       ws.send(sub)
       ws.send(sub2)
       ws.send(subTyping)
@@ -398,14 +423,19 @@ export function refreshSubscriptions() {
         try {
           log(`Refresh subscribe -> ${url}`)
           ws.send(sub); ws.send(sub2); ws.send(subTyping); ws.send(subRoomsMeta); ws.send(subReceipts)
-          // re-apply current room subscription on refresh
-          try { ws.send(JSON.stringify(["CLOSE", 'roomCur'])) } catch {}
+          // re-apply current room subscription on refresh using stable sub id and dedupe
+          const subId = getOrCreateRoomSubId(pk)
+          try { ws.send(JSON.stringify(["CLOSE", subId])) } catch {}
           try {
             const rid = useRoomStore.getState().selectedRoom
             if (rid) {
               const since = Math.floor(Date.now()/1000) - 7*24*60*60
-              const req = JSON.stringify(["REQ", 'roomCur', { kinds: [42], '#e': [rid], since }])
+              const req = JSON.stringify(["REQ", subId, { kinds: [42], '#e': [rid], since }])
               ws.send(req)
+              activeRoomSubs.set(url, { roomId: rid, subId })
+              log(`Refresh roomCur -> ${url} room=${rid.slice(0,8)}… id=${subId}`)
+            } else {
+              activeRoomSubs.set(url, { roomId: null, subId })
             }
           } catch {}
         } catch {}
