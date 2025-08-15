@@ -615,7 +615,7 @@ export default function App() {
             setInviteUrl(link)
             setInviteOpen(true)
             try {
-              const message = "Let's chat securely on GlobGram. Open this link to connect with me."
+              const message = 'Join me on GlobGram. Tap the link to start a secure chat.'
               // @ts-ignore - Web Share API optional
               if (navigator.share) {
               try { log('Invite.share.attempt') } catch {}
@@ -635,14 +635,14 @@ export default function App() {
               }
               if (!shared) {
                 try { await navigator.clipboard.writeText(`${message}\n${link}`) } catch {}
-                alert('Invite link copied to clipboard.')
+                alert('Invite text copied to clipboard.')
               } else {
                 try { log('Invite.share.success') } catch {}
               }
               } else {
               try { await navigator.clipboard.writeText(`${message}\n${link}`) } catch {}
               try { log('Invite.share.unsupported') } catch {}
-              alert('Invite link copied to clipboard.')
+              alert('Invite text copied to clipboard.')
               }
             } catch (e: any) { try { log(`Invite.share.error: ${e?.message||e}`) } catch {} }
             }}>Invite a friend</button>
