@@ -176,9 +176,7 @@ export function ChatWindow() {
     return () => { try { unsub() } catch {} }
   }, [selectedPeer])
 
-  if (!selectedPeer) return <section style={{ flex: 1, padding: 16, height: '100%' }}>Select a chat</section>
-
-  // cleanup on unmount
+  // cleanup on unmount (keep hook order stable before any early returns)
   useEffect(() => {
     return () => {
       try { cameraStreamRef.current?.getTracks().forEach(t => t.stop()) } catch {}
@@ -196,6 +194,8 @@ export function ChatWindow() {
       window.dispatchEvent(ev)
     } catch {}
   }, [selectedPeer])
+
+  if (!selectedPeer) return <section style={{ flex: 1, padding: 16, height: '100%' }}>Select a chat</section>
 
   return (
   <section role="main" aria-label="Direct messages" style={{ 

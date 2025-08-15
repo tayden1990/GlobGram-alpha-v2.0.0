@@ -157,9 +157,7 @@ export function RoomWindow() {
 		return () => obs.disconnect()
 	}, [msgs.length, visibleCount])
 
-	if (!roomId) return <section style={{ flex: 1, padding: 16, height: '100%' }}>Select a room</section>
-
-	// cleanup on unmount
+	// cleanup on unmount (must be before any early return to keep hooks order stable)
 	useEffect(() => {
 		return () => {
 			try { cameraStreamRef.current?.getTracks().forEach(t => t.stop()) } catch {}
@@ -177,6 +175,8 @@ export function RoomWindow() {
 			window.dispatchEvent(ev)
 		} catch {}
 	}, [roomId])
+
+	if (!roomId) return <section style={{ flex: 1, padding: 16, height: '100%' }}>Select a room</section>
 
 	return (
 		<section role="main" aria-label="Room messages" style={{ 

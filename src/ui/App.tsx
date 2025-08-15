@@ -331,7 +331,25 @@ export default function App() {
           try { log('Nav.selectPeer.notReady -> hardReloadOnce') } catch {}
           try { sessionStorage.setItem(global, '1') } catch {}
           try { sessionStorage.setItem(key, '1') } catch {}
-          try { window.location.reload() } catch {}
+          try {
+            ;(async () => {
+              try {
+                const regs = await (navigator as any)?.serviceWorker?.getRegistrations?.()
+                if (regs && Array.isArray(regs)) regs.forEach((r: any) => { try { r.unregister() } catch {} })
+              } catch {}
+              try {
+                const keys = await (caches as any)?.keys?.()
+                if (keys && Array.isArray(keys)) {
+                  for (const k of keys) { try { await (caches as any).delete(k) } catch {} }
+                }
+              } catch {}
+              try {
+                const u = new URL(window.location.href)
+                u.searchParams.set('bust', String(Date.now()))
+                window.location.replace(u.toString())
+              } catch { window.location.reload() }
+            })()
+          } catch { window.location.reload() }
         }
       }
     }, 2500)
@@ -379,12 +397,62 @@ export default function App() {
           try { log('Nav.selectRoom.notReady -> hardReloadOnce') } catch {}
           try { sessionStorage.setItem(global, '1') } catch {}
           try { sessionStorage.setItem(key, '1') } catch {}
-          try { window.location.reload() } catch {}
+          try {
+            ;(async () => {
+              try {
+                const regs = await (navigator as any)?.serviceWorker?.getRegistrations?.()
+                if (regs && Array.isArray(regs)) regs.forEach((r: any) => { try { r.unregister() } catch {} })
+              } catch {}
+              try {
+                const keys = await (caches as any)?.keys?.()
+                if (keys && Array.isArray(keys)) {
+                  for (const k of keys) { try { await (caches as any).delete(k) } catch {} }
+                }
+              } catch {}
+              try {
+                const u = new URL(window.location.href)
+                u.searchParams.set('bust', String(Date.now()))
+                window.location.replace(u.toString())
+              } catch { window.location.reload() }
+            })()
+          } catch { window.location.reload() }
         }
       }
     }, 2500)
     return () => { window.removeEventListener('panel-ready', onReady as any); window.clearTimeout(t1); window.clearTimeout(t2); window.clearInterval(poll) }
   }, [selectedRoom])
+
+  // One-time global guard: if React hook mismatch error (#310) bubbles, hard-reload with cache-bust
+  useEffect(() => {
+    const key = 'react310Reloaded'
+    const onErr = (e: ErrorEvent) => {
+      try {
+        const msg = String(e?.message || '')
+        if (msg.includes('Minified React error #310') && !sessionStorage.getItem(key)) {
+          sessionStorage.setItem(key, '1')
+          ;(async () => {
+            try {
+              const regs = await (navigator as any)?.serviceWorker?.getRegistrations?.()
+              if (regs && Array.isArray(regs)) regs.forEach((r: any) => { try { r.unregister() } catch {} })
+            } catch {}
+            try {
+              const keys = await (caches as any)?.keys?.()
+              if (keys && Array.isArray(keys)) {
+                for (const k of keys) { try { await (caches as any).delete(k) } catch {} }
+              }
+            } catch {}
+            try {
+              const u = new URL(window.location.href)
+              u.searchParams.set('bust', String(Date.now()))
+              window.location.replace(u.toString())
+            } catch { window.location.reload() }
+          })()
+        }
+      } catch {}
+    }
+    window.addEventListener('error', onErr)
+    return () => window.removeEventListener('error', onErr)
+  }, [])
   return (
     <ToastProvider>
       <Splash />
