@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { log } from '../ui/logger'
 import { persist } from 'zustand/middleware'
 
 export type ChatMessage = {
@@ -46,11 +47,12 @@ export const useChatStore = create<State & Actions>()(
       lastRead: {},
   blocked: {},
   typing: {},
-      setMyPubkey: (pk: string | null) => set({ myPubkey: pk }),
+  setMyPubkey: (pk: string | null) => { set({ myPubkey: pk }); try { log(`chatStore.setMyPubkey ${pk?.slice(0,8) || 'null'}`) } catch {} },
       selectPeer: (pk: string | null) => {
         set({ selectedPeer: pk })
         try { if (pk) localStorage.setItem('lastSelectedPeer', pk); else localStorage.removeItem('lastSelectedPeer') } catch {}
         if (pk) {
+          try { log(`chatStore.selectPeer ${pk.slice(0,8)}…`) } catch {}
           // mark read to newest message when switching
           const msgs = get().conversations[pk] || []
           const ts = msgs.length ? msgs[msgs.length - 1].ts : 0
@@ -60,6 +62,7 @@ export const useChatStore = create<State & Actions>()(
         }
       },
       addMessage: (peer: string, msg: ChatMessage) => {
+        try { log(`chatStore.addMessage ${peer.slice(0,8)}… id=${msg.id.slice(0,8)}… status=${msg.status || ''}`) } catch {}
         const convs = { ...get().conversations }
         const list = convs[peer] ? [...convs[peer]] : []
         if (!list.some((m) => m.id === msg.id)) {
@@ -71,6 +74,7 @@ export const useChatStore = create<State & Actions>()(
         set({ conversations: convs })
       },
       markRead: (peer: string) => {
+  try { log(`chatStore.markRead ${peer.slice(0,8)}…`) } catch {}
         const msgs = get().conversations[peer] || []
         const ts = msgs.length ? msgs[msgs.length - 1].ts : 0
         const lr = { ...get().lastRead }
@@ -78,23 +82,27 @@ export const useChatStore = create<State & Actions>()(
         set({ lastRead: lr })
       },
       removeMessage: (peer: string, id: string) => {
+  try { log(`chatStore.removeMessage ${peer.slice(0,8)}… id=${id.slice(0,8)}…`) } catch {}
         const convs = { ...get().conversations }
         const list = (convs[peer] || []).filter(m => m.id !== id)
         convs[peer] = list
         set({ conversations: convs })
       },
       updateMessageId: (peer: string, oldId: string, newId: string) => {
+  try { log(`chatStore.updateMessageId ${peer.slice(0,8)}… ${oldId.slice(0,8)}… -> ${newId.slice(0,8)}…`) } catch {}
         const convs = { ...get().conversations }
         const list = (convs[peer] || []).map(m => m.id === oldId ? { ...m, id: newId } : m)
         convs[peer] = list
         set({ conversations: convs })
       },
       clearConversation: (peer: string) => {
+  try { log(`chatStore.clearConversation ${peer.slice(0,8)}…`) } catch {}
         const convs = { ...get().conversations }
         delete convs[peer]
         set({ conversations: convs })
       },
       setBlocked: (peer: string, enabled: boolean) => {
+  try { log(`chatStore.setBlocked ${peer.slice(0,8)}… -> ${enabled}`) } catch {}
         const b = { ...get().blocked }
         if (enabled) b[peer] = true
         else delete b[peer]
@@ -102,11 +110,20 @@ export const useChatStore = create<State & Actions>()(
       },
       updateMessageStatus: (peer: string, id: string, status: ChatMessage['status'], error?: string) => {
         const convs = { ...get().conversations }
-        const list = (convs[peer] || []).map(m => m.id === id ? { ...m, status, error: status === 'failed' ? (error || m.error) : undefined } : m)
+        let changed = false
+        const list = (convs[peer] || []).map(m => {
+          if (m.id !== id) return m
+          if (m.status === status && (status !== 'failed' || m.error === error)) return m
+          changed = true
+          return { ...m, status, error: status === 'failed' ? (error || m.error) : undefined }
+        })
+        if (!changed) return
+        try { log(`chatStore.updateMessageStatus ${peer.slice(0,8)}… id=${id.slice(0,8)}… -> ${status}${error ? ` (${error})` : ''}`) } catch {}
         convs[peer] = list
         set({ conversations: convs })
       },
       setTyping: (peer: string, typing: boolean) => {
+  try { log(`chatStore.setTyping ${peer.slice(0,8)}… -> ${typing}`) } catch {}
         const t = { ...get().typing }
         if (typing) t[peer] = true
         else delete t[peer]

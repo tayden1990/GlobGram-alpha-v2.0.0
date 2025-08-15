@@ -6,6 +6,7 @@ import { nip19 } from 'nostr-tools'
 import { bytesToHex } from '../nostr/utils'
 import { QRScan } from './QRScan'
 import { useToast } from './Toast'
+import { log } from './logger'
 
 export function ChatList({ onCollapse }: { onCollapse?: () => void }) {
 	const { show } = useToast()
@@ -69,23 +70,25 @@ export function ChatList({ onCollapse }: { onCollapse?: () => void }) {
 							pk = typeof dec.data === 'string' ? dec.data : bytesToHex(dec.data as Uint8Array)
 						}
 					} catch {}
-					if (!/^[0-9a-fA-F]{64}$/.test(pk)) { show('Invalid pubkey', 'error'); return }
-					selectPeer(pk)
+					if (!/^[0-9a-fA-F]{64}$/.test(pk)) { show('Invalid pubkey', 'error'); try { log('ChatList.newChat.invalid') } catch {}; return }
+					selectPeer(pk); try { onCollapse && onCollapse() } catch {}
+					try { log(`ChatList.newChat ${pk.slice(0, 12)}…`) } catch {}
 					setNewPeer('')
 				}}>Start</button>
-				<button title="Scan QR" onClick={() => setQrOpen(true)}>📷</button>
+				<button title="Scan QR" onClick={() => { try { log('ChatList.qr.open') } catch {}; setQrOpen(true) }}>📷</button>
 			</div>
 			{qrOpen && (
 				<QRScan onResult={(text) => {
 					setQrOpen(false)
+					try { log(`ChatList.qr.result ${String(text).slice(0,64)}`) } catch {}
 					try {
 						if (text.startsWith('npub')) {
 							const dec = nip19.decode(text)
 							const pk = typeof dec.data === 'string' ? dec.data : bytesToHex(dec.data as Uint8Array)
 							if (/^[0-9a-fA-F]{64}$/.test(pk)) selectPeer(pk)
 						}
-					} catch {}
-				}} onClose={() => setQrOpen(false)} />
+						} catch (e: any) { try { log(`ChatList.qr.error: ${e?.message||e}`) } catch {} }
+					}} onClose={() => { try { log('ChatList.qr.close') } catch {}; setQrOpen(false) }} />
 			)}
 			<div ref={listRef} style={{ maxHeight: 360, overflowY: 'auto' }}>
 				<ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
@@ -98,7 +101,7 @@ export function ChatList({ onCollapse }: { onCollapse?: () => void }) {
 						const name = aliases[pk]
 						const unread = msgs.filter(m => m.ts > (lastRead[pk] || 0)).length
 						return (
-							<li key={pk} style={{ padding: '8px 6px', cursor: 'pointer', background: selected===pk? 'var(--selected)': undefined }} onClick={() => selectPeer(pk)}>
+							<li key={pk} style={{ padding: '8px 6px', cursor: 'pointer', background: selected===pk? 'var(--selected)': undefined }} onClick={() => { selectPeer(pk); try { onCollapse && onCollapse() } catch {} }}>
 								<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
 									<div style={{ fontFamily: name ? 'inherit' : 'monospace', fontSize: 12 }}>{name || `${pk.slice(0, 10)}…`}</div>
 									{unread > 0 && <span style={{ background: 'var(--accent)', color: '#fff', borderRadius: 999, padding: '0 6px', fontSize: 11 }}>{unread}</span>}

@@ -3,6 +3,7 @@ import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools'
 import { bytesToHex, hexToBytes } from '../nostr/utils'
 import { useChatStore } from '../state/chatStore'
 import { useToast } from '../ui/Toast'
+import { log } from '../ui/logger'
 
 export function KeyManager() {
   const [sk, setSk] = useState<string | null>(null)
@@ -20,6 +21,7 @@ export function KeyManager() {
   const pub = getPublicKey(hexToBytes(stored))
   setPk(pub)
   setMyPubkey(pub)
+  try { log('KeyManager.init: loaded existing key') } catch {}
     }
   }, [])
 
@@ -31,6 +33,7 @@ export function KeyManager() {
     setSk(hexd)
     setPk(pub)
   setMyPubkey(pub)
+  try { log('KeyManager.create: generated new key') } catch {}
   }
 
   const exportKeys = async () => {
@@ -39,12 +42,14 @@ export function KeyManager() {
   const npub = nip19.npubEncode(pk)
   await navigator.clipboard.writeText(`${npub}\n${nsec}`)
   show('Copied npub and nsec', 'success')
+  try { log('KeyManager.export: copied npub+nsec to clipboard') } catch {}
   }
 
   const copyNpub = async () => {
     if (!pk) return
     const npub = nip19.npubEncode(pk)
   try { await navigator.clipboard.writeText(npub); show('npub copied', 'success') } catch { show('Copy failed', 'error') }
+  try { log('KeyManager.copyNpub') } catch {}
   }
 
   const copyNsec = async () => {
@@ -53,6 +58,7 @@ export function KeyManager() {
     if (!ok) return
     const nsec = nip19.nsecEncode(hexToBytes(sk))
   try { await navigator.clipboard.writeText(nsec); show('nsec copied', 'success') } catch { show('Copy failed', 'error') }
+  try { log('KeyManager.copyNsec') } catch {}
   }
 
   const shareNpub = async () => {
@@ -63,17 +69,21 @@ export function KeyManager() {
       // @ts-ignore
       if (navigator.share) {
         // @ts-ignore
+  try { log('KeyManager.shareNpub.attempt') } catch {}
   await navigator.share({ title: 'My Nostr npub', text: npub })
+  try { log('KeyManager.shareNpub.success') } catch {}
       } else {
   await navigator.clipboard.writeText(npub)
   show('npub copied (sharing unsupported)', 'success')
+  try { log('KeyManager.shareNpub.unsupported') } catch {}
       }
-    } catch {}
+    } catch (e: any) { try { log(`KeyManager.shareNpub.error: ${e?.message||e}`) } catch {} }
   }
 
   const copyHexPubkey = async () => {
     if (!pk) return
   try { await navigator.clipboard.writeText(pk); show('pubkey (hex) copied', 'success') } catch { show('Copy failed', 'error') }
+  try { log('KeyManager.copyHexPubkey') } catch {}
   }
 
   const downloadQR = () => {
@@ -90,6 +100,7 @@ export function KeyManager() {
       a.click()
       a.remove()
   } catch { show('Failed to export QR', 'error') }
+  try { log('KeyManager.downloadQR') } catch {}
   }
 
   const copyQRToClipboard = async () => {
@@ -111,6 +122,7 @@ export function KeyManager() {
         window.open(url, '_blank')
       }
   } catch { show('Copy failed', 'error') }
+  try { log('KeyManager.copyQRToClipboard') } catch {}
   }
 
   const downloadBackup = () => {
@@ -134,6 +146,7 @@ export function KeyManager() {
     a.click()
     a.remove()
     URL.revokeObjectURL(url)
+  try { log('KeyManager.downloadBackup v1') } catch {}
   }
 
   // Render QR locally when modal opens (lazy-load qrcode)
@@ -182,6 +195,7 @@ export function KeyManager() {
     a.click()
     a.remove()
     URL.revokeObjectURL(url)
+  try { log('KeyManager.exportEncrypted v2') } catch {}
   }
 
   const importEncrypted = async () => {
@@ -191,7 +205,7 @@ export function KeyManager() {
     input.onchange = async () => {
       const file = input.files?.[0]
       if (!file) return
-      try {
+  try {
         const text = await file.text()
         const obj = JSON.parse(text)
         if (!(obj && obj.v === 2 && Array.isArray(obj.salt) && Array.isArray(obj.iv) && Array.isArray(obj.data))) throw new Error('Invalid backup')
@@ -212,8 +226,9 @@ export function KeyManager() {
         setPk(pub)
         setMyPubkey(pub)
   show('Encrypted backup imported', 'success')
-      } catch {
+      } catch (e: any) {
   show('Failed to decrypt backup', 'error')
+  try { log(`KeyManager.importEncrypted.error: ${e?.message||e}`) } catch {}
       }
     }
     input.click()
@@ -250,13 +265,14 @@ export function KeyManager() {
     setSk(secretHex)
     setPk(pub)
     setMyPubkey(pub)
+  try { log('KeyManager.importNsec') } catch {}
   }
 
   const importFromFile = async (file?: File) => {
     try {
       const f = file || fileInputRef.current?.files?.[0]
       if (!f) return
-      const text = await f.text()
+  const text = await f.text()
       let secretHex: string | null = null
       // Try JSON first
       try {
@@ -282,7 +298,7 @@ export function KeyManager() {
           if (maybeNsec) secretHex = nsecToHex(maybeNsec)
         }
       }
-      if (!secretHex || !/^[0-9a-fA-F]{64}$/.test(secretHex)) {
+  if (!secretHex || !/^[0-9a-fA-F]{64}$/.test(secretHex)) {
   show('Could not read a valid key from the selected file', 'error')
         return
       }
@@ -292,8 +308,9 @@ export function KeyManager() {
       setPk(pub)
       setMyPubkey(pub)
   show('Account imported from file', 'success')
-    } catch (e) {
+    } catch (e: any) {
   show('Failed to import file', 'error')
+  try { log(`KeyManager.importFromFile.error: ${e?.message||e}`) } catch {}
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
@@ -304,6 +321,7 @@ export function KeyManager() {
     setSk(null)
     setPk(null)
   setMyPubkey(null)
+  try { log('KeyManager.clear') } catch {}
   }
 
   return (

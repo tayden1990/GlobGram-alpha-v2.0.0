@@ -1,9 +1,16 @@
-import { createContext, useContext, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 
 type Variant = 'info' | 'success' | 'error'
 type Toast = { id: string; text: string; variant: Variant }
 
 const ToastCtx = createContext<{ show: (text: string, variant?: Variant) => void } | null>(null)
+
+// Lightweight event emitter so non-React modules can trigger toasts without importing React
+export function emitToast(text: string, variant: Variant = 'info') {
+  try {
+    window.dispatchEvent(new CustomEvent('app:toast', { detail: { text, variant } }))
+  } catch {}
+}
 
 export function ToastProvider({ children }: { children: any }) {
   const [toasts, setToasts] = useState<Toast[]>([])
@@ -24,6 +31,19 @@ export function ToastProvider({ children }: { children: any }) {
   }
 
   const bgFor = (v: Variant) => v === 'success' ? '#2e7d32' : v === 'error' ? '#c62828' : 'rgba(0,0,0,0.85)'
+
+  // Listen for global toast events
+  useEffect(() => {
+    const onToast = (e: Event) => {
+      try {
+        const ce = e as CustomEvent
+        const d = ce.detail as { text?: string; variant?: Variant }
+        if (d && typeof d.text === 'string') show(d.text, d.variant)
+      } catch {}
+    }
+    window.addEventListener('app:toast', onToast as any)
+    return () => window.removeEventListener('app:toast', onToast as any)
+  }, [])
 
   return (
     <ToastCtx.Provider value={{ show }}>

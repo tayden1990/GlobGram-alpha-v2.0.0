@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GlobGram — Offline</title>
+    <meta name="description" content="You're offline. GlobGram will reconnect automatically when your network is back." />
+    <style>
+      html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#0f1115; color:#e5e7eb; }
+      .wrap { min-height: 100%; display: grid; place-items: center; padding: 24px; }
+      .card { max-width: 520px; width: 100%; border: 1px solid #263041; background: #0c0e13; border-radius: 12px; box-shadow: 0 10px 32px rgba(0,0,0,.35); padding: 20px; }
+      h1 { margin: 0 0 8px; font-size: 20px; }
+      p { margin: 6px 0; color: #9aa7b8; }
+      button { margin-top: 12px; background: #1976d2; color: #fff; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card" style="text-align:center">
+        <img src="/branding/logo.png" alt="Logo" width="72" height="72" onerror="this.src='/icons/icon.svg'" style="border-radius:18%; filter: drop-shadow(0 2px 6px rgba(0,0,0,.3)); margin-bottom:10px" />
+        <h1>You're offline</h1>
+        <p>GlobGram couldn't load. Check your connection and try again.</p>
+        <button onclick="location.reload()">Reload</button>
+      </div>
+    </div>
+  </body>
+  </html>

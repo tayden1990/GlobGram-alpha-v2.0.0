@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { log } from '../ui/logger'
 import { persist } from 'zustand/middleware'
 
 export type Room = {
@@ -49,8 +50,15 @@ export const useRoomStore = create<State & Actions>()(
   messages: {},
   owners: {},
   members: {},
-      addRoom: (room) => set({ rooms: { ...get().rooms, [room.id]: { ...get().rooms[room.id], ...room } } }),
+      addRoom: (room) => {
+        const prev = get().rooms[room.id]
+        const next = { ...(prev || {}), ...room }
+        const changed = !prev || prev.name !== next.name || prev.about !== next.about || prev.picture !== next.picture
+        set({ rooms: { ...get().rooms, [room.id]: next } })
+        if (changed) { try { log(`roomStore.addRoom ${room.id.slice(0,8)}…`) } catch {} }
+      },
       removeRoom: (id) => {
+        try { log(`roomStore.removeRoom ${id.slice(0,8)}…`) } catch {}
         const r = { ...get().rooms }
         delete r[id]
         const m = { ...get().messages }
@@ -58,10 +66,12 @@ export const useRoomStore = create<State & Actions>()(
         set({ rooms: r, messages: m, selectedRoom: get().selectedRoom === id ? null : get().selectedRoom })
       },
       selectRoom: (id) => {
+        try { log(`roomStore.selectRoom ${id?.slice(0,8) || 'null'}`) } catch {}
         set({ selectedRoom: id })
         try { if (id) localStorage.setItem('lastSelectedRoom', id); else localStorage.removeItem('lastSelectedRoom') } catch {}
       },
       addRoomMessage: (id, msg) => {
+        try { log(`roomStore.addRoomMessage ${id.slice(0,8)}… id=${msg.id.slice(0,8)}…`) } catch {}
         const list = get().messages[id] ? [...get().messages[id]] : []
         if (!list.some(m => m.id === msg.id)) {
           list.push(msg)
@@ -70,22 +80,26 @@ export const useRoomStore = create<State & Actions>()(
         set({ messages: { ...get().messages, [id]: list } })
       },
       setRoomMeta: (id, meta) => {
+        try { log(`roomStore.setRoomMeta ${id.slice(0,8)}… keys=${Object.keys(meta).join(',')}`) } catch {}
         const r = get().rooms[id] || { id }
         set({ rooms: { ...get().rooms, [id]: { ...r, ...meta } } })
       },
-      clearRoom: (id) => set({ messages: { ...get().messages, [id]: [] } }),
-      setOwner: (id, owner) => set({ owners: { ...get().owners, [id]: owner } }),
+      clearRoom: (id) => { try { log(`roomStore.clearRoom ${id.slice(0,8)}…`) } catch {}; set({ messages: { ...get().messages, [id]: [] } }) },
+      setOwner: (id, owner) => { try { log(`roomStore.setOwner ${id.slice(0,8)}… -> ${owner.slice(0,8)}…`) } catch {}; set({ owners: { ...get().owners, [id]: owner } }) },
       setMembers: (id, arr) => {
+        try { log(`roomStore.setMembers ${id.slice(0,8)}… count=${arr.length}`) } catch {}
         const setMap: Record<string, true> = {}
         for (const m of arr) setMap[m] = true
         set({ members: { ...get().members, [id]: setMap } })
       },
       addMember: (id, member) => {
+        try { log(`roomStore.addMember ${id.slice(0,8)}… + ${member.slice(0,8)}…`) } catch {}
         const m = { ...(get().members[id] || {}) }
         m[member] = true
         set({ members: { ...get().members, [id]: m } })
       },
       removeMember: (id, member) => {
+        try { log(`roomStore.removeMember ${id.slice(0,8)}… - ${member.slice(0,8)}…`) } catch {}
         const m = { ...(get().members[id] || {}) }
         delete m[member]
         set({ members: { ...get().members, [id]: m } })

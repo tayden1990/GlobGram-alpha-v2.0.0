@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { log } from '../ui/logger'
 import { persist } from 'zustand/middleware'
 
 export type Relay = { url: string; enabled: boolean }
@@ -29,9 +30,10 @@ export const useRelayStore = create<State & Actions>()(
         const exists = get().relays.some(r => r.url === u)
         if (exists) return
         set({ relays: [...get().relays, { url: u, enabled: true }] })
+        try { log(`relayStore.addRelay ${u}`) } catch {}
       },
-      removeRelay: (url) => set({ relays: get().relays.filter(r => r.url !== url) }),
-      toggleRelay: (url, enabled) => set({ relays: get().relays.map(r => r.url === url ? { ...r, enabled } : r) }),
+      removeRelay: (url) => { set({ relays: get().relays.filter(r => r.url !== url) }); try { log(`relayStore.removeRelay ${url}`) } catch {} },
+      toggleRelay: (url, enabled) => { set({ relays: get().relays.map(r => r.url === url ? { ...r, enabled } : r) }); try { log(`relayStore.toggleRelay ${url} -> ${enabled}`) } catch {} },
     }),
     { name: 'globgram-relays', version: 1 }
   )

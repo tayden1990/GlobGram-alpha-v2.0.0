@@ -1,6 +1,8 @@
 import { KeyManager } from '../wallet'
 import { ChatList, NostrEngine, RelayManager, RoomList } from '.'
 import { ToastProvider } from './Toast'
+import Logo from './Logo'
+import Splash from './Splash'
 import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { useIsMobile } from './useIsMobile'
 import { useChatStore } from '../state/chatStore'
@@ -10,6 +12,7 @@ import { hexToBytes } from '../nostr/utils'
 import { bytesToHex } from '../nostr/utils'
 import { createRoom, refreshSubscriptions, sendDM } from '../nostr/engine'
 import { useSettingsStore } from './settingsStore'
+import { getLogs, clearLogs, onLog, log, setLogMinLevel, getPersistedLogsText, clearPersistedLogs } from './logger'
 // Lazy-load QRCode only when needed to reduce initial bundle size
 
 const ChatWindowLazy = lazy(() => import('.').then(m => ({ default: m.ChatWindow })))
@@ -25,6 +28,19 @@ export default function App() {
   const [theme, setTheme] = useState<'system'|'light'|'dark'>(() => (localStorage.getItem('theme') as any) || 'system')
   const [fabOpen, setFabOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [logModalOpen, setLogModalOpen] = useState(false)
+  const [logAuth, setLogAuth] = useState<'idle'|'required'|'granted'|'denied'>('idle')
+  const [logTick, setLogTick] = useState(0)
+  const [logLevel, setLogLevel] = useState<'all'|'info'|'warn'|'error'>(() => {
+    try { return (localStorage.getItem('logLevel') as any) || 'all' } catch { return 'all' }
+  })
+  useEffect(() => {
+    try {
+      localStorage.setItem('logLevel', logLevel); log(`Logs.level=${logLevel}`)
+      if (logLevel === 'all') setLogMinLevel('info')
+      else setLogMinLevel(logLevel)
+    } catch {}
+  }, [logLevel])
   const [inviteOpen, setInviteOpen] = useState(false)
   const [inviteUrl, setInviteUrl] = useState<string>('')
   // Onboarding state
@@ -106,6 +122,7 @@ export default function App() {
       setInstallStatus('installed')
       setInstallAvailable(false)
       setIsStandalone(true)
+      log('PWA appinstalled event')
     }
     window.addEventListener('beforeinstallprompt', onBip as any)
     window.addEventListener('appinstalled', onInstalled as any)
@@ -134,7 +151,7 @@ export default function App() {
     try { navigator.serviceWorker.controller?.postMessage({ type: 'GET_VERSION' }) } catch {}
     // Also trigger an update check
     navigator.serviceWorker.getRegistrations().then(regs => {
-      regs.forEach(reg => reg.update().catch(()=>{}))
+  regs.forEach(reg => reg.update().catch(()=>{}))
     }).catch(()=>{})
     // If a new worker is waiting, surface update
     navigator.serviceWorker.getRegistration().then(reg => {
@@ -147,7 +164,7 @@ export default function App() {
         const nw = reg.installing
         if (!nw) return
         nw.addEventListener('statechange', () => {
-          if (nw.state === 'installed' && navigator.serviceWorker.controller) setUpdateAvailable(true)
+          if (nw.state === 'installed' && navigator.serviceWorker.controller) { setUpdateAvailable(true); log('SW update available') }
         })
       })
     }).catch(()=>{})
@@ -184,11 +201,19 @@ export default function App() {
     return () => clearInterval(id)
   }, [updateAvailable])
 
+  // While the log modal is open and unlocked, subscribe to log updates to live-refresh
+  useEffect(() => {
+    if (!(logModalOpen && logAuth === 'granted')) return
+    const off = onLog(() => setLogTick(t => (t + 1) % 1_000_000))
+    return () => { try { off && off() } catch {} }
+  }, [logModalOpen, logAuth])
+
   // Handle invite links: ?invite=<npub|hex>
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const invite = params.get('invite')
     if (!invite) return
+    try { log(`Invite.detect ${invite.slice(0, 64)}`) } catch {}
     // Clean URL
     try { window.history.replaceState({}, '', window.location.pathname + window.location.hash) } catch {}
     (async () => {
@@ -212,16 +237,18 @@ export default function App() {
         localStorage.setItem('nostr_sk', hexd)
         setMyPubkey(pub)
         sk = hexd
+        try { log('Invite.autoAccountCreated') } catch {}
       }
       // Send hello DM and focus chat
       try {
         // slight delay to allow engine to start
         setTimeout(async () => {
+          try { log(`Invite.helloDM -> ${inviterHex.slice(0, 12)}…`) } catch {}
           await sendDM(sk!, inviterHex, { t: 'Hi, I am here from now' })
           selectPeer(inviterHex)
           localStorage.setItem(ackKey, '1')
         }, 400)
-      } catch {}
+      } catch (e: any) { try { log(`Invite.error: ${e?.message||e}`) } catch {} }
     })()
   }, [])
 
@@ -258,8 +285,70 @@ export default function App() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [chatListOpen, roomListOpen, isMobile])
+
+  // Auto-collapse any drawers/lists on chat selection; force-close stuck overlays and hard-reload as last resort
+  useEffect(() => {
+    if (!selectedPeer) return
+    try { log(`Nav.selectPeer ${selectedPeer.slice(0, 12)}…`) } catch {}
+    // Ensure Chats tab is active on mobile
+    setActiveTab('chats')
+    // Close drawers/side lists proactively
+    setChatDrawerOpen(false)
+    setChatListOpen(false)
+    // Give React a moment; then verify overlays are gone
+    const t1 = window.setTimeout(() => {
+      const overlays = document.querySelectorAll('.drawer-overlay')
+      if (overlays.length) {
+        try { log('UI.drawerOverlay.stuck.afterPeerSelect -> forceClose') } catch {}
+        setChatDrawerOpen(false)
+        setRoomDrawerOpen(false)
+        // As a visual safety, hide any leftover overlay nodes
+        overlays.forEach(el => { (el as HTMLElement).style.display = 'none' })
+      }
+    }, 250)
+    // If somehow still stuck, last-resort reload
+    const t2 = window.setTimeout(() => {
+      const overlays = document.querySelectorAll('.drawer-overlay')
+      if (overlays.length) {
+        try { log('UI.drawerOverlay.stuck.afterPeerSelect -> hardReload') } catch {}
+        try { window.location.reload() } catch {}
+      }
+    }, 1400)
+    return () => { window.clearTimeout(t1); window.clearTimeout(t2) }
+  }, [selectedPeer])
+
+  // Auto-collapse any drawers/lists on room selection; force-close stuck overlays and hard-reload as last resort
+  useEffect(() => {
+    if (!selectedRoom) return
+    try { log(`Nav.selectRoom ${String(selectedRoom).slice(0, 18)}…`) } catch {}
+    // Ensure Rooms tab is active on mobile
+    setActiveTab('rooms')
+    // Close drawers/side lists proactively
+    setRoomDrawerOpen(false)
+    setRoomListOpen(false)
+    // Give React a moment; then verify overlays are gone
+    const t1 = window.setTimeout(() => {
+      const overlays = document.querySelectorAll('.drawer-overlay')
+      if (overlays.length) {
+        try { log('UI.drawerOverlay.stuck.afterRoomSelect -> forceClose') } catch {}
+        setRoomDrawerOpen(false)
+        setChatDrawerOpen(false)
+        overlays.forEach(el => { (el as HTMLElement).style.display = 'none' })
+      }
+    }, 250)
+    // If somehow still stuck, last-resort reload
+    const t2 = window.setTimeout(() => {
+      const overlays = document.querySelectorAll('.drawer-overlay')
+      if (overlays.length) {
+        try { log('UI.drawerOverlay.stuck.afterRoomSelect -> hardReload') } catch {}
+        try { window.location.reload() } catch {}
+      }
+    }, 1400)
+    return () => { window.clearTimeout(t1); window.clearTimeout(t2) }
+  }, [selectedRoom])
   return (
     <ToastProvider>
+      <Splash />
       {/* Onboarding overlay */}
       {onboardingOpen && (
         <div role="dialog" aria-modal="true" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
@@ -497,7 +586,10 @@ export default function App() {
     <div style={{ fontFamily: 'system-ui, sans-serif', height: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--fg)', overflow: 'hidden' }}>
       <div className="sticky-top" style={{ display: 'flex', flexDirection: 'column', gap: 0, borderBottom: '1px solid var(--border)', background: 'var(--card)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px' }}>
-        <h1 style={{ margin: 0, fontSize: 22 }}>GlobGram Alpha</h1>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+          <Logo size={28} animated title="GlobGram" />
+          <h1 style={{ margin: 0, fontSize: 22 }}>GlobGram Alpha</h1>
+        </div>
         {/* <span style={{ color: 'var(--muted)' }}>Decentralized DMs over Nostr</span> */}
         <div style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, alignItems: 'center' }}>
           <button title="Share invite" onClick={async () => {
@@ -523,9 +615,13 @@ export default function App() {
               // @ts-ignore - Web Share API optional
               if (navigator.share) {
                 // @ts-ignore
+                try { log('Invite.share.attempt') } catch {}
                 await navigator.share({ title: 'Connect on GlobGram', text: 'Join me on GlobGram. Tap the link to start a secure chat.', url: link })
+                try { log('Invite.share.success') } catch {}
+              } else {
+                try { log('Invite.share.unsupported') } catch {}
               }
-            } catch {}
+            } catch (e: any) { try { log(`Invite.share.error: ${e?.message||e}`) } catch {} }
           }}>Connect safely with your friend</button>
           <label style={{ fontSize: 12, color: 'var(--muted)' }}>Theme</label>
           <select value={theme} onChange={(e) => applyTheme(e.target.value as any)}>
@@ -578,13 +674,115 @@ export default function App() {
               <summary style={{ cursor: 'pointer', userSelect: 'none' }}>Preferences</summary>
               <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                  <input type="checkbox" checked={powMining} onChange={(e) => setPowMining(e.target.checked)} />
+                  <input type="checkbox" checked={powMining} onChange={(e) => { setPowMining(e.target.checked); try { log(`Settings: powMining=${e.target.checked}`) } catch {} }} />
                   Enable PoW mining (for relays that require NIP-13)
                 </label>
-                <button onClick={() => { try { localStorage.removeItem('onboarding_done') } catch {}; window.location.reload() }}>Run onboarding again</button>
+                <button onClick={() => { try { localStorage.removeItem('onboarding_done') } catch {}; try { log('Onboarding: reset requested') } catch {}; window.location.reload() }}>Run onboarding again</button>
+                <button onClick={() => { setLogAuth('required'); setLogModalOpen(true) }}>View log</button>
               </div>
             </details>
           </div>
+        </Modal>
+      )}
+      {logModalOpen && (
+        <Modal onClose={() => { setLogModalOpen(false); setLogAuth('idle') }}>
+          {logAuth !== 'granted' ? (
+            <div>
+              <h3 style={{ marginTop: 0 }}>Unlock logs</h3>
+              <p style={{ marginTop: 0 }}>Enter password to view logs.</p>
+              <input type="password" placeholder="Password" id="log-pass" />
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <button onClick={() => {
+                  const inp = (document.getElementById('log-pass') as HTMLInputElement | null)
+                  const ok = inp && inp.value === '4522815'
+                  if (ok) setLogAuth('granted'); else setLogAuth('denied')
+                }}>Unlock</button>
+                <button onClick={() => { setLogModalOpen(false); setLogAuth('idle') }}>Cancel</button>
+              </div>
+              {logAuth === 'denied' && (<div style={{ color: 'var(--danger, #d32f2f)', marginTop: 8 }}>Incorrect password.</div>)}
+            </div>
+          ) : (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                <h3 style={{ margin: 0 }}>Logs</h3>
+                <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <label style={{ fontSize: 12, color: 'var(--muted)' }}>Level</label>
+                  <select value={logLevel} onChange={(e) => setLogLevel(e.target.value as any)}>
+                    <option value="all">All</option>
+                    <option value="info">Info</option>
+                    <option value="warn">Warn</option>
+                    <option value="error">Error</option>
+                  </select>
+                  <button onClick={async () => {
+                    try {
+                      const text = (getLogs() || []).map(e => `${new Date(e.ts).toISOString()} [${e.level.toUpperCase()}] ${e.msg}`).join('\n')
+                      await navigator.clipboard.writeText(text)
+                    } catch {}
+                  }}>Copy</button>
+                  <button onClick={async () => {
+                    try {
+                      const items = (getLogs() || []).filter(e => logLevel==='all' ? true : e.level===logLevel)
+                      const text = items.map(e => `${new Date(e.ts).toISOString()} [${e.level.toUpperCase()}] ${e.msg}`).join('\n')
+                      await navigator.clipboard.writeText(text)
+                    } catch {}
+                  }}>Copy filtered</button>
+                  <button onClick={() => {
+                    try {
+                      const items = (getLogs() || [])
+                      const text = items.map(e => `${new Date(e.ts).toISOString()} [${e.level.toUpperCase()}] ${e.msg}`).join('\n')
+                      const blob = new Blob([text], { type: 'text/plain' })
+                      const url = URL.createObjectURL(blob)
+                      const a = document.createElement('a')
+                      a.href = url
+                      a.download = `globgram-logs-${Date.now()}.txt`
+                      document.body.appendChild(a)
+                      a.click()
+                      a.remove()
+                      URL.revokeObjectURL(url)
+                    } catch {}
+                  }}>Download</button>
+                  <button onClick={async () => {
+                    try {
+                      const text = await getPersistedLogsText('all')
+                      const blob = new Blob([text], { type: 'text/plain' })
+                      const url = URL.createObjectURL(blob)
+                      const a = document.createElement('a')
+                      a.href = url
+                      a.download = `globgram-logs-all-${Date.now()}.txt`
+                      document.body.appendChild(a)
+                      a.click()
+                      a.remove()
+                      URL.revokeObjectURL(url)
+                    } catch {}
+                  }}>Download all (persisted)</button>
+                  <button onClick={() => {
+                    try {
+                      const items = (getLogs() || []).filter(e => logLevel==='all' ? true : e.level===logLevel)
+                      const text = items.map(e => `${new Date(e.ts).toISOString()} [${e.level.toUpperCase()}] ${e.msg}`).join('\\n')
+                      const blob = new Blob([text], { type: 'text/plain' })
+                      const url = URL.createObjectURL(blob)
+                      const a = document.createElement('a')
+                      a.href = url
+                      a.download = `globgram-logs-${logLevel}-${Date.now()}.txt`
+                      document.body.appendChild(a)
+                      a.click()
+                      a.remove()
+                      URL.revokeObjectURL(url)
+                    } catch {}
+                  }}>Download filtered</button>
+                  <button onClick={async () => { try { await clearPersistedLogs() } catch {} }}>Clear persisted</button>
+                  <button onClick={() => { try { clearLogs(); setLogTick(t => (t + 1) % 1_000_000) } catch {} }}>Clear</button>
+                </div>
+              </div>
+              <div style={{ marginTop: 8, maxHeight: '60vh', overflow: 'auto', border: '1px solid var(--border)', padding: 8, borderRadius: 8, background: 'var(--card)' }}>
+                {(getLogs() || []).filter(e => logLevel==='all' ? true : e.level===logLevel).map((e, i) => (
+                  <div key={i} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 12, color: e.level==='error' ? '#d32f2f' : e.level==='warn' ? '#ed6c02' : 'var(--fg)' }}>
+                    {new Date(e.ts).toLocaleTimeString()} [{e.level.toUpperCase()}] {e.msg}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </Modal>
       )}
       {inviteOpen && (
@@ -605,9 +803,13 @@ export default function App() {
                     // @ts-ignore
                     if (navigator.share) {
                       // @ts-ignore
+                      try { log('InviteModal.share.attempt') } catch {}
                       await navigator.share({ title: 'Connect on GlobGram', text: 'Join me on GlobGram. Tap the link to start a secure chat.', url: inviteUrl })
+                      try { log('InviteModal.share.success') } catch {}
+                    } else {
+                      try { log('InviteModal.share.unsupported') } catch {}
                     }
-                  } catch {}
+                  } catch (e: any) { try { log(`InviteModal.share.error: ${e?.message||e}`) } catch {} }
                 }}>Share…</button>
               </div>
             </div>
@@ -630,7 +832,7 @@ export default function App() {
                   <div style={{ color: 'var(--muted)', fontSize: 12 }}>Chats</div>
                 </div>
                 <div style={{ flex: 1, minHeight: 0, height: 0 }}>
-                  <Suspense fallback={<div style={{ padding: 16 }}>Loading…</div>}>
+                  <Suspense fallback={<div className="app-loading" style={{ padding: 16, textAlign: 'center' }}><Logo size={56} animated /><div className="hint">Loading chat…</div></div>}>
                     <ChatWindowLazy />
                   </Suspense>
                 </div>
@@ -642,7 +844,7 @@ export default function App() {
                   <div style={{ color: 'var(--muted)', fontSize: 12 }}>Rooms</div>
                 </div>
                 <div style={{ flex: 1, minHeight: 0, height: 0 }}>
-                  <Suspense fallback={<div style={{ padding: 16 }}>Loading…</div>}>
+                  <Suspense fallback={<div className="app-loading" style={{ padding: 16, textAlign: 'center' }}><Logo size={56} animated /><div className="hint">Loading room…</div></div>}>
                     <RoomWindowLazy />
                   </Suspense>
                 </div>
@@ -713,7 +915,7 @@ export default function App() {
                 </div>
               )}
               <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-                <Suspense fallback={<div style={{ padding: 16 }}>Loading…</div>}>
+                <Suspense fallback={<div className="app-loading" style={{ padding: 16, textAlign: 'center' }}><Logo size={64} animated /><div className="hint">Loading chat…</div></div>}>
                   <ChatWindowLazy />
                 </Suspense>
               </div>
@@ -729,7 +931,7 @@ export default function App() {
                 </div>
               )}
               <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-                <Suspense fallback={<div style={{ padding: 16 }}>Loading…</div>}>
+                <Suspense fallback={<div className="app-loading" style={{ padding: 16, textAlign: 'center' }}><Logo size={64} animated /><div className="hint">Loading room…</div></div>}>
                   <RoomWindowLazy />
                 </Suspense>
               </div>
@@ -779,10 +981,11 @@ function Modal({ children, onClose }: { children: any; onClose: () => void }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+  try { document.body.classList.add('modal-open') } catch {}
+  return () => { window.removeEventListener('keydown', onKey); try { document.body.classList.remove('modal-open') } catch {} }
   }, [onClose])
   return (
-    <div role="dialog" aria-modal="true" onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+  <div role="dialog" aria-modal="true" onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2500 }}>
       <div onClick={(e) => e.stopPropagation()} className="card" style={{ width: '92vw', maxWidth: 520, maxHeight: '80vh', overflow: 'auto', padding: 12, background: 'var(--card)', color: 'var(--fg)' }}>
         {children}
       </div>

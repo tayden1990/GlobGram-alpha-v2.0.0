@@ -4,6 +4,7 @@ import { createRoom, updateRoomMembers } from '../nostr/engine'
 import { useChatStore } from '../state/chatStore'
 import { useToast } from './Toast'
 import { refreshSubscriptions } from '../nostr/engine'
+import { log } from './logger'
 
 export function RoomList({ onCollapse }: { onCollapse?: () => void }) {
 	const { show } = useToast()
@@ -53,15 +54,25 @@ export function RoomList({ onCollapse }: { onCollapse?: () => void }) {
 			</div>
 			<div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
 				<input placeholder="track room id (shown if you are owner/member)" value={newId} onChange={(e) => setNewId(e.target.value)} style={{ flex: 1, minWidth: 200 }} />
-				<button onClick={() => { const id = newId.trim(); if (!id) return; addRoom({ id }); setNewId('') }}>Join</button>
+				<button onClick={() => {
+					const id = newId.trim();
+					if (!id) return;
+					addRoom({ id });
+					try { log(`RoomList.join ${id}`) } catch {}
+					// Auto-select and collapse drawer to avoid lingering overlay
+					selectRoom(id);
+					try { onCollapse && onCollapse() } catch {}
+					setNewId('')
+				}}>Join</button>
 				<button title="Create a new room" onClick={async () => {
 					const name = prompt('Room name (optional)') || undefined
 					const about = prompt('About (optional)') || undefined
 					const picture = undefined
 					const sk = localStorage.getItem('nostr_sk')
 					if (!sk) { show('No key', 'error'); return }
-					const id = await createRoom(sk, { name, about, picture })
+					const id = await createRoom(sk, { name, about, picture }); try { log(`RoomList.create ${id}`) } catch {}
 					selectRoom(id)
+					try { onCollapse && onCollapse() } catch {}
 				}}>New</button>
 			</div>
 			<div ref={listRef} style={{ maxHeight: 360, overflowY: 'auto' }}>
@@ -71,12 +82,12 @@ export function RoomList({ onCollapse }: { onCollapse?: () => void }) {
 						const last = (msgs[id] || [])[ (msgs[id] || []).length - 1 ]
 						const isOwner = owners[id] && owners[id] === my
 						return (
-							<li key={id} style={{ padding: '8px 6px', cursor: 'pointer', background: selected===id? 'var(--selected)': undefined }} onClick={() => selectRoom(id)}>
+							<li key={id} style={{ padding: '8px 6px', cursor: 'pointer', background: selected===id? 'var(--selected)': undefined }} onClick={() => { try { log(`RoomList.select ${id}`) } catch {}; selectRoom(id); try { onCollapse && onCollapse() } catch {} }}>
 								<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
 									<div style={{ fontFamily: 'monospace', fontSize: 12 }}>{id.slice(0, 12)}…</div>
 									<span style={{ fontSize: 11, color: 'var(--muted)' }}>{Object.keys(members[id] || {}).length} members</span>
 									<span style={{ flex: 1 }} />
-									<button onClick={(e) => { e.stopPropagation(); removeRoom(id) }}>Leave</button>
+									<button onClick={(e) => { e.stopPropagation(); try { log(`RoomList.leave ${id}`) } catch {}; removeRoom(id) }}>Leave</button>
 								</div>
 								{last && <div style={{ color: 'var(--muted)', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{last.text}</div>}
 								{isOwner && (
@@ -89,7 +100,7 @@ export function RoomList({ onCollapse }: { onCollapse?: () => void }) {
 											const m = prompt('Add member pubkey (hex):')
 											if (!m) return
 											const next = Array.from(new Set([...current, m.trim()]))
-											await updateRoomMembers(sk, id, next)
+											await updateRoomMembers(sk, id, next); try { log(`RoomList.members.add ${m}`) } catch {}
 										}}>+ member</button>
 										<button title="Remove member (pubkey hex)" onClick={async (e) => {
 											e.stopPropagation()
@@ -100,7 +111,7 @@ export function RoomList({ onCollapse }: { onCollapse?: () => void }) {
 											const m = prompt('Remove which member (pubkey hex):', current[0])
 											if (!m) return
 											const next = current.filter(x => x !== m.trim())
-											await updateRoomMembers(sk, id, next)
+											await updateRoomMembers(sk, id, next); try { log(`RoomList.members.remove ${m}`) } catch {}
 										}}>- member</button>
 									</div>
 								)}

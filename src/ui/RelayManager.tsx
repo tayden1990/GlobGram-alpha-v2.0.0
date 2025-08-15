@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRelayStore } from '../state/relayStore'
+import { fetchRelayInfo, getCachedRelayInfo, type RelayInfo } from '../nostr/nip11'
 
 export function RelayManager() {
   const relays = useRelayStore(s => s.relays)
@@ -8,6 +9,8 @@ export function RelayManager() {
   const toggleRelay = useRelayStore(s => s.toggleRelay)
   const [url, setUrl] = useState('')
   const [statuses, setStatuses] = useState<Record<string, number>>({})
+  const [infos, setInfos] = useState<Record<string, RelayInfo | { error: string } | undefined>>({})
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     const urls = relays.filter(r => r.enabled).map(r => r.url)
@@ -17,6 +20,13 @@ export function RelayManager() {
       for (const [u, ws] of sockets) st[u] = ws.readyState
       setStatuses(st)
     }
+    // prime cached nip11
+    const cached: Record<string, RelayInfo | { error: string } | undefined> = {}
+    for (const u of urls) {
+      const c = getCachedRelayInfo(u)
+      if (c) cached[u] = c
+    }
+    if (Object.keys(cached).length) setInfos(prev => ({ ...prev, ...cached }))
     for (const u of urls) {
       try {
         const ws = new WebSocket(u)
@@ -34,6 +44,17 @@ export function RelayManager() {
   }, [relays.map(r => `${r.url}:${r.enabled}`).join(',')])
 
   const badge = (rs?: number) => rs === WebSocket.OPEN ? '🟢' : rs === WebSocket.CONNECTING ? '🟡' : '🔴'
+  const short = (s?: string, n = 64) => (s && s.length > n) ? (s.slice(0, n - 1) + '…') : (s || '')
+
+  const loadInfo = async (u: string, force = false) => {
+    try {
+      setInfos(prev => ({ ...prev, [u]: prev[u] }))
+      const info = await fetchRelayInfo(u, { force })
+      setInfos(prev => ({ ...prev, [u]: info }))
+    } catch (e) {
+      setInfos(prev => ({ ...prev, [u]: { error: (e as Error)?.message || 'Failed' } }))
+    }
+  }
 
   return (
     <section style={{ marginTop: 12, padding: 12, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--card)', color: 'var(--fg)' }}>
@@ -43,16 +64,44 @@ export function RelayManager() {
         <button onClick={() => { addRelay(url); setUrl('') }}>Add</button>
       </div>
       <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-    {relays.map(r => (
-          <li key={r.url} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 0' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <input type="checkbox" checked={r.enabled} onChange={(e) => toggleRelay(r.url, e.target.checked)} />
-      <span>{badge(statuses[r.url])}</span>
-      <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{r.url}</span>
-            </label>
-            <button onClick={() => removeRelay(r.url)}>Remove</button>
-          </li>
-        ))}
+        {relays.map(r => {
+          const info = infos[r.url]
+          const isOpen = !!expanded[r.url]
+          return (
+            <li key={r.url} style={{ padding: '8px 0', borderTop: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
+                  <input type="checkbox" checked={r.enabled} onChange={(e) => toggleRelay(r.url, e.target.checked)} />
+                  <span>{badge(statuses[r.url])}</span>
+                  <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{r.url}</span>
+                </label>
+                <button onClick={() => setExpanded(prev => ({ ...prev, [r.url]: !prev[r.url] }))}>{isOpen ? 'Hide' : 'Details'}</button>
+                <button onClick={() => loadInfo(r.url, true)}>Refresh</button>
+                <button onClick={() => removeRelay(r.url)}>Remove</button>
+              </div>
+              {isOpen && (
+                <div style={{ marginTop: 6, marginLeft: 28, fontSize: 13, color: 'var(--muted)' }}>
+                  {info && 'error' in (info as any) ? (
+                    <div style={{ color: 'var(--danger)' }}>NIP-11: {(info as any).error}</div>
+                  ) : info ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', rowGap: 4, columnGap: 8 }}>
+                      <div style={{ opacity: .7 }}>Name</div><div>{short((info as any).name, 80) || '—'}</div>
+                      <div style={{ opacity: .7 }}>Desc</div><div>{short((info as any).description, 120) || '—'}</div>
+                      <div style={{ opacity: .7 }}>Pubkey</div><div style={{ fontFamily: 'monospace' }}>{short((info as any).pubkey, 80) || '—'}</div>
+                      <div style={{ opacity: .7 }}>NIPs</div><div>{Array.isArray((info as any).supported_nips) ? (info as any).supported_nips.join(', ') : '—'}</div>
+                      <div style={{ opacity: .7 }}>Software</div><div>{short((info as any).software, 80) || '—'}</div>
+                      <div style={{ opacity: .7 }}>Version</div><div>{short((info as any).version, 40) || '—'}</div>
+                    </div>
+                  ) : (
+                    <div>
+                      <button onClick={() => loadInfo(r.url)}>Load NIP-11</button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </li>
+          )
+        })}
       </ul>
     </section>
   )

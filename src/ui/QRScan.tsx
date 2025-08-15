@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { log } from './logger'
 
 // Minimal QR scan using native BarcodeDetector if available (Chromium). Falls back to input file if not.
 export function QRScan({ onResult, onClose }: { onResult: (text: string) => void; onClose: () => void }) {
@@ -7,16 +8,19 @@ export function QRScan({ onResult, onClose }: { onResult: (text: string) => void
 
   useEffect(() => {
     // @ts-ignore
-    setSupported(!!window.BarcodeDetector)
+  const ok = !!(window as any).BarcodeDetector
+  setSupported(ok)
+  try { log(`QRScan.supported=${ok}`) } catch {}
   }, [])
 
   useEffect(() => {
     let stream: MediaStream | null = null
     let detector: any = null
     let raf = 0
-    const start = async () => {
+  const start = async () => {
       try {
-        if (!supported) return
+    if (!supported) return
+    try { log('QRScan.camera.start') } catch {}
         // @ts-ignore
         detector = new window.BarcodeDetector({ formats: ['qr_code'] })
         stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
@@ -31,12 +35,13 @@ export function QRScan({ onResult, onClose }: { onResult: (text: string) => void
             const codes = await detector.detect(videoRef.current)
             const text = codes?.[0]?.rawValue
             if (text) {
+        try { log(`QRScan.camera.detected: ${String(text).slice(0, 64)}`) } catch {}
               onResult(text)
             }
-          } catch {}
+      } catch (e: any) { try { log(`QRScan.camera.detect.error: ${e?.message||e}`) } catch {} }
         }
         tick()
-      } catch {}
+    } catch (e: any) { try { log(`QRScan.camera.start.error: ${e?.message||e}`) } catch {} }
     }
     start()
     return () => {
@@ -49,6 +54,7 @@ export function QRScan({ onResult, onClose }: { onResult: (text: string) => void
     try {
       const f = file
       if (!f) return
+      try { log(`QRScan.file.selected name=${f.name} size=${f.size}`) } catch {}
       const url = URL.createObjectURL(f)
       // @ts-ignore
       if (window.BarcodeDetector) {
@@ -68,10 +74,10 @@ export function QRScan({ onResult, onClose }: { onResult: (text: string) => void
         // @ts-ignore
         const codes = await detector.detect(canvas)
         const text = codes?.[0]?.rawValue
-        if (text) onResult(text)
+        if (text) { try { log(`QRScan.file.detected: ${String(text).slice(0, 64)}`) } catch {}; onResult(text) }
       }
       URL.revokeObjectURL(url)
-    } catch {}
+    } catch (e: any) { try { log(`QRScan.file.error: ${e?.message||e}`) } catch {} }
   }
 
   return (
@@ -87,7 +93,7 @@ export function QRScan({ onResult, onClose }: { onResult: (text: string) => void
           </div>
         )}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
-          <button onClick={onClose}>Close</button>
+          <button onClick={() => { try { log('QRScan.close') } catch {}; onClose() }}>Close</button>
         </div>
       </div>
     </div>

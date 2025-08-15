@@ -1,5 +1,5 @@
 import { getPublicKey, nip04, finalizeEvent, type Event, type EventTemplate } from 'nostr-tools'
-import { getRelayPool, resetRelayPool } from './pool'
+import { getRelayPool, resetRelayPool, trackListener } from './pool'
 import { hexToBytes } from './utils'
 import { encryptDataURL, type EncryptedMedia } from './media'
 import { putObject, getObject, parseMemUrl } from '../services/upload'
@@ -7,26 +7,72 @@ import { useChatStore, type ChatMessage } from '../state/chatStore'
 import { useRelayStore } from '../state/relayStore'
 import { useRoomStore } from '../state/roomStore'
 import { useSettingsStore } from '../ui/settingsStore'
+import { log } from '../ui/logger'
+import { emitToast } from '../ui/Toast'
 
 export function startNostrEngine(sk: string) {
   const pk = getPublicKey(hexToBytes(sk))
   const urls = useRelayStore.getState().relays.filter(r => r.enabled).map(r => r.url)
   const pool = getRelayPool(urls)
   const seen = new Set<string>()
+  log(`Engine start for ${pk.slice(0,8)}…, relays: ${urls.length}`)
+  // Generate stable-but-unique REQ ids per session to avoid collisions across tabs
+  const mkSubId = (name: string) => `${name}:${pk.slice(0, 8)}:${Math.random().toString(36).slice(2, 8)}`
+  const SUBS = {
+    inbox: mkSubId('inbox'),
+    inbox2: mkSubId('inbox2'),
+    typing: mkSubId('typing'),
+    roomsMeta: mkSubId('roomsMeta'),
+    roomCur: mkSubId('roomCur'),
+    receipts: mkSubId('receipts'),
+  }
+  const sub = JSON.stringify(["REQ", SUBS.inbox, { kinds: [4], authors: [pk] }])
+  const sub2 = JSON.stringify(["REQ", SUBS.inbox2, { kinds: [4], '#p': [pk] }])
+  const subTyping = JSON.stringify(["REQ", SUBS.typing, { kinds: [20000], '#p': [pk] }])
+  // Only subscribe globally to channel metadata (40/41); avoid flooding all messages (42)
+  const subRoomsMeta = JSON.stringify(["REQ", SUBS.roomsMeta, { kinds: [40,41] }])
+  const subReceipts = JSON.stringify(["REQ", SUBS.receipts, { kinds: [10001 as any], '#p': [pk] }])
+  // Maintain a focused subscription for currently selected room messages
+  const updateCurrentRoomSub = (roomId: string | null) => {
+    try {
+      for (const [url, ws] of pool.entries()) {
+        try { ws.send(JSON.stringify(["CLOSE", SUBS.roomCur])) } catch {}
+        if (!roomId) continue
+        const since = Math.floor(Date.now()/1000) - 7*24*60*60 // last 7 days
+        const req = JSON.stringify(["REQ", SUBS.roomCur, { kinds: [42], '#e': [roomId], since }])
+        try { ws.send(req); log(`Subscribe roomCur -> ${url} room=${roomId.slice(0,8)}…`) } catch {}
+      }
+    } catch {}
+  }
   // react to relay changes at runtime
-  const attachHandlers = (ws: WebSocket) => {
+  const attachHandlers = (url: string, ws: WebSocket) => {
     ws.onopen = () => {
+      log(`Subscribe -> ${url} (inbox/typing/roomsMeta/receipts/roomCur)`)    
       ws.send(sub)
       ws.send(sub2)
-  ws.send(subTyping)
-  ws.send(subRooms)
+      ws.send(subTyping)
+      ws.send(subRoomsMeta)
       ws.send(subReceipts)
+      // also (re)apply focused current room subscription
+      try { updateCurrentRoomSub(useRoomStore.getState().selectedRoom) } catch {}
     }
     ws.onmessage = async (ev) => {
       try {
         const data = JSON.parse(ev.data as string)
-  if (Array.isArray(data) && data[0] === 'EVENT') {
+        if (Array.isArray(data) && data[0] === 'NOTICE') {
+          const msg = String(data[1] ?? '')
+          log(`NOTICE @ ${url}: ${msg}`, 'warn')
+          return
+        }
+        if (Array.isArray(data) && data[0] === 'EOSE') {
+          const sid = String(data[1] ?? '')
+          if (sid) log(`EOSE @ ${url}: ${sid}`)
+          return
+        }
+        if (Array.isArray(data) && data[0] === 'EVENT') {
           const evt = data[2] as Event
+      // debug small sample of events
+      if (Math.random() < 0.01) log(`EVENT kind=${evt.kind} id=${evt.id.slice(0,8)}…`)
           // delivery receipts (custom kind 10001)
           if (evt.kind === (10001 as any)) {
             const refId = evt.tags.find(t => t[0] === 'e')?.[1]
@@ -51,6 +97,7 @@ export function startNostrEngine(sk: string) {
             seen.add(evt.id)
             const pTag = evt.tags.find(t => t[0] === 'p')?.[1] || ''
             const peerPk = evt.pubkey === pk ? pTag : evt.pubkey
+            log(`DM @ ${url} from ${evt.pubkey.slice(0,8)}… -> ${peerPk.slice(0,8)}… id=${evt.id.slice(0,8)}…`)
             const txt = await nip04.decrypt(sk, peerPk, evt.content)
             // If this DM is a receipt envelope { r: <eventId> }, mark delivered and skip adding a message
             try {
@@ -146,6 +193,7 @@ export function startNostrEngine(sk: string) {
               attachments,
             }
             if (!isBlocked) addMessage(peerPk, message)
+            else log(`Message from blocked peer ${peerPk.slice(0,8)}… ignored`, 'warn')
             // Also send an encrypted DM receipt back ({ r: evt.id }) so relays that drop custom kinds still allow delivery acks
             try {
               if (evt.pubkey !== pk) {
@@ -163,7 +211,7 @@ export function startNostrEngine(sk: string) {
                   }
                 }
               }
-            } catch {}
+            } catch { log(`Failed to send DM receipt (kind 4) @ ${url}`, 'warn') }
             // send a delivery receipt back to sender (kind 10001) with tag e:evt.id and p:sender
             try {
               if (evt.pubkey !== pk) {
@@ -179,7 +227,7 @@ export function startNostrEngine(sk: string) {
                   }
                 }
               }
-            } catch {}
+            } catch { log(`Failed to send delivery receipt (kind 10001) @ ${url}`, 'warn') }
           } else if (evt.kind === 20000) {
             if (evt.pubkey !== pk) {
               const setTyping = useChatStore.getState().setTyping
@@ -203,10 +251,11 @@ export function startNostrEngine(sk: string) {
               const members = evt.tags.filter(t => t[0]==='p').map(t => t[1]).filter(Boolean)
               if (members.length) useRoomStore.getState().setMembers(ref, members)
             }
-          } else if (evt.kind === 42) { // NIP-28 Channel Message (with attachments envelope)
+      } else if (evt.kind === 42) { // NIP-28 Channel Message (with attachments envelope)
             const roomId = evt.tags.find(t => t[0] === 'e')?.[1]
             if (roomId) {
-              useRoomStore.getState().addRoom({ id: roomId })
+        // Avoid redundant room add noise; only add if unknown
+        try { if (!useRoomStore.getState().rooms[roomId]) useRoomStore.getState().addRoom({ id: roomId }) } catch {}
               // membership/owner gate: if we know membership and we're not a member, ignore.
               // If membership unknown yet, accept to avoid dropping messages before metadata arrives.
               const owner = useRoomStore.getState().owners[roomId]
@@ -286,13 +335,15 @@ export function startNostrEngine(sk: string) {
         }
       } catch {}
     }
-    if (ws.readyState === ws.OPEN) {
+  if (ws.readyState === ws.OPEN) {
       try {
+    log(`Subscribe (immediate) -> ${url}`)
         ws.send(sub)
         ws.send(sub2)
         ws.send(subTyping)
-        ws.send(subRooms)
+    ws.send(subRoomsMeta)
         ws.send(subReceipts)
+    try { updateCurrentRoomSub(useRoomStore.getState().selectedRoom) } catch {}
       } catch {}
     }
   }
@@ -300,20 +351,30 @@ export function startNostrEngine(sk: string) {
     const next = s.relays.filter(r => r.enabled).map(r => r.url)
     resetRelayPool(next)
     const pool2 = getRelayPool(next)
-    for (const ws of pool2.values()) {
-      attachHandlers(ws)
+    for (const [url, ws] of pool2.entries()) {
+      attachHandlers(url, ws)
     }
   })
 
-  const sub = JSON.stringify(["REQ", "inbox", { kinds: [4], authors: [pk] }])
-  const sub2 = JSON.stringify(["REQ", "inbox2", { kinds: [4], '#p': [pk] }])
-  const subTyping = JSON.stringify(["REQ", "typing", { kinds: [20000], '#p': [pk] }])
-  const subRooms = JSON.stringify(["REQ", "rooms", { kinds: [40,41,42] }])
-  const subReceipts = JSON.stringify(["REQ", "receipts", { kinds: [10001 as any], '#p': [pk] }])
-
-  for (const ws of pool.values()) {
-    attachHandlers(ws)
+  for (const [url, ws] of pool.entries()) {
+    attachHandlers(url, ws)
   }
+  log('Engine subscriptions attached to current pool')
+
+  // React to selected room changes by updating focused room subscription
+  try {
+    let lastRoom: string | null = null
+    useRoomStore.subscribe((s) => {
+      const cur = s.selectedRoom as string | null
+      if (cur !== lastRoom) {
+        lastRoom = cur
+        updateCurrentRoomSub(cur)
+      }
+      return s
+    })
+    // also seed initial
+    updateCurrentRoomSub(useRoomStore.getState().selectedRoom)
+  } catch {}
 }
 
 // Lightweight data refresh: re-send subscription REQs to all connected relays
@@ -322,17 +383,31 @@ export function refreshSubscriptions() {
     const sk = localStorage.getItem('nostr_sk')
     if (!sk) return
     const pk = getPublicKey(hexToBytes(sk))
+  log('Refreshing subscriptions')
     const urls = useRelayStore.getState().relays.filter(r => r.enabled).map(r => r.url)
     const pool = getRelayPool(urls)
-    const sub = JSON.stringify(["REQ", "inbox", { kinds: [4], authors: [pk] }])
-    const sub2 = JSON.stringify(["REQ", "inbox2", { kinds: [4], '#p': [pk] }])
-    const subTyping = JSON.stringify(["REQ", "typing", { kinds: [20000], '#p': [pk] }])
-    const subRooms = JSON.stringify(["REQ", "rooms", { kinds: [40,41,42] }])
-  const subReceipts = JSON.stringify(["REQ", "receipts", { kinds: [10001 as any], '#p': [pk] }])
-    for (const ws of pool.values()) {
+    // Create fresh REQ IDs on refresh to ensure relays re-evaluate
+    const mkSubId = (name: string) => `${name}:${pk.slice(0, 8)}:${Math.random().toString(36).slice(2, 8)}`
+    const sub = JSON.stringify(["REQ", mkSubId('inbox'), { kinds: [4], authors: [pk] }])
+    const sub2 = JSON.stringify(["REQ", mkSubId('inbox2'), { kinds: [4], '#p': [pk] }])
+    const subTyping = JSON.stringify(["REQ", mkSubId('typing'), { kinds: [20000], '#p': [pk] }])
+  const subRoomsMeta = JSON.stringify(["REQ", mkSubId('roomsMeta'), { kinds: [40,41] }])
+    const subReceipts = JSON.stringify(["REQ", mkSubId('receipts'), { kinds: [10001 as any], '#p': [pk] }])
+    for (const [url, ws] of pool.entries()) {
       if (ws.readyState === ws.OPEN) {
         try {
-      ws.send(sub); ws.send(sub2); ws.send(subTyping); ws.send(subRooms); ws.send(subReceipts)
+          log(`Refresh subscribe -> ${url}`)
+          ws.send(sub); ws.send(sub2); ws.send(subTyping); ws.send(subRoomsMeta); ws.send(subReceipts)
+          // re-apply current room subscription on refresh
+          try { ws.send(JSON.stringify(["CLOSE", 'roomCur'])) } catch {}
+          try {
+            const rid = useRoomStore.getState().selectedRoom
+            if (rid) {
+              const since = Math.floor(Date.now()/1000) - 7*24*60*60
+              const req = JSON.stringify(["REQ", 'roomCur', { kinds: [42], '#e': [rid], since }])
+              ws.send(req)
+            }
+          } catch {}
         } catch {}
       }
     }
@@ -340,6 +415,7 @@ export function refreshSubscriptions() {
 }
 
 export async function sendDM(sk: string, to: string, payload: { t?: string; a?: any; as?: any[]; p?: string }) {
+  log(`sendDM -> ${to.slice(0,8)}… t=${payload.t ? (payload.t.slice(0,24)+(payload.t.length>24?'…':'')) : ''} a=${payload.a?'y':'n'} as=${payload.as?.length||0}`)
   const urls = useRelayStore.getState().relays.filter(r => r.enabled).map(r => r.url)
   const pool = getRelayPool(urls)
   const now = Math.floor(Date.now() / 1000)
@@ -371,13 +447,17 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
   let lastReason: string | undefined
   let powBitsRequired: number | null = null
   const handlers: Array<{ ws: WebSocket, fn: (ev: MessageEvent) => void }> = []
-  for (const ws of pool.values()) {
+  for (const [url, ws] of pool.entries()) {
     if (ws.readyState === ws.OPEN) {
       ws.send(pub)
+      log(`EVENT -> ${url} (OPEN) id=${evt.id.slice(0,8)}…`)
       const handler = (ev: MessageEvent) => {
         try {
           const data = JSON.parse((ev.data as string) || 'null')
-          if (Array.isArray(data) && data[0] === 'OK' && data[1] === evt.id) {
+          if (Array.isArray(data) && data[0] === 'NOTICE') {
+            const msg = String(data[1] ?? '')
+            log(`NOTICE @ ${url}: ${msg}`, 'warn')
+          } else if (Array.isArray(data) && data[0] === 'OK' && data[1] === evt.id) {
             const ok = !!data[2]
             if (ok) {
               ackCount += 1
@@ -386,6 +466,7 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
               useChatStore.getState().updateMessageStatus(to, evt.id, 'sent')
               ws.removeEventListener('message', handler as any)
               try { for (const h of handlers) h.ws.removeEventListener('message', h.fn as any) } catch {}
+              log(`OK @ ${url} (count=${ackCount}) id=${evt.id.slice(0,8)}…`)
             } else {
               const reason = typeof data[3] === 'string' ? data[3] : undefined
               if (reason) {
@@ -394,15 +475,18 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
                 const m = /(pow)\s*:\s*(\d+)\s*bits/i.exec(reason)
                 if (m) {
                   powBitsRequired = parseInt(m[2], 10)
+                  log(`PoW required @ ${url}: ${powBitsRequired} bits`,'warn')
                 }
+                log(`OK false @ ${url}: ${reason}`, 'warn')
               }
             }
           }
         } catch {}
       }
-      try { ws.addEventListener('message', handler as any); handlers.push({ ws, fn: handler }) } catch {}
+  try { ws.addEventListener('message', handler as any); trackListener(ws, 'message', handler as any); handlers.push({ ws, fn: handler }) } catch {}
     } else if (ws.readyState === ws.CONNECTING) {
       try { ws.addEventListener('open', () => ws.send(pub), { once: true } as any) } catch {}
+      log(`EVENT queued -> ${url} (CONNECTING) id=${evt.id.slice(0,8)}…`)
     }
   }
   // If relay requested PoW, try to re-mine with a nonce tag and resend
@@ -411,56 +495,56 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
     if (!miningEnabled) {
       const reason = `PoW required (${powBitsRequired} bits) but disabled in Settings`
       try { useChatStore.getState().updateMessageStatus(to, evt.id, 'failed', reason) } catch {}
+      // Surface a toast with an action hint
+      emitToast('PoW required by relay. Enable PoW mining in Settings to send.', 'error')
       // prevent further retries/timeouts and cleanup listeners
       acked = true
       try { for (const h of handlers) h.ws.removeEventListener('message', h.fn as any) } catch {}
+  log('PoW disabled; not mining and marking failed','warn')
       return
     }
     try {
       // Update status to show we're working
       useChatStore.getState().updateMessageStatus(to, evt.id, 'pending', `Mining ${powBitsRequired} bits…`)
+  log(`Mining start: ${powBitsRequired} bits for id=${evt.id.slice(0,8)}…`)
       const { newEvt } = await mineEventWithPow(evt, powBitsRequired)
       const oldId = evt.id
       evt = newEvt
+  log(`Mining success: new id=${evt.id.slice(0,8)}… old=${oldId.slice(0,8)}…`)
       // Update local message id so receipts/acks match
       try { useChatStore.getState().updateMessageId(to, oldId, evt.id) } catch {}
       const pub2 = JSON.stringify(["EVENT", evt])
-      for (const ws of pool.values()) {
-        if (ws.readyState === ws.OPEN) ws.send(pub2)
+      for (const [url, ws] of pool.entries()) {
+        if (ws.readyState === ws.OPEN) { ws.send(pub2); log(`EVENT (mined) -> ${url} id=${evt.id.slice(0,8)}…`) }
         else if (ws.readyState === ws.CONNECTING) {
           try { ws.addEventListener('open', () => ws.send(pub2), { once: true } as any) } catch {}
+          log(`EVENT (mined) queued -> ${url} id=${evt.id.slice(0,8)}…`)
         }
       }
     } catch (e) {
       // If mining failed, keep lastReason as failure message
+  log(`Mining failed: ${(e as any)?.message || e}`,'error')
       if (!lastReason) lastReason = (e as Error)?.message || 'PoW mining failed'
     }
   }
-  // If no relay ACK within 3s, retry once to all enabled relays
-  try {
-    setTimeout(() => {
-      try {
-        if (acked) return
-        for (const ws of pool.values()) {
-          if (ws.readyState === ws.OPEN) ws.send(pub)
-        }
-      } catch {}
-    }, 3000)
-  } catch {}
-  // Second retry at 7s if still no ACK
-  try {
-    setTimeout(() => {
-      try {
-        if (acked) return
-        for (const ws of pool.values()) {
-          if (ws.readyState === ws.OPEN) ws.send(pub)
-        }
-      } catch {}
-    }, 7000)
-  } catch {}
+  // Exponential backoff retries: 2s, 4s, 8s (stop early on ack)
+  const retryDelays = [2000, 4000, 8000]
+  for (const d of retryDelays) {
+    try {
+      setTimeout(() => {
+        try {
+          if (acked) return
+          for (const [url, ws] of pool.entries()) {
+            if (ws.readyState === ws.OPEN) { ws.send(pub); log(`Retry -> ${url} id=${evt.id.slice(0,8)}…`) }
+          }
+          log(`Retry send after ${d}ms id=${evt.id.slice(0,8)}…`)
+        } catch {}
+      }, d)
+    } catch {}
+  }
   // fallback: if no relay OK after 15-20s, mark as failed
   try {
-    setTimeout(() => {
+  const failTimer = setTimeout(() => {
       try {
         if (acked) return
         const conv = useChatStore.getState().conversations[to] || []
@@ -471,7 +555,9 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
         }
         try { for (const h of handlers) h.ws.removeEventListener('message', h.fn as any) } catch {}
       } catch {}
-    }, 20000)
+  }, 20000)
+  // if we do get an ack later, clear timer
+  if (acked) try { clearTimeout(failTimer) } catch {}
   } catch {}
   // message already added above
 }
@@ -506,16 +592,18 @@ async function mineEventWithPow(evt: any, bits: number): Promise<{ newEvt: any }
 }
 
 function leadingZeroBits(hexId: string): number {
+  // Accurate leading-zero-bit counter using nibble lookup
   const hex = hexId.toLowerCase()
+  const nibbleLZ: number[] = [4,3,2,2,1,1,1,1,0,0,0,0,0,0,0,0]
+  // index is 0..15 representing nibble value; value is leading zero bits in that nibble
   let bits = 0
   for (let i = 0; i < hex.length; i++) {
-    const n = parseInt(hex[i], 16)
-    if (n === 0) { bits += 4; continue }
-    // 1xxx -> 0 leading, 0xxx cases handled above
-    if (n < 8) { bits += 3; break }
-    if (n < 4) { bits += 2; break }
-    if (n < 2) { bits += 1; break }
-    break
+    const ch = hex[i]
+    const n = parseInt(ch, 16)
+    if (Number.isNaN(n)) break
+    const lz = nibbleLZ[n]
+    bits += lz
+    if (lz !== 4) break // stop at the first non-zero nibble
   }
   return bits
 }
@@ -527,10 +615,11 @@ export async function sendTyping(sk: string, to: string) {
   const template: EventTemplate = { kind: 20000, created_at: now, content: '1', tags: [["p", to]] }
   const evt = finalizeEvent(template, hexToBytes(sk))
   const pub = JSON.stringify(["EVENT", evt])
-  for (const ws of pool.values()) {
-    if (ws.readyState === ws.OPEN) ws.send(pub)
+  for (const [url, ws] of pool.entries()) {
+    if (ws.readyState === ws.OPEN) { ws.send(pub); log(`Typing -> ${url} to=${to.slice(0,8)}…`) }
     else if (ws.readyState === ws.CONNECTING) {
       try { ws.addEventListener('open', () => ws.send(pub), { once: true } as any) } catch {}
+      log(`Typing queued -> ${url} to=${to.slice(0,8)}…`)
     }
   }
 }
@@ -563,10 +652,12 @@ export async function sendRoom(sk: string, roomId: string, text?: string, opts?:
   const template: EventTemplate = { kind: 42, created_at: now, content: body, tags: [["e", roomId]] }
   const evt = finalizeEvent(template, hexToBytes(sk))
   const pub = JSON.stringify(["EVENT", evt])
-  for (const ws of pool.values()) {
-    if (ws.readyState === ws.OPEN) ws.send(pub)
+  log(`sendRoom room=${roomId.slice(0,8)}… text=${text ? (text.slice(0,24)+(text.length>24?'…':'')) : ''} a=${opts?.a?'y':'n'} as=${opts?.as?.length||0}`)
+  for (const [url, ws] of pool.entries()) {
+    if (ws.readyState === ws.OPEN) { ws.send(pub); log(`ROOM EVENT -> ${url} id=${evt.id.slice(0,8)}…`) }
     else if (ws.readyState === ws.CONNECTING) {
       try { ws.addEventListener('open', () => ws.send(pub), { once: true } as any) } catch {}
+      log(`ROOM EVENT queued -> ${url} id=${evt.id.slice(0,8)}…`)
     }
   }
 }
@@ -583,10 +674,12 @@ export async function createRoom(sk: string, meta?: { name?: string; about?: str
   const template: EventTemplate = { kind: 40, created_at: now, content: '', tags }
   const evt = finalizeEvent(template, hexToBytes(sk))
   const pub = JSON.stringify(["EVENT", evt])
-  for (const ws of pool.values()) {
-    if (ws.readyState === ws.OPEN) ws.send(pub)
+  log(`createRoom name=${meta?.name || ''}`)
+  for (const [url, ws] of pool.entries()) {
+    if (ws.readyState === ws.OPEN) { ws.send(pub); log(`CREATE ROOM -> ${url} id=${evt.id.slice(0,8)}…`) }
     else if (ws.readyState === ws.CONNECTING) {
       try { ws.addEventListener('open', () => ws.send(pub), { once: true } as any) } catch {}
+      log(`CREATE ROOM queued -> ${url} id=${evt.id.slice(0,8)}…`)
     }
   }
   // update local stores optimistically
@@ -610,10 +703,12 @@ export async function updateRoomMembers(sk: string, roomId: string, members: str
   const template: EventTemplate = { kind: 41, created_at: now, content: '', tags }
   const evt = finalizeEvent(template, hexToBytes(sk))
   const pub = JSON.stringify(["EVENT", evt])
-  for (const ws of pool.values()) {
-    if (ws.readyState === ws.OPEN) ws.send(pub)
+  log(`updateRoomMembers room=${roomId.slice(0,8)}… members=${members.length} meta=${meta? 'y':'n'}`)
+  for (const [url, ws] of pool.entries()) {
+    if (ws.readyState === ws.OPEN) { ws.send(pub); log(`UPDATE ROOM -> ${url} id=${evt.id.slice(0,8)}…`) }
     else if (ws.readyState === ws.CONNECTING) {
       try { ws.addEventListener('open', () => ws.send(pub), { once: true } as any) } catch {}
+      log(`UPDATE ROOM queued -> ${url} id=${evt.id.slice(0,8)}…`)
     }
   }
   // local update

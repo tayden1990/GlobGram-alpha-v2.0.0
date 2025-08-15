@@ -1,4 +1,5 @@
 import { bytesToBase64, dataURLToBytes, sha256Hex } from './utils'
+import { log } from '../ui/logger'
 
 export type EncryptedMedia = {
   v: 1
@@ -19,6 +20,7 @@ async function deriveKey(password: string, salt: Uint8Array) {
 }
 
 export async function encryptDataURL(dataUrl: string, password: string): Promise<EncryptedMedia> {
+  log(`Encrypt media (dataURL, ${password ? 'with' : 'no'} password)`)  
   const { bytes, mime } = dataURLToBytes(dataUrl)
   const iv = crypto.getRandomValues(new Uint8Array(12))
   const salt = crypto.getRandomValues(new Uint8Array(16))
@@ -27,5 +29,6 @@ export async function encryptDataURL(dataUrl: string, password: string): Promise
   const ivBuf = new Uint8Array(iv).buffer
   const ptBuf = new Uint8Array(bytes).buffer
   const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: ivBuf as unknown as BufferSource }, key, ptBuf))
+  log(`Encrypt done: mime=${mime}, sha256=${hash.slice(0,8)}… size=${bytes.length}B`)
   return { v: 1, alg: 'AES-GCM-256', iv: bytesToBase64(iv), keySalt: bytesToBase64(salt), ct: bytesToBase64(ct), mime, sha256: hash }
 }
