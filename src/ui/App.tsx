@@ -805,7 +805,7 @@ export default function App() {
             try {
               const message = t('invite.message')
               // Try sharing text+link+QR image
-              const tryShareWithQR = async () => {
+        const tryShareWithQR = async () => {
                 try {
                   // Build QR image blob offscreen
                   const { toCanvas } = await import('qrcode') as any
@@ -815,8 +815,9 @@ export default function App() {
                   })
                   const blob: Blob | null = await new Promise(res => { try { off.toBlob(b => res(b), 'image/png') } catch { res(null) } })
                   if (!blob) return false
-                  const file = new File([blob], 'globgram-invite.png', { type: 'image/png' })
-                  const data = { files: [file], text: `${message}\n${link}`, title: t('invite.connectTitle') }
+          const file = new File([blob], 'globgram-invite.png', { type: 'image/png' })
+          const txt = new File([`${message}\n${link}`], 'globgram-invite.txt', { type: 'text/plain' })
+          const data: any = { files: [file, txt], text: `${message}\n${link}`, title: t('invite.connectTitle'), url: link }
                   // @ts-ignore
                   if ((navigator as any).canShare && (navigator as any).canShare(data)) {
                     // @ts-ignore
@@ -1117,7 +1118,8 @@ export default function App() {
                     const blob: Blob | null = await new Promise(resolve => { try { canvas.toBlob(b => resolve(b), 'image/png') } catch { resolve(null) } })
                     if (!blob) return false
                     const file = new File([blob], 'globgram-invite.png', { type: 'image/png' })
-                    const data = { files: [file], text, title: t('invite.connectTitle') }
+                    const txt = new File([text], 'globgram-invite.txt', { type: 'text/plain' })
+                    const data: any = { files: [file, txt], text, title: t('invite.connectTitle'), url: inviteUrl }
                     try {
                       // @ts-ignore
                       if ((navigator as any).canShare(data)) {
