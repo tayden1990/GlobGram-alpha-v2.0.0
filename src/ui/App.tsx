@@ -1268,6 +1268,19 @@ export default function App() {
       } catch { try { await navigator.clipboard.writeText(text) } catch {}; alert(t('invite.copied')) }
                 }}>{t('common.copyLink')}</button>
               </div>
+              {/* Read-only full caption (message + link) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <label style={{ fontSize: 12, color: 'var(--muted)' }}>
+                  {(() => { const l = t('modal.invite.captionText') as string; return l && l !== 'modal.invite.captionText' ? l : 'Invite text' })()}
+                </label>
+                <textarea
+                  readOnly
+                  rows={3}
+                  value={formatInviteCaption(getInviteMessage(), inviteUrl)}
+                  onFocus={(e) => { try { (e.target as HTMLTextAreaElement).select() } catch {} }}
+                  style={{ width: '100%', resize: 'vertical' }}
+                />
+              </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button onClick={async () => {
                   // Copy invite text + link + QR image when possible
