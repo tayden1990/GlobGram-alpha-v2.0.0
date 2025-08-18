@@ -113,6 +113,14 @@ export default function App() {
       return m ? m[0] : null
     } catch { return null }
   }
+  const stripUrls = (s: string | null | undefined): string => {
+    if (!s) return ''
+    try {
+      // Remove all http/https URLs
+      const cleaned = s.replace(/https?:\/\/[^\s]+/g, ' ').replace(/\s{2,}/g, ' ').trim()
+      return cleaned
+    } catch { return String(s) }
+  }
 
   // apply theme
   const applyTheme = (t: 'system'|'light'|'dark') => {
@@ -804,11 +812,12 @@ export default function App() {
       <div className="sticky-top" style={{ display: 'flex', flexDirection: 'column', gap: 0, borderBottom: '1px solid var(--border)', background: 'var(--card)' }}>
         {adText && (() => {
           const url = extractFirstUrl(adText)
+          const displayText = stripUrls(adText)
           return (
             <div role="note" aria-live="polite" style={{ padding: '6px 12px', borderBottom: '1px solid var(--border)' }}>
               <button
                 type="button"
-                title={adText}
+                title={displayText}
                 onClick={() => { if (url) try { window.open(url, '_blank', 'noopener,noreferrer') } catch {} }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 10, width: '100%',
@@ -819,10 +828,10 @@ export default function App() {
                 onMouseDown={(e) => { const t = e.currentTarget; t.style.transform = 'translateY(1px)' }}
                 onMouseUp={(e) => { const t = e.currentTarget; t.style.transform = '' }}
                 onMouseLeave={(e) => { const t = e.currentTarget; t.style.transform = '' }}
-                aria-label={url ? `${adText} — open link` : adText}
+                aria-label={url ? `${displayText} — open link` : displayText}
               >
                 <span aria-hidden>📣</span>
-                <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{adText}</span>
+                <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayText}</span>
                 {url && <span aria-hidden style={{ opacity: 0.9 }}>↗</span>}
               </button>
             </div>
