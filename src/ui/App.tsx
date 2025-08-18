@@ -27,85 +27,6 @@ export default function App() {
   const { t, locale, setLocale, availableLocales } = useI18n()
   // Helper: format a localized invite caption (message + link)
   const formatInviteCaption = (msg: string, link: string) => `${msg}\n${link}`
-  // Helper: build an invite link with tracking params
-  const buildInviteLink = (base: string, npub: string, lang: string) => {
-    try {
-      const u = new URL(base, window.location.origin)
-      // Preserve existing params (invite, lang) if present in base
-      if (!u.searchParams.get('invite')) u.searchParams.set('invite', npub)
-      if (!u.searchParams.get('lang')) u.searchParams.set('lang', lang)
-      // Append UTM/tracking
-      u.searchParams.set('utm_source', 'globgram')
-      u.searchParams.set('utm_medium', 'invite')
-      u.searchParams.set('utm_campaign', 'friend-share')
-      u.searchParams.set('utm_term', lang)
-      u.searchParams.set('inviter', npub)
-      return u.toString()
-    } catch {
-      // Fallback to plain concatenation
-      const sep = base.includes('?') ? '&' : '?'
-      return `${base}${sep}invite=${encodeURIComponent(npub)}&lang=${encodeURIComponent(lang)}&utm_source=globgram&utm_medium=invite&utm_campaign=friend-share&utm_term=${encodeURIComponent(lang)}&inviter=${encodeURIComponent(npub)}`
-    }
-  }
-  // Helper: draw a QR code with a centered logo overlay onto a canvas
-  const drawQrWithLogo = async (canvas: HTMLCanvasElement, text: string) => {
-    try {
-      const q = await import('qrcode') as any
-      const toCanvas = (q as any).toCanvas || (q as any).default?.toCanvas
-      const size = Math.min(1024, Math.max(128, canvas.width || 0) || 256)
-      canvas.width = size
-      canvas.height = size
-      await new Promise<void>((resolve) => {
-        try { (toCanvas || (toCanvas as any)?.default?.toCanvas)(canvas, text, () => resolve()) } catch { resolve() }
-      })
-      const ctx = canvas.getContext('2d')
-      if (!ctx) return
-      // Try a few common app icon paths
-      const logoCandidates = ['/icon-192.png', '/icon.png', '/favicon-32x32.png', '/favicon.png']
-      const img = new Image()
-      const loadLogo = (idx: number): Promise<HTMLImageElement | null> => new Promise(res => {
-        if (idx >= logoCandidates.length) return res(null)
-        img.onload = () => res(img)
-        img.onerror = () => loadLogo(idx + 1).then(res)
-        img.crossOrigin = 'anonymous'
-        img.src = logoCandidates[idx]
-      })
-      const loaded = await loadLogo(0)
-      const pad = Math.round(size * 0.02)
-      const logoSize = Math.round(size * 0.22)
-      const cx = Math.round(size / 2 - logoSize / 2)
-      const cy = Math.round(size / 2 - logoSize / 2)
-      // White rounded square backdrop to improve scan reliability
-      const radius = Math.max(6, Math.round(logoSize * 0.18))
-      ctx.save()
-      ctx.beginPath()
-      const x = cx - pad, y = cy - pad, w = logoSize + pad * 2, h = logoSize + pad * 2
-      const r = radius
-      ctx.moveTo(x + r, y)
-      ctx.arcTo(x + w, y, x + w, y + h, r)
-      ctx.arcTo(x + w, y + h, x, y + h, r)
-      ctx.arcTo(x, y + h, x, y, r)
-      ctx.arcTo(x, y, x + w, y, r)
-      ctx.closePath()
-      ctx.fillStyle = '#fff'
-      ctx.fill()
-      if (loaded) {
-        ctx.drawImage(loaded, cx, cy, logoSize, logoSize)
-      } else {
-        // Fallback: draw a simple branded monogram
-        ctx.fillStyle = '#111'
-        ctx.beginPath()
-        ctx.arc(size/2, size/2, logoSize/2, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.fillStyle = '#fff'
-        ctx.font = `${Math.round(logoSize * 0.52)}px system-ui, sans-serif`
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
-        ctx.fillText('G', size/2, size/2)
-      }
-      ctx.restore()
-    } catch {}
-  }
   // Helper: safely decode an nsec bech32 string to 64-char hex
   const nsecToHex = (n: string): string | null => {
     try {
@@ -257,7 +178,11 @@ export default function App() {
     if (!canvas) return
     ;(async () => {
       try {
-  await drawQrWithLogo(canvas, inviteUrl)
+        const q = await import('qrcode')
+        const toCanvas = (q as any).toCanvas || (q as any).default?.toCanvas
+        if (typeof toCanvas === 'function') {
+          toCanvas(canvas, inviteUrl)
+        }
       } catch {}
     })()
   }, [inviteOpen, inviteUrl])
@@ -992,13 +917,12 @@ export default function App() {
               setMyPubkey(pub)
               sk = hexd
             }
-            // Build invite URL with my npub and current language (+ tracking)
+            // Build invite URL with my npub and current language
             const pk = useChatStore.getState().myPubkey
             if (!pk) return
             const npub = nip19.npubEncode(pk)
             const base = (import.meta as any).env?.BASE_URL || '/'
-            const baseUrl = `${window.location.origin}${base}`
-            const link = buildInviteLink(baseUrl, npub, locale)
+            const link = `${window.location.origin}${base}?invite=${encodeURIComponent(npub)}&lang=${encodeURIComponent(locale)}`
             setInviteUrl(link)
             setInviteOpen(true)
             try {
@@ -1006,13 +930,15 @@ export default function App() {
               // Try sharing text+link+QR image
         const tryShareWithQR = async () => {
                 try {
-                  // Build QR image blob offscreen (with logo overlay)
+                  // Build QR image blob offscreen
+                  const { toCanvas } = await import('qrcode') as any
                   const off = document.createElement('canvas')
-                  off.width = 512; off.height = 512
-                  await drawQrWithLogo(off, link)
+                  await new Promise<void>((resolve) => {
+                    try { (toCanvas || (toCanvas as any)?.default?.toCanvas)(off, link, () => resolve()) } catch { resolve() }
+                  })
                   const blob: Blob | null = await new Promise(res => { try { off.toBlob(b => res(b), 'image/png') } catch { res(null) } })
                   if (!blob) return false
-      const file = new File([blob], `globgram-invite-${locale}.png`, { type: 'image/png' })
+      const file = new File([blob], 'globgram-invite.png', { type: 'image/png' })
       const caption = formatInviteCaption(message, link)
       const data: any = { files: [file], text: caption, title: caption, url: link }
                   // @ts-ignore
@@ -1037,9 +963,11 @@ export default function App() {
               } else {
                 // Try ClipboardItem with image+text, else fallback to text only
                 try {
+                  const { toCanvas } = await import('qrcode') as any
                   const off = document.createElement('canvas')
-                  off.width = 512; off.height = 512
-                  await drawQrWithLogo(off, link)
+                  await new Promise<void>((resolve) => {
+                    try { (toCanvas || (toCanvas as any)?.default?.toCanvas)(off, link, () => resolve()) } catch { resolve() }
+                  })
                   const blob: Blob | null = await new Promise(res => { try { off.toBlob(b => res(b), 'image/png') } catch { res(null) } })
                   if (blob && 'ClipboardItem' in window && (navigator.clipboard as any)?.write) {
                     const item = new (window as any).ClipboardItem({ 'image/png': blob, 'text/plain': new Blob([formatInviteCaption(message, link)], { type: 'text/plain' }) })
