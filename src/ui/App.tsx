@@ -283,20 +283,15 @@ export default function App() {
     return () => { try { off && off() } catch {} }
   }, [logModalOpen, logAuth])
 
-  // Handle invite links: ?invite=<npub|hex>
+  // Handle invite links robustly: ?invite=<npub|hex>
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const invite = params.get('invite')
-    if (!invite) return
-    try { log(`Invite.detect ${invite.slice(0, 64)}`) } catch {}
-    // Clean URL
-    try { window.history.replaceState({}, '', window.location.pathname + window.location.hash) } catch {}
-    (async () => {
-      // Ensure we only act once per inviter
-      let inviterHex = invite
+    const processInvite = async (raw: string) => {
+      try { log(`Invite.detect ${raw.slice(0, 64)}`) } catch {}
+      // Decode to hex if npub
+      let inviterHex = raw
       try {
-        if (invite.startsWith('npub')) {
-          const hx = npubToHex(invite)
+        if (raw.startsWith('npub')) {
+          const hx = npubToHex(raw)
           if (hx) inviterHex = hx
         }
       } catch {}
@@ -314,17 +309,56 @@ export default function App() {
         sk = hexd
         try { log('Invite.autoAccountCreated') } catch {}
       }
-      // Send hello DM and focus chat
-      try {
-        // slight delay to allow engine to start
-        setTimeout(async () => {
-          try { log(`Invite.helloDM -> ${inviterHex.slice(0, 12)}…`) } catch {}
+      // Try sending a hello DM with small retries; always select the peer
+      const tries = [700, 1200, 2000]
+      let sent = false
+      for (let i = 0; i < tries.length && !sent; i++) {
+        await new Promise(r => setTimeout(r, tries[i]))
+        try {
+          try { log(`Invite.helloDM.try${i+1} -> ${inviterHex.slice(0, 12)}…`) } catch {}
           await sendDM(sk!, inviterHex, { t: 'Hi, I am here from now' })
-          selectPeer(inviterHex)
-          localStorage.setItem(ackKey, '1')
-        }, 400)
-      } catch (e: any) { try { log(`Invite.error: ${e?.message||e}`) } catch {} }
-    })()
+          sent = true
+        } catch (e: any) {
+          try { log(`Invite.helloDM.fail${i+1}: ${e?.message||e}`) } catch {}
+        }
+      }
+      // Focus chat regardless; mark ack so we don’t spam
+      selectPeer(inviterHex)
+      try { localStorage.setItem(ackKey, '1') } catch {}
+    }
+
+    const params = new URLSearchParams(window.location.search)
+    const invite = params.get('invite')
+    if (invite) {
+      // Persist pending invite in session in case of reloads
+      try { sessionStorage.setItem('pending_invite', invite) } catch {}
+      // Clean only the invite from URL, preserve other params like lang
+      try {
+        const next = new URLSearchParams(window.location.search)
+        next.delete('invite')
+        const qs = next.toString()
+        const newUrl = window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash
+        window.history.replaceState({}, '', newUrl)
+      } catch {}
+      ;(async () => { await processInvite(invite) })()
+    } else {
+      // Check if an invite was stored earlier
+      let pending: string | null = null
+      try { pending = sessionStorage.getItem('pending_invite') } catch {}
+      if (pending) {
+        ;(async () => { await processInvite(pending!) })()
+      }
+    }
+
+    // Also handle cases where app is already open and user navigates back with an invite
+    const onFocus = () => {
+      try {
+        const p = sessionStorage.getItem('pending_invite')
+        if (p) { processInvite(p) }
+      } catch {}
+    }
+    window.addEventListener('focus', onFocus)
+    return () => { window.removeEventListener('focus', onFocus) }
   }, [])
 
   // Prefetch heavy panels just-in-time (removed dynamic import to avoid TS module warning in isolated checks)
@@ -915,7 +949,7 @@ export default function App() {
                   if (!blob) return false
       const file = new File([blob], 'globgram-invite.png', { type: 'image/png' })
       const caption = `${message}\n${link}`
-      const data: any = { files: [file], text: caption, title: caption, url: link }
+  const data: any = { files: [file], text: caption, title: caption }
                   // @ts-ignore
                   if ((navigator as any).canShare && (navigator as any).canShare(data)) {
                     // @ts-ignore
@@ -1251,7 +1285,7 @@ export default function App() {
                     const blob: Blob | null = await new Promise(resolve => { try { canvas.toBlob(b => resolve(b), 'image/png') } catch { resolve(null) } })
                     if (!blob) return false
                     const file = new File([blob], 'globgram-invite.png', { type: 'image/png' })
-                    const data: any = { files: [file], text, title: text, url: inviteUrl }
+                    const data: any = { files: [file], text, title: text }
                     try {
                       // @ts-ignore
                       if ((navigator as any).canShare(data)) {
