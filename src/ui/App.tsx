@@ -794,43 +794,68 @@ export default function App() {
               setMyPubkey(pub)
               sk = hexd
             }
-            // Build invite URL with my npub
+            // Build invite URL with my npub and current language
             const pk = useChatStore.getState().myPubkey
             if (!pk) return
             const npub = nip19.npubEncode(pk)
             const base = (import.meta as any).env?.BASE_URL || '/'
-            const link = `${window.location.origin}${base}?invite=${encodeURIComponent(npub)}`
+            const link = `${window.location.origin}${base}?invite=${encodeURIComponent(npub)}&lang=${encodeURIComponent(locale)}`
             setInviteUrl(link)
             setInviteOpen(true)
             try {
-              const message = 'Join me on GlobGram. Tap the link to start a secure chat.'
-              // @ts-ignore - Web Share API optional
-              if (navigator.share) {
-              try { log('Invite.share.attempt') } catch {}
-              // Some platforms hide `text` when `url` is present. Try both, then fallback to text+link.
-              const payloads: any[] = [
-                { title: 'Chat with me on GlobGram', text: message, url: link },
-                { title: 'Chat with me on GlobGram', text: `${message}\n${link}` },
-              ]
-              let shared = false
-              for (const p of payloads) {
+              const message = t('invite.message')
+              // Try sharing text+link+QR image
+              const tryShareWithQR = async () => {
                 try {
-                const can = (navigator as any).canShare ? (navigator as any).canShare(p) : true
-                if (can) { await (navigator as any).share(p); shared = true; break }
+                  // Build QR image blob offscreen
+                  const { toCanvas } = await import('qrcode') as any
+                  const off = document.createElement('canvas')
+                  await new Promise<void>((resolve) => {
+                    try { (toCanvas || (toCanvas as any)?.default?.toCanvas)(off, link, () => resolve()) } catch { resolve() }
+                  })
+                  const blob: Blob | null = await new Promise(res => { try { off.toBlob(b => res(b), 'image/png') } catch { res(null) } })
+                  if (!blob) return false
+                  const file = new File([blob], 'globgram-invite.png', { type: 'image/png' })
+                  const data = { files: [file], text: `${message}\n${link}`, title: t('invite.connectTitle') }
+                  // @ts-ignore
+                  if ((navigator as any).canShare && (navigator as any).canShare(data)) {
+                    // @ts-ignore
+                    await (navigator as any).share(data)
+                    return true
+                  }
+                } catch {}
+                return false
+              }
+              // @ts-ignore - Web Share API optional
+              if (await tryShareWithQR()) { try { log('Invite.share.success.qr') } catch {}; return }
+              if ((navigator as any).share) {
+                try {
+                  // @ts-ignore
+                  await (navigator as any).share({ title: t('invite.connectTitle'), text: `${message}\n${link}`, url: link })
                 } catch {
-                // try next payload
+                  // @ts-ignore
+                  await (navigator as any).share({ title: t('invite.connectTitle'), text: `${message}\n${link}` })
                 }
-              }
-              if (!shared) {
-                try { await navigator.clipboard.writeText(`${message}\n${link}`) } catch {}
-                alert('Invite text copied to clipboard.')
               } else {
-                try { log('Invite.share.success') } catch {}
-              }
-              } else {
-              try { await navigator.clipboard.writeText(`${message}\n${link}`) } catch {}
-              try { log('Invite.share.unsupported') } catch {}
-              alert('Invite text copied to clipboard.')
+                // Try ClipboardItem with image+text, else fallback to text only
+                try {
+                  const { toCanvas } = await import('qrcode') as any
+                  const off = document.createElement('canvas')
+                  await new Promise<void>((resolve) => {
+                    try { (toCanvas || (toCanvas as any)?.default?.toCanvas)(off, link, () => resolve()) } catch { resolve() }
+                  })
+                  const blob: Blob | null = await new Promise(res => { try { off.toBlob(b => res(b), 'image/png') } catch { res(null) } })
+                  if (blob && 'ClipboardItem' in window && (navigator.clipboard as any)?.write) {
+                    const item = new (window as any).ClipboardItem({
+                      'image/png': blob,
+                      'text/plain': new Blob([`${message}\n${link}`], { type: 'text/plain' }),
+                    })
+                    await (navigator.clipboard as any).write([item])
+                  } else {
+                    await navigator.clipboard.writeText(`${message}\n${link}`)
+                  }
+                } catch { await navigator.clipboard.writeText(`${message}\n${link}`) }
+                alert(t('invite.copied'))
               }
             } catch (e: any) { try { log(`Invite.share.error: ${e?.message||e}`) } catch {} }
             }}>{t('actions.invite')}</button>
@@ -1040,12 +1065,49 @@ export default function App() {
               <label style={{ fontSize: 12, color: 'var(--muted)' }}>{t('modal.invite.linkLabel')}</label>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <input type="text" value={inviteUrl} readOnly style={{ flex: 1 }} onFocus={(e) => { try { (e.target as HTMLInputElement).select() } catch {} }} />
-                <button onClick={async () => { try { await navigator.clipboard.writeText(inviteUrl) } catch {} }}>{t('common.copyLink')}</button>
+                <button onClick={async () => {
+                  // Copy link + QR image to clipboard when possible
+                  try {
+                    const canvas = inviteCanvasRef.current
+                    const text = inviteUrl
+                    if (canvas && 'ClipboardItem' in window && (navigator.clipboard as any)?.write) {
+                      const blob: Blob | null = await new Promise(resolve => { try { canvas.toBlob(b => resolve(b), 'image/png') } catch { resolve(null) } })
+                      if (blob) {
+                        const item = new (window as any).ClipboardItem({
+                          'image/png': blob,
+                          'text/plain': new Blob([text], { type: 'text/plain' }),
+                        })
+                        await (navigator.clipboard as any).write([item])
+                        alert(t('invite.copied'))
+                        return
+                      }
+                    }
+                    await navigator.clipboard.writeText(text)
+                    alert(t('invite.copied'))
+                  } catch { try { await navigator.clipboard.writeText(inviteUrl) } catch {}; alert(t('invite.copied')) }
+                }}>{t('common.copyLink')}</button>
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button onClick={async () => {
+                  // Copy invite text + link + QR image when possible
                   const msg = t('invite.message') + '\n' + inviteUrl
-                  try { await navigator.clipboard.writeText(msg); alert(t('invite.copied')) } catch { alert(t('invite.copied')) }
+                  try {
+                    const canvas = inviteCanvasRef.current
+                    if (canvas && 'ClipboardItem' in window && (navigator.clipboard as any)?.write) {
+                      const blob: Blob | null = await new Promise(resolve => { try { canvas.toBlob(b => resolve(b), 'image/png') } catch { resolve(null) } })
+                      if (blob) {
+                        const item = new (window as any).ClipboardItem({
+                          'image/png': blob,
+                          'text/plain': new Blob([msg], { type: 'text/plain' }),
+                        })
+                        await (navigator.clipboard as any).write([item])
+                        alert(t('invite.copied'))
+                        return
+                      }
+                    }
+                    await navigator.clipboard.writeText(msg)
+                    alert(t('invite.copied'))
+                  } catch { try { await navigator.clipboard.writeText(msg) } catch {}; alert(t('invite.copied')) }
                 }}>{t('modal.invite.copyText')}</button>
                 <button onClick={async () => {
                   const text = t('invite.message') + '\n' + inviteUrl
@@ -1079,12 +1141,43 @@ export default function App() {
                         await (navigator as any).share({ title: t('invite.connectTitle'), text })
                       }
                     } else {
-                      await navigator.clipboard.writeText(text)
-                      alert(t('invite.copied'))
+                      // Clipboard fallback: include QR image if possible
+                      try {
+                        const canvas = inviteCanvasRef.current
+                        if (canvas && 'ClipboardItem' in window && (navigator.clipboard as any)?.write) {
+                          const blob: Blob | null = await new Promise(resolve => { try { canvas.toBlob(b => resolve(b), 'image/png') } catch { resolve(null) } })
+                          if (blob) {
+                            const item = new (window as any).ClipboardItem({
+                              'image/png': blob,
+                              'text/plain': new Blob([text], { type: 'text/plain' }),
+                            })
+                            await (navigator.clipboard as any).write([item])
+                            alert(t('invite.copied'))
+                            return
+                          }
+                        }
+                        await navigator.clipboard.writeText(text)
+                        alert(t('invite.copied'))
+                      } catch { try { await navigator.clipboard.writeText(text) } catch {}; alert(t('invite.copied')) }
                     }
                   } catch {
-                    try { await navigator.clipboard.writeText(text) } catch {}
-                    alert(t('invite.copied'))
+                    try {
+                      const canvas = inviteCanvasRef.current
+                      if (canvas && 'ClipboardItem' in window && (navigator.clipboard as any)?.write) {
+                        const blob: Blob | null = await new Promise(resolve => { try { canvas.toBlob(b => resolve(b), 'image/png') } catch { resolve(null) } })
+                        if (blob) {
+                          const item = new (window as any).ClipboardItem({
+                            'image/png': blob,
+                            'text/plain': new Blob([text], { type: 'text/plain' }),
+                          })
+                          await (navigator.clipboard as any).write([item])
+                          alert(t('invite.copied'))
+                          return
+                        }
+                      }
+                      await navigator.clipboard.writeText(text)
+                      alert(t('invite.copied'))
+                    } catch { try { await navigator.clipboard.writeText(text) } catch {}; alert(t('invite.copied')) }
                   }
                 }}>{t('modal.invite.shareAll')}</button>
               </div>

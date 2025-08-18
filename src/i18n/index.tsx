@@ -50,11 +50,19 @@ const localeFlags: Record<string, string> = {
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState<string>(() => {
+    const supported = Object.keys(loaders)
+    // URL override: ?lang=xx
+    try {
+      const urlLang = new URLSearchParams(window.location.search).get('lang')
+      if (urlLang && supported.includes(urlLang)) {
+        try { localStorage.setItem(LOCALE_STORAGE_KEY, urlLang) } catch {}
+        return urlLang
+      }
+    } catch {}
     const stored = localStorage.getItem(LOCALE_STORAGE_KEY)
     if (stored) return stored
     const nav = typeof navigator !== 'undefined' ? navigator.language || (navigator as any).userLanguage : 'en'
     const base = (nav || 'en').split('-')[0].toLowerCase()
-    const supported = Object.keys(loaders)
     return supported.includes(base) ? base : 'en'
   })
   const [messages, setMessages] = useState<Messages>({})
