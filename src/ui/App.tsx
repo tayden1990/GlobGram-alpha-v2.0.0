@@ -967,7 +967,7 @@ export default function App() {
                   if (!blob) return false
       const file = new File([blob], 'globgram-invite.png', { type: 'image/png' })
       const caption = formatInviteCaption(message, link)
-      const data: any = { files: [file], text: caption, title: caption, url: link }
+  const data: any = { files: [file], text: caption, title: caption }
                   // @ts-ignore
                   if ((navigator as any).canShare && (navigator as any).canShare(data)) {
                     // @ts-ignore
@@ -982,7 +982,7 @@ export default function App() {
               if ((navigator as any).share) {
                 try {
                   // @ts-ignore
-                  await (navigator as any).share({ title: t('invite.connectTitle'), text: formatInviteCaption(message, link), url: link })
+                  await (navigator as any).share({ title: t('invite.connectTitle'), text: formatInviteCaption(message, link) })
                 } catch {
                   // @ts-ignore
                   await (navigator as any).share({ title: t('invite.connectTitle'), text: formatInviteCaption(message, link) })
@@ -1298,7 +1298,7 @@ export default function App() {
                     const blob: Blob | null = await new Promise(resolve => { try { canvas.toBlob(b => resolve(b), 'image/png') } catch { resolve(null) } })
                     if (!blob) return false
                     const file = new File([blob], `globgram-invite-${locale}.png`, { type: 'image/png' })
-                    const data: any = { files: [file], text, title: text, url: inviteUrl }
+                    const data: any = { files: [file], text, title: text }
                     try {
                       // @ts-ignore
                       if ((navigator as any).canShare(data)) {
@@ -1311,12 +1311,12 @@ export default function App() {
                   }
                   try {
                     if (await shareWithFiles()) return
-                    // Fallback to text + url
+                    // Fallback to text-only share sheet
                     // @ts-ignore
                     if ((navigator as any).share) {
                       try {
                         // @ts-ignore
-                        await (navigator as any).share({ title: t('invite.connectTitle'), text, url: inviteUrl })
+                        await (navigator as any).share({ title: t('invite.connectTitle'), text })
                       } catch {
                         // @ts-ignore
                         await (navigator as any).share({ title: t('invite.connectTitle'), text })
