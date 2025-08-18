@@ -15,9 +15,8 @@ type Actions = {
 }
 
 const defaults: Relay[] = [
-  { url: 'wss://relay.damus.io', enabled: true },
-  { url: 'wss://nos.lol', enabled: true },
-  { url: 'wss://relay.nostr.band', enabled: true },
+  { url: 'wss://relay1.matrus.org', enabled: true },
+  { url: 'wss://relay2.matrus.org', enabled: true },
 ]
 
 export const useRelayStore = create<State & Actions>()(
