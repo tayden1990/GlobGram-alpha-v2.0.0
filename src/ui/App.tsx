@@ -321,7 +321,10 @@ export default function App() {
     return () => { try { off && off() } catch {} }
   }, [logModalOpen, logAuth])
 
-  // Handle invite links: ?invite=<npub|hex>
+  // Store invite info for processing after onboarding (if needed)
+  const [pendingInvite, setPendingInvite] = useState<{hex: string, lang?: string} | null>(null)
+  
+  // Handle invite links: ?invite=<npub|hex>&lang=<locale>
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     // Accept alternate param names just in case
@@ -336,11 +339,34 @@ export default function App() {
     try { log(`Invite.detect ${invite.slice(0, 64)}`) } catch {}
     // Clean URL
     try { window.history.replaceState({}, '', window.location.pathname + window.location.hash) } catch {}
-    (async () => {
+    
+    // Store invite info for processing
+    setPendingInvite({ hex: parsedHex, lang: urlLang || undefined })
+    
+    // Check if user already has account and onboarding is done
+    const hasKey = !!localStorage.getItem('nostr_sk')
+    const onboardingDone = !!localStorage.getItem('onboarding_done')
+    
+    if (hasKey && onboardingDone) {
+      // Existing user - process invite immediately
+      processInviteGreeting(parsedHex, urlLang || undefined)
+    } else {
+      // New user or onboarding incomplete - force onboarding, greeting will be sent after completion
+      try { log('Invite.needsOnboarding - will greet after completion') } catch {}
+      if (!onboardingDone) {
+        setOnboardingOpen(true)
+      }
+      // If no key, it will be created during onboarding
+    }
+  }, [])
+
+  // Function to process invite greeting
+  const processInviteGreeting = async (inviterHex: string, urlLang?: string) => {
+    try {
       // Ensure we only act once per inviter
-      const inviterHex = parsedHex
       const ackKey = `invite_ack_${inviterHex}`
       if (localStorage.getItem(ackKey)) return
+      
       // Ensure we have an account
       let sk = localStorage.getItem('nostr_sk')
       if (!sk) {
@@ -352,32 +378,62 @@ export default function App() {
         sk = hexd
         try { log('Invite.autoAccountCreated') } catch {}
       }
+      
       // Send hello DM (best-effort) and focus chat
       try {
-        // slight delay to allow engine to start
+        // slight delay to allow engine to start and translations to load
         setTimeout(async () => {
           try { log(`Invite.helloDM -> ${inviterHex.slice(0, 12)}…`) } catch {}
           // Wait a brief moment for translations if we just switched locale via ?lang
-          await new Promise(res => setTimeout(res, 150))
-          const pref = t('invite.autoStartMessage') as string
-          const alt1 = t('chat.autoStartMessage') as string
-          const alt2 = t('invite.message') as string
-          const pick = (val: string, key: string) => (val && val !== key ? val : '')
-          let autoStartMsg = pick(pref, 'invite.autoStartMessage') || pick(alt1, 'chat.autoStartMessage') || pick(alt2, 'invite.message') || "Hi! I accepted your invite. Let's chat."
+          await new Promise(res => setTimeout(res, urlLang ? 300 : 150))
+          
+          // Get localized greeting message with fallbacks
+          const getAutoStartMessage = () => {
+            const pref = t('invite.autoStartMessage') as string
+            const alt1 = t('chat.autoStartMessage') as string  
+            const alt2 = t('invite.message') as string
+            const pick = (val: string, key: string) => (val && val !== key ? val : '')
+            return pick(pref, 'invite.autoStartMessage') || 
+                   pick(alt1, 'chat.autoStartMessage') || 
+                   pick(alt2, 'invite.message') || 
+                   "Hi! I accepted your invite. Let's chat."
+          }
+          
+          let autoStartMsg = getAutoStartMessage()
+          
           try {
             await sendDM(sk!, inviterHex, { t: autoStartMsg })
+            try { log(`Invite.helloDM.sent: ${autoStartMsg.slice(0, 30)}${autoStartMsg.length > 30 ? '…' : ''}`) } catch {}
           } catch (err) {
             // One retry on failure with a safe default
             try { log(`Invite.helloDM.retry: ${String(err)}`) } catch {}
             autoStartMsg = "Hi! I accepted your invite. Let's chat."
-            try { await sendDM(sk!, inviterHex, { t: autoStartMsg }) } catch {}
+            try { 
+              await sendDM(sk!, inviterHex, { t: autoStartMsg })
+              try { log(`Invite.helloDM.retrySuccess`) } catch {}
+            } catch (retryErr) {
+              try { log(`Invite.helloDM.retryFailed: ${String(retryErr)}`) } catch {}
+            }
           }
+          
+          // Focus on the conversation
           selectPeer(inviterHex)
           localStorage.setItem(ackKey, '1')
+          // Clear pending invite
+          setPendingInvite(null)
         }, 800)
       } catch (e: any) { try { log(`Invite.error: ${e?.message||e}`) } catch {} }
-    })()
-  }, [])
+    } catch (e: any) { try { log(`Invite.processError: ${e?.message||e}`) } catch {} }
+  }
+
+  // Process pending invite after onboarding completion
+  useEffect(() => {
+    if (!onboardingOpen && pendingInvite) {
+      // Onboarding just completed and we have a pending invite
+      try { log('Invite.onboardingComplete - processing pending invite') } catch {}
+      processInviteGreeting(pendingInvite.hex, pendingInvite.lang)
+    }
+  }, [onboardingOpen, pendingInvite])
 
   // Prefetch heavy panels just-in-time (removed dynamic import to avoid TS module warning in isolated checks)
 
@@ -869,7 +925,11 @@ export default function App() {
                 </ul>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                   <button onClick={() => setObStep(5)}>← {t('common.back')}</button>
-                  <button onClick={() => { try { localStorage.setItem('onboarding_done', '1') } catch {}; setOnboardingOpen(false) }}>{t('common.finish')}</button>
+                  <button onClick={() => { 
+                    try { localStorage.setItem('onboarding_done', '1') } catch {}
+                    setOnboardingOpen(false)
+                    try { log('Onboarding.completed - checking for pending invite') } catch {}
+                  }}>{t('common.finish')}</button>
                 </div>
               </div>
             )}
@@ -967,12 +1027,36 @@ export default function App() {
                   if (!blob) return false
       const file = new File([blob], 'globgram-invite.png', { type: 'image/png' })
       const caption = formatInviteCaption(message, link)
-  const data: any = { files: [file], text: caption, title: caption }
+      // Try different Web Share approaches for better platform compatibility
+      const shareData1 = { files: [file], text: caption }
+      const shareData2 = { files: [file], title: caption }
+      const shareData3 = { files: [file] }
                   // @ts-ignore
-                  if ((navigator as any).canShare && (navigator as any).canShare(data)) {
-                    // @ts-ignore
-                    await (navigator as any).share(data)
-                    return true
+                  if ((navigator as any).canShare) {
+                    try {
+                      // @ts-ignore - Try with text field first
+                      if ((navigator as any).canShare(shareData1)) {
+                        // @ts-ignore
+                        await (navigator as any).share(shareData1)
+                        return true
+                      }
+                      // @ts-ignore - Try with title field
+                      if ((navigator as any).canShare(shareData2)) {
+                        // @ts-ignore
+                        await (navigator as any).share(shareData2)
+                        return true
+                      }
+                      // @ts-ignore - Try files only, then share text separately
+                      if ((navigator as any).canShare(shareData3)) {
+                        // @ts-ignore
+                        await (navigator as any).share(shareData3)
+                        // Copy caption to clipboard as fallback
+                        try { await navigator.clipboard.writeText(caption) } catch {}
+                        return true
+                      }
+                    } catch (shareErr) {
+                      console.warn('Web Share with files failed:', shareErr)
+                    }
                   }
                 } catch {}
                 return false
@@ -1305,73 +1389,90 @@ export default function App() {
                 }}>{t('modal.invite.copyText')}</button>
                 <button onClick={async () => {
                   const text = formatInviteCaption(getInviteMessage(), inviteUrl)
-                  const shareWithFiles = async () => {
-                    const canvas = inviteCanvasRef.current
-                    if (!canvas || !(navigator as any).canShare) return false
-                    const blob: Blob | null = await new Promise(resolve => { try { canvas.toBlob(b => resolve(b), 'image/png') } catch { resolve(null) } })
-                    if (!blob) return false
-                    const file = new File([blob], `globgram-invite-${locale}.png`, { type: 'image/png' })
-                    const data: any = { files: [file], text, title: text }
+                  const canvas = inviteCanvasRef.current
+                  
+                  // Try Web Share API with multiple strategies
+                  if ((navigator as any).share && canvas) {
                     try {
-                      // @ts-ignore
-                      if ((navigator as any).canShare(data)) {
-                        // @ts-ignore
-                        await (navigator as any).share(data)
-                        return true
-                      }
-                    } catch {}
-                    return false
-                  }
-                  try {
-                    if (await shareWithFiles()) return
-                    // Fallback to text-only share sheet
-                    // @ts-ignore
-                    if ((navigator as any).share) {
-                      try {
-                        // @ts-ignore
-                        await (navigator as any).share({ title: t('invite.connectTitle'), text })
-                      } catch {
-                        // @ts-ignore
-                        await (navigator as any).share({ title: t('invite.connectTitle'), text })
-                      }
-                    } else {
-                      // Clipboard fallback: include QR image if possible
-                      try {
-                        const canvas = inviteCanvasRef.current
-                        if (canvas && 'ClipboardItem' in window && (navigator.clipboard as any)?.write) {
-                          const blob: Blob | null = await new Promise(resolve => { try { canvas.toBlob(b => resolve(b), 'image/png') } catch { resolve(null) } })
-                          if (blob) {
-                            const item = new (window as any).ClipboardItem({
-                              'image/png': blob,
-                              'text/plain': new Blob([text], { type: 'text/plain' }),
-                            })
-                            await (navigator.clipboard as any).write([item])
-                            alert(t('invite.copied'))
+                      const blob: Blob | null = await new Promise(resolve => { 
+                        try { 
+                          canvas.toBlob(b => resolve(b), 'image/png') 
+                        } catch { 
+                          resolve(null) 
+                        } 
+                      })
+                      
+                      if (blob) {
+                        const file = new File([blob], `globgram-invite-${locale}.png`, { type: 'image/png' })
+                        
+                        // Strategy 1: Try files with text
+                        try {
+                          const dataWithText = { files: [file], text, title: t('invite.connectTitle') }
+                          if ((navigator as any).canShare && (navigator as any).canShare(dataWithText)) {
+                            await (navigator as any).share(dataWithText)
                             return
                           }
+                        } catch (e) {
+                          console.log('Files+text share failed:', e)
                         }
-                        await navigator.clipboard.writeText(text)
-                        alert(t('invite.copied'))
-                      } catch { try { await navigator.clipboard.writeText(text) } catch {}; alert(t('invite.copied')) }
-                    }
-                  } catch {
-                    try {
-                      const canvas = inviteCanvasRef.current
-                      if (canvas && 'ClipboardItem' in window && (navigator.clipboard as any)?.write) {
-                        const blob: Blob | null = await new Promise(resolve => { try { canvas.toBlob(b => resolve(b), 'image/png') } catch { resolve(null) } })
-                        if (blob) {
-                          const item = new (window as any).ClipboardItem({
-                            'image/png': blob,
-                            'text/plain': new Blob([text], { type: 'text/plain' }),
-                          })
-                          await (navigator.clipboard as any).write([item])
-                          alert(t('invite.copied'))
-                          return
+                        
+                        // Strategy 2: Try files only, then copy text separately
+                        try {
+                          const dataFilesOnly = { files: [file], title: t('invite.connectTitle') }
+                          if ((navigator as any).canShare && (navigator as any).canShare(dataFilesOnly)) {
+                            await (navigator as any).share(dataFilesOnly)
+                            // Copy text to clipboard as backup
+                            try {
+                              await navigator.clipboard.writeText(text)
+                            } catch {}
+                            return
+                          }
+                        } catch (e) {
+                          console.log('Files-only share failed:', e)
                         }
                       }
-                      await navigator.clipboard.writeText(text)
-                      alert(t('invite.copied'))
-                    } catch { try { await navigator.clipboard.writeText(text) } catch {}; alert(t('invite.copied')) }
+                      
+                      // Strategy 3: Text-only fallback
+                      try {
+                        await (navigator as any).share({ title: t('invite.connectTitle'), text })
+                        return
+                      } catch (e) {
+                        console.log('Text-only share failed:', e)
+                      }
+                    } catch (e) {
+                      console.log('Web Share API failed:', e)
+                    }
+                  }
+                  
+                  // Clipboard fallback: try to copy both image and text
+                  try {
+                    if (canvas && 'ClipboardItem' in window && (navigator.clipboard as any)?.write) {
+                      const blob: Blob | null = await new Promise(resolve => { 
+                        try { 
+                          canvas.toBlob(b => resolve(b), 'image/png') 
+                        } catch { 
+                          resolve(null) 
+                        } 
+                      })
+                      if (blob) {
+                        const item = new (window as any).ClipboardItem({
+                          'image/png': blob,
+                          'text/plain': new Blob([text], { type: 'text/plain' }),
+                        })
+                        await (navigator.clipboard as any).write([item])
+                        alert(t('invite.copied'))
+                        return
+                      }
+                    }
+                    // Text-only clipboard fallback
+                    await navigator.clipboard.writeText(text)
+                    alert(t('invite.copied'))
+                  } catch {
+                    // Final fallback - just copy text
+                    try { 
+                      await navigator.clipboard.writeText(text) 
+                    } catch {}
+                    alert(t('invite.copied'))
                   }
                 }}>{t('modal.invite.shareAll')}</button>
               </div>
