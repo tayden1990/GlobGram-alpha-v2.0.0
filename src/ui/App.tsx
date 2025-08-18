@@ -190,7 +190,10 @@ export default function App() {
     ;(async () => {
       try {
         const items = await loadPreparedAds(locale, 'top')
-        if (!cancelled) setAds(items)
+        if (!cancelled) {
+          setAds(items)
+          try { console.info('Ads loaded:', items.length) } catch {}
+        }
       } catch {}
     })()
     return () => { cancelled = true }
