@@ -444,7 +444,7 @@ export function refreshSubscriptions() {
   } catch {}
 }
 
-export async function sendDM(sk: string, to: string, payload: { t?: string; a?: any; as?: any[]; p?: string }) {
+export async function sendDM(sk: string, to: string, payload: { t?: string; a?: any; as?: any[]; p?: string }): Promise<{ id: string; acked: Promise<boolean> }> {
   log(`sendDM -> ${to.slice(0,8)}… t=${payload.t ? (payload.t.slice(0,24)+(payload.t.length>24?'…':'')) : ''} a=${payload.a?'y':'n'} as=${payload.as?.length||0}`)
   const urls = useRelayStore.getState().relays.filter(r => r.enabled).map(r => r.url)
   const pool = getRelayPool(urls)
@@ -477,6 +477,16 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
   let lastReason: string | undefined
   let powBitsRequired: number | null = null
   const handlers: Array<{ ws: WebSocket, fn: (ev: MessageEvent) => void }> = []
+  // Promise that resolves true on first OK ack, or false after timeout
+  let resolveAck: (v: boolean) => void = () => {}
+  const ackedPromise = new Promise<boolean>((resolve) => { resolveAck = resolve })
+
+  // Timeout: if no ack within 8 seconds, consider failed
+  const ackTimeout = setTimeout(() => {
+    try { if (!acked) resolveAck(false) } catch {}
+    try { for (const h of handlers) h.ws.removeEventListener('message', h.fn as any) } catch {}
+  }, 8000)
+
   for (const [url, ws] of pool.entries()) {
     if (ws.readyState === ws.OPEN) {
       ws.send(pub)
@@ -496,6 +506,8 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
               useChatStore.getState().updateMessageStatus(to, evt.id, 'sent')
               ws.removeEventListener('message', handler as any)
               try { for (const h of handlers) h.ws.removeEventListener('message', h.fn as any) } catch {}
+              try { clearTimeout(ackTimeout) } catch {}
+              try { resolveAck(true) } catch {}
               log(`OK @ ${url} (count=${ackCount}) id=${evt.id.slice(0,8)}…`)
             } else {
               const reason = typeof data[3] === 'string' ? data[3] : undefined
@@ -519,6 +531,11 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
       log(`EVENT queued -> ${url} (CONNECTING) id=${evt.id.slice(0,8)}…`)
     }
   }
+  // If no relays are available, resolve ack as false quickly
+  if (pool.size === 0) {
+    try { clearTimeout(ackTimeout) } catch {}
+    try { resolveAck(false) } catch {}
+  }
   // If relay requested PoW, try to re-mine with a nonce tag and resend
   if (!acked && powBitsRequired && powBitsRequired > 0) {
     const miningEnabled = (() => { try { return useSettingsStore.getState().powMining } catch { return true } })()
@@ -530,8 +547,10 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
       // prevent further retries/timeouts and cleanup listeners
       acked = true
       try { for (const h of handlers) h.ws.removeEventListener('message', h.fn as any) } catch {}
-  log('PoW disabled; not mining and marking failed','warn')
-      return
+      try { clearTimeout(ackTimeout) } catch {}
+      try { resolveAck(false) } catch {}
+      log('PoW disabled; not mining and marking failed','warn')
+      return { id: evt.id, acked: ackedPromise }
     }
     try {
       // Update status to show we're working
@@ -545,12 +564,16 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
       try { useChatStore.getState().updateMessageId(to, oldId, evt.id) } catch {}
       const pub2 = JSON.stringify(["EVENT", evt])
       for (const [url, ws] of pool.entries()) {
-        if (ws.readyState === ws.OPEN) { ws.send(pub2); log(`EVENT (mined) -> ${url} id=${evt.id.slice(0,8)}…`) }
-        else if (ws.readyState === ws.CONNECTING) {
+        if (ws.readyState === ws.OPEN) {
+          ws.send(pub2)
+          log(`EVENT (mined) -> ${url} id=${evt.id.slice(0,8)}…`)
+        } else if (ws.readyState === ws.CONNECTING) {
           try { ws.addEventListener('open', () => ws.send(pub2), { once: true } as any) } catch {}
           log(`EVENT (mined) queued -> ${url} id=${evt.id.slice(0,8)}…`)
         }
       }
+      // Return immediately; callers may await acked if they need confirmation
+      return { id: evt.id, acked: ackedPromise }
     } catch (e) {
       // If mining failed, keep lastReason as failure message
   log(`Mining failed: ${(e as any)?.message || e}`,'error')
@@ -589,7 +612,8 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
   // if we do get an ack later, clear timer
   if (acked) try { clearTimeout(failTimer) } catch {}
   } catch {}
-  // message already added above
+  // Return handle so callers can await acked
+  return { id: evt.id, acked: ackedPromise }
 }
 
 // Simple NIP-13 PoW miner: adds/updates a nonce tag and created_at to meet difficulty

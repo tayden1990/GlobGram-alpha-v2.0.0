@@ -463,83 +463,72 @@ export default function App() {
           }
           
           let autoStartMsg = getAutoStartMessage()
-          let messageSent = false
-          
-          // Primary attempt to send greeting message
-          try {
-            await sendDM(sk!, inviterHex, { t: autoStartMsg })
-            messageSent = true
-            try { log(`Invite.helloDM.sent: ${autoStartMsg.slice(0, 30)}${autoStartMsg.length > 30 ? '…' : ''}`) } catch {}
-          } catch (err) {
-            try { log(`Invite.helloDM.primaryFailed: ${String(err)}`) } catch {}
-          }
-          
-          // First retry with fallback message
-          if (!messageSent) {
+          let acked = false
+
+          // helper to send and wait for ack
+          const sendAndWait = async (text: string): Promise<boolean> => {
             try {
-              autoStartMsg = "Hi! I accepted your invite. Let's chat."
-              await sendDM(sk!, inviterHex, { t: autoStartMsg })
-              messageSent = true
-              try { log(`Invite.helloDM.retrySuccess`) } catch {}
-            } catch (retryErr) {
-              try { log(`Invite.helloDM.retryFailed: ${String(retryErr)}`) } catch {}
-            }
-          }
-          
-          // If still not sent, schedule a delayed retry
-          if (!messageSent) {
-            try { log(`Invite.helloDM.schedulingDelayedRetry`) } catch {}
-            setTimeout(async () => {
-              try {
-                await sendDM(sk!, inviterHex, { t: "Hi! I accepted your invite. Let's chat." })
-                try { log(`Invite.helloDM.delayedRetrySuccess`) } catch {}
-              } catch (finalErr) {
-                try { log(`Invite.helloDM.delayedRetryFailed: ${String(finalErr)}`) } catch {}
-              }
-            }, 2000) // Retry after 2 seconds
-          }
-          
-          // Focus on the conversation and mark as processed
-          selectPeer(inviterHex)
-          
-          // Ensure conversation focus with a small delay for UI state consistency
-          setTimeout(() => {
-            selectPeer(inviterHex)
-          }, 100)
-          
-          // Verify message was added to conversation and provide feedback
-          setTimeout(() => {
-            try {
-              const conversations = useChatStore.getState().conversations
-              const peerMessages = conversations[inviterHex] || []
-              const myPk = getPublicKey(hexToBytes(sk!))
-              const sentMessages = peerMessages.filter(m => m.from === myPk)
-              
-              if (sentMessages.length > 0) {
-                try { log(`Invite.messageVerified: ${sentMessages.length} message(s) in conversation`) } catch {}
-              } else {
-                try { log(`Invite.messageNotFound: no sent messages in conversation`) } catch {}
-                // Try one more time to send a simple greeting
-                setTimeout(async () => {
-                  try {
-                    await sendDM(sk!, inviterHex, { t: "Hi! 👋" })
-                    try { log(`Invite.fallbackMessageSent`) } catch {}
-                  } catch (e) {
-                    try { log(`Invite.fallbackMessageFailed: ${String(e)}`) } catch {}
-                  }
-                }, 1000)
-              }
+              const { acked } = await sendDM(sk!, inviterHex, { t: text })
+              const ok = await Promise.race([
+                acked,
+                new Promise<boolean>(res => setTimeout(() => res(false), 9000)),
+              ])
+              if (ok) try { log(`Invite.helloDM.acked`) } catch {}
+              return ok
             } catch (e) {
-              try { log(`Invite.verificationError: ${String(e)}`) } catch {}
+              try { log(`Invite.helloDM.sendError: ${String(e)}`) } catch {}
+              return false
             }
-          }, 1500)
+          }
+
+          // Primary attempt
+          acked = await sendAndWait(autoStartMsg)
+          if (!acked) {
+            try { log(`Invite.helloDM.primaryNoAck`) } catch {}
+            // Retry with safe default
+            acked = await sendAndWait("Hi! I accepted your invite. Let's chat.")
+          }
+
+          // Last-chance delayed retry (non-blocking) if still not acked
+          if (!acked) {
+            try { log(`Invite.helloDM.scheduleLastChance`) } catch {}
+            setTimeout(() => { sendDM(sk!, inviterHex, { t: "Hi! 👋" }).catch(()=>{}) }, 2500)
+          }
           
-          localStorage.setItem(ackKey, '1')
-          
-          // Clear pending invite
-          setPendingInvite(null)
-          
-          try { log(`Invite.completed: ${inviterHex.slice(0, 12)}…`) } catch {}
+          const finalizeSuccess = () => {
+            // Focus conversation
+            selectPeer(inviterHex)
+            setTimeout(() => selectPeer(inviterHex), 100)
+            // Mark processed and clear pending
+            try { localStorage.setItem(ackKey, '1') } catch {}
+            setPendingInvite(null)
+            try { log(`Invite.completed: ${inviterHex.slice(0, 12)}… ack=true`) } catch {}
+          }
+
+          if (acked) {
+            finalizeSuccess()
+          } else {
+            try { log('Invite.pendingAck - will retry before finishing') } catch {}
+            // Background retry loop; only finish when acked
+            const plan = [3000, 6000, 12000, 24000, 48000]
+            let idx = 0
+            const tryAgain = () => {
+              if (idx >= plan.length) {
+                try { log('Invite.greetingFailedAfterRetries') } catch {}
+                return
+              }
+              const delay = plan[idx++]
+              setTimeout(async () => {
+                const ok = await sendAndWait("Hi! I accepted your invite. Let's chat.")
+                if (ok) {
+                  finalizeSuccess()
+                } else {
+                  tryAgain()
+                }
+              }, delay)
+            }
+            tryAgain()
+          }
         }, delay)
       } catch (e: any) { try { log(`Invite.error: ${e?.message||e}`) } catch {} }
     } catch (e: any) { try { log(`Invite.processError: ${e?.message||e}`) } catch {} }
@@ -1223,27 +1212,33 @@ export default function App() {
                 return false
               }
               
-              // Try QR sharing first
+              // Try to share, but always open the manual share modal afterwards
+              let shared = false
+              // Try QR sharing first (files-based strategies)
               if (await tryShareWithQR()) { 
                 try { log('Invite.share.success.qr') } catch {}
-                return 
-              }
-              
-              // Fallback to text-only sharing
-              // @ts-ignore
-              if ((navigator as any).share) {
-                try {
-                  // @ts-ignore
-                  await (navigator as any).share({ title: t('invite.connectTitle'), text: caption })
-                  try { log('Invite.share.success.text') } catch {}
-                  return
-                } catch (e) {
-                  console.log('Text-only share failed:', e)
+                shared = true
+              } else {
+                // Fallback to text-only sharing via Web Share API
+                // @ts-ignore
+                if ((navigator as any).share) {
+                  try {
+                    // @ts-ignore
+                    await (navigator as any).share({ title: t('invite.connectTitle'), text: caption })
+                    try { log('Invite.share.success.text') } catch {}
+                    shared = true
+                  } catch (e) {
+                    console.log('Text-only share failed:', e)
+                  }
                 }
               }
-              
-              // If sharing failed, open modal
-              console.log('Direct sharing failed, opening modal')
+
+              // Many apps drop captions when images are shared; copy caption for safety
+              if (shared) {
+                try { await navigator.clipboard.writeText(caption) } catch {}
+              }
+
+              // Always show the invite modal so the user can copy/share manually
               setInviteOpen(true)
               
             } catch (e: any) { 
