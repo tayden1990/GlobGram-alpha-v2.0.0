@@ -11,6 +11,7 @@ import { loadPreparedAds, extractFirstUrl as extractAdUrl, stripUrls as stripAdU
 import { useIsMobile } from './useIsMobile'
 import { useChatStore } from '../state/chatStore'
 import { useRoomStore } from '../state/roomStore'
+import { useRelayStore } from '../state/relayStore'
 import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools'
 import { hexToBytes } from '../nostr/utils'
 import { bytesToHex } from '../nostr/utils'
@@ -396,17 +397,44 @@ export default function App() {
             await new Promise(res => setTimeout(res, 300))
           }
           
-          // Ensure NostrEngine has started
+          // Ensure NostrEngine has started and relays are connected
           let retries = 0
-          while (retries < 10) {
-            const currentSk = localStorage.getItem('nostr_sk')
-            if (currentSk === sk) {
-              // Engine should be running, wait a bit more
-              await new Promise(res => setTimeout(res, 100))
-              break
+          const maxRetries = 15
+          let engineReady = false
+          
+          while (retries < maxRetries && !engineReady) {
+            try {
+              // Check if engine is initialized and has active relay connections
+              const { getRelayPool } = await import('../nostr/pool')
+              const enabledRelays = useRelayStore.getState().relays.filter(r => r.enabled).map(r => r.url)
+              
+              if (enabledRelays.length > 0) {
+                const pool = getRelayPool(enabledRelays)
+                let openConnections = 0
+                
+                for (const [url, ws] of pool.entries()) {
+                  if (ws.readyState === WebSocket.OPEN) {
+                    openConnections++
+                  }
+                }
+                
+                // Consider engine ready if we have at least one open connection
+                if (openConnections > 0) {
+                  engineReady = true
+                  try { log(`Invite.engineReady: ${openConnections}/${enabledRelays.length} relays connected`) } catch {}
+                  break
+                }
+              }
+            } catch (e) {
+              try { log(`Invite.engineCheck.error: ${String(e)}`) } catch {}
             }
+            
             retries++
-            await new Promise(res => setTimeout(res, 200))
+            await new Promise(res => setTimeout(res, 300))
+          }
+          
+          if (!engineReady) {
+            try { log(`Invite.engineNotReady: proceeding anyway after ${retries} retries`) } catch {}
           }
           
           // Get localized greeting message with comprehensive fallbacks
@@ -435,24 +463,77 @@ export default function App() {
           }
           
           let autoStartMsg = getAutoStartMessage()
+          let messageSent = false
           
+          // Primary attempt to send greeting message
           try {
             await sendDM(sk!, inviterHex, { t: autoStartMsg })
+            messageSent = true
             try { log(`Invite.helloDM.sent: ${autoStartMsg.slice(0, 30)}${autoStartMsg.length > 30 ? '…' : ''}`) } catch {}
           } catch (err) {
-            // One retry on failure with a safe default
-            try { log(`Invite.helloDM.retry: ${String(err)}`) } catch {}
-            autoStartMsg = "Hi! I accepted your invite. Let's chat."
-            try { 
+            try { log(`Invite.helloDM.primaryFailed: ${String(err)}`) } catch {}
+          }
+          
+          // First retry with fallback message
+          if (!messageSent) {
+            try {
+              autoStartMsg = "Hi! I accepted your invite. Let's chat."
               await sendDM(sk!, inviterHex, { t: autoStartMsg })
+              messageSent = true
               try { log(`Invite.helloDM.retrySuccess`) } catch {}
             } catch (retryErr) {
               try { log(`Invite.helloDM.retryFailed: ${String(retryErr)}`) } catch {}
             }
           }
           
+          // If still not sent, schedule a delayed retry
+          if (!messageSent) {
+            try { log(`Invite.helloDM.schedulingDelayedRetry`) } catch {}
+            setTimeout(async () => {
+              try {
+                await sendDM(sk!, inviterHex, { t: "Hi! I accepted your invite. Let's chat." })
+                try { log(`Invite.helloDM.delayedRetrySuccess`) } catch {}
+              } catch (finalErr) {
+                try { log(`Invite.helloDM.delayedRetryFailed: ${String(finalErr)}`) } catch {}
+              }
+            }, 2000) // Retry after 2 seconds
+          }
+          
           // Focus on the conversation and mark as processed
           selectPeer(inviterHex)
+          
+          // Ensure conversation focus with a small delay for UI state consistency
+          setTimeout(() => {
+            selectPeer(inviterHex)
+          }, 100)
+          
+          // Verify message was added to conversation and provide feedback
+          setTimeout(() => {
+            try {
+              const conversations = useChatStore.getState().conversations
+              const peerMessages = conversations[inviterHex] || []
+              const myPk = getPublicKey(hexToBytes(sk!))
+              const sentMessages = peerMessages.filter(m => m.from === myPk)
+              
+              if (sentMessages.length > 0) {
+                try { log(`Invite.messageVerified: ${sentMessages.length} message(s) in conversation`) } catch {}
+              } else {
+                try { log(`Invite.messageNotFound: no sent messages in conversation`) } catch {}
+                // Try one more time to send a simple greeting
+                setTimeout(async () => {
+                  try {
+                    await sendDM(sk!, inviterHex, { t: "Hi! 👋" })
+                    try { log(`Invite.fallbackMessageSent`) } catch {}
+                  } catch (e) {
+                    try { log(`Invite.fallbackMessageFailed: ${String(e)}`) } catch {}
+                  }
+                }, 1000)
+              }
+            } catch (e) {
+              try { log(`Invite.verificationError: ${String(e)}`) } catch {}
+            }
+          }, 1500)
+          
           localStorage.setItem(ackKey, '1')
           
           // Clear pending invite
