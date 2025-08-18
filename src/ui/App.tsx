@@ -25,6 +25,14 @@ const RoomWindowLazy = lazy(() => import('./RoomWindow').then(m => ({ default: m
 
 export default function App() {
   const { t, locale, setLocale, availableLocales } = useI18n()
+  // Helper: safely get a localized invite caption/message without leaking raw keys
+  const getInviteMessage = () => {
+    const cap = t('invite.caption') as string
+    if (cap && cap !== 'invite.caption') return cap
+    const msg = t('invite.message') as string
+    if (msg && msg !== 'invite.message') return msg
+    return 'Join me on GlobGram. Tap the link to start a secure chat.'
+  }
   // Helper: format a localized invite caption (message + link)
   const formatInviteCaption = (msg: string, link: string) => `${msg}\n${link}`
   // Helper: safely decode an nsec bech32 string to 64-char hex
@@ -344,7 +352,18 @@ export default function App() {
         // slight delay to allow engine to start
         setTimeout(async () => {
           try { log(`Invite.helloDM -> ${inviterHex.slice(0, 12)}…`) } catch {}
-          await sendDM(sk!, inviterHex, { t: 'Hi, I am here from now' })
+          // Localized auto-start message based on current language/locale.
+          // Avoid sending raw keys if translations aren't loaded yet.
+          const pref = t('invite.autoStartMessage') as string
+          const alt1 = t('chat.autoStartMessage') as string
+          const alt2 = t('invite.message') as string
+          const pick = (val: string, key: string) => (val && val !== key ? val : '')
+          const autoStartMsg =
+            pick(pref, 'invite.autoStartMessage') ||
+            pick(alt1, 'chat.autoStartMessage') ||
+            pick(alt2, 'invite.message') ||
+            "Hi! I accepted your invite. Let's chat."
+          await sendDM(sk!, inviterHex, { t: autoStartMsg })
           selectPeer(inviterHex)
           localStorage.setItem(ackKey, '1')
         }, 800)
@@ -926,7 +945,7 @@ export default function App() {
             setInviteUrl(link)
             setInviteOpen(true)
             try {
-        const message = (t('invite.caption') || t('invite.message')) as string
+  const message = getInviteMessage()
               // Try sharing text+link+QR image
         const tryShareWithQR = async () => {
                 try {
@@ -1244,7 +1263,7 @@ export default function App() {
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button onClick={async () => {
                   // Copy invite text + link + QR image when possible
-                  const msg = formatInviteCaption((t('invite.caption') || t('invite.message')) as string, inviteUrl)
+                  const msg = formatInviteCaption(getInviteMessage(), inviteUrl)
                   try {
                     const canvas = inviteCanvasRef.current
                     if (canvas && 'ClipboardItem' in window && (navigator.clipboard as any)?.write) {
@@ -1264,7 +1283,7 @@ export default function App() {
                   } catch { try { await navigator.clipboard.writeText(msg) } catch {}; alert(t('invite.copied')) }
                 }}>{t('modal.invite.copyText')}</button>
                 <button onClick={async () => {
-                  const text = formatInviteCaption((t('invite.caption') || t('invite.message')) as string, inviteUrl)
+                  const text = formatInviteCaption(getInviteMessage(), inviteUrl)
                   const shareWithFiles = async () => {
                     const canvas = inviteCanvasRef.current
                     if (!canvas || !(navigator as any).canShare) return false

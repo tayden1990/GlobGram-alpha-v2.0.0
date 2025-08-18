@@ -120,6 +120,7 @@
   "logs.level.error": "Ошибки",
 
   "invite.message": "Присоединяйтесь ко мне в GlobGram. Нажмите ссылку, чтобы начать безопасный чат.",
+  "invite.autoStartMessage": "Привет! Я принял(а) твоё приглашение. Давай общаться.",
   "invite.connectTitle": "Подключиться в GlobGram",
   "invite.copied": "Текст приглашения скопирован в буфер обмена.",
 

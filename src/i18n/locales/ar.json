@@ -120,6 +120,7 @@
   "logs.level.error": "أخطاء",
 
   "invite.message": "انضم إليّ على GlobGram. اضغط على الرابط لبدء دردشة آمنة.",
+  "invite.autoStartMessage": "مرحبًا! قبلت دعوتك. لنتحدث.",
   "invite.connectTitle": "الاتصال عبر GlobGram",
   "invite.copied": "نص الدعوة نُسخ إلى الحافظة.",
 

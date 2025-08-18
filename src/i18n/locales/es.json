@@ -120,6 +120,7 @@
   "logs.level.error": "Errores",
 
   "invite.message": "Únete a mí en GlobGram. Toca el enlace para iniciar un chat seguro.",
+  "invite.autoStartMessage": "¡Hola! Acepté tu invitación. Hablemos.",
   "invite.connectTitle": "Conéctate en GlobGram",
   "invite.copied": "Texto de invitación copiado al portapapeles.",
 

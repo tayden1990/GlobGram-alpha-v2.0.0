@@ -120,6 +120,7 @@
   "logs.level.error": "خطاها",
 
   "invite.message": "به GlobGram بپیوندید. برای شروع گفتگوی امن روی لینک بزنید.",
+  "invite.autoStartMessage": "سلام! دعوت‌نامه‌ات را پذیرفتم. شروع کنیم به گفتگو.",
   "invite.connectTitle": "اتصال در GlobGram",
   "invite.copied": "متن دعوت‌نامه در کلیپ‌بورد کپی شد.",
 
