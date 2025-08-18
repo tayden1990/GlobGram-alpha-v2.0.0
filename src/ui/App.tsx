@@ -25,6 +25,87 @@ const RoomWindowLazy = lazy(() => import('./RoomWindow').then(m => ({ default: m
 
 export default function App() {
   const { t, locale, setLocale, availableLocales } = useI18n()
+  // Helper: format a localized invite caption (message + link)
+  const formatInviteCaption = (msg: string, link: string) => `${msg}\n${link}`
+  // Helper: build an invite link with tracking params
+  const buildInviteLink = (base: string, npub: string, lang: string) => {
+    try {
+      const u = new URL(base, window.location.origin)
+      // Preserve existing params (invite, lang) if present in base
+      if (!u.searchParams.get('invite')) u.searchParams.set('invite', npub)
+      if (!u.searchParams.get('lang')) u.searchParams.set('lang', lang)
+      // Append UTM/tracking
+      u.searchParams.set('utm_source', 'globgram')
+      u.searchParams.set('utm_medium', 'invite')
+      u.searchParams.set('utm_campaign', 'friend-share')
+      u.searchParams.set('utm_term', lang)
+      u.searchParams.set('inviter', npub)
+      return u.toString()
+    } catch {
+      // Fallback to plain concatenation
+      const sep = base.includes('?') ? '&' : '?'
+      return `${base}${sep}invite=${encodeURIComponent(npub)}&lang=${encodeURIComponent(lang)}&utm_source=globgram&utm_medium=invite&utm_campaign=friend-share&utm_term=${encodeURIComponent(lang)}&inviter=${encodeURIComponent(npub)}`
+    }
+  }
+  // Helper: draw a QR code with a centered logo overlay onto a canvas
+  const drawQrWithLogo = async (canvas: HTMLCanvasElement, text: string) => {
+    try {
+      const q = await import('qrcode') as any
+      const toCanvas = (q as any).toCanvas || (q as any).default?.toCanvas
+      const size = Math.min(1024, Math.max(128, canvas.width || 0) || 256)
+      canvas.width = size
+      canvas.height = size
+      await new Promise<void>((resolve) => {
+        try { (toCanvas || (toCanvas as any)?.default?.toCanvas)(canvas, text, () => resolve()) } catch { resolve() }
+      })
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+      // Try a few common app icon paths
+      const logoCandidates = ['/icon-192.png', '/icon.png', '/favicon-32x32.png', '/favicon.png']
+      const img = new Image()
+      const loadLogo = (idx: number): Promise<HTMLImageElement | null> => new Promise(res => {
+        if (idx >= logoCandidates.length) return res(null)
+        img.onload = () => res(img)
+        img.onerror = () => loadLogo(idx + 1).then(res)
+        img.crossOrigin = 'anonymous'
+        img.src = logoCandidates[idx]
+      })
+      const loaded = await loadLogo(0)
+      const pad = Math.round(size * 0.02)
+      const logoSize = Math.round(size * 0.22)
+      const cx = Math.round(size / 2 - logoSize / 2)
+      const cy = Math.round(size / 2 - logoSize / 2)
+      // White rounded square backdrop to improve scan reliability
+      const radius = Math.max(6, Math.round(logoSize * 0.18))
+      ctx.save()
+      ctx.beginPath()
+      const x = cx - pad, y = cy - pad, w = logoSize + pad * 2, h = logoSize + pad * 2
+      const r = radius
+      ctx.moveTo(x + r, y)
+      ctx.arcTo(x + w, y, x + w, y + h, r)
+      ctx.arcTo(x + w, y + h, x, y + h, r)
+      ctx.arcTo(x, y + h, x, y, r)
+      ctx.arcTo(x, y, x + w, y, r)
+      ctx.closePath()
+      ctx.fillStyle = '#fff'
+      ctx.fill()
+      if (loaded) {
+        ctx.drawImage(loaded, cx, cy, logoSize, logoSize)
+      } else {
+        // Fallback: draw a simple branded monogram
+        ctx.fillStyle = '#111'
+        ctx.beginPath()
+        ctx.arc(size/2, size/2, logoSize/2, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.fillStyle = '#fff'
+        ctx.font = `${Math.round(logoSize * 0.52)}px system-ui, sans-serif`
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText('G', size/2, size/2)
+      }
+      ctx.restore()
+    } catch {}
+  }
   // Helper: safely decode an nsec bech32 string to 64-char hex
   const nsecToHex = (n: string): string | null => {
     try {
@@ -42,6 +123,34 @@ export default function App() {
       if (dec && dec.type === 'npub' && dec.data) {
         return bytesToHex(dec.data as Uint8Array)
       }
+    } catch {}
+    return null
+  }
+  // Parse an invite value from arbitrary input (URL, npub, hex) and return hex pubkey
+  const parseInviteInput = (raw: string): string | null => {
+    try {
+      if (!raw) return null
+      let s = raw.trim()
+      // If it's a full URL, extract ?invite= or ?inviter= if present
+      if (/^https?:\/\//i.test(s)) {
+        try {
+          const u = new URL(s)
+          s = u.searchParams.get('invite') || u.searchParams.get('inviter') || s
+        } catch {}
+      }
+      // Allow nostr: or web+nostr: schemes
+      s = s.replace(/^web\+nostr:/i, '').replace(/^nostr:/i, '')
+      // If string contains an npub anywhere, extract it
+      const m = s.match(/(npub1[02-9ac-hj-np-z]{58,})/i)
+      if (m && m[1]) s = m[1]
+      // Normalize bech32 to lowercase
+      if (s.startsWith('NPUB') || s.startsWith('npub')) s = s.toLowerCase()
+      if (s.startsWith('npub')) {
+        const hx = npubToHex(s)
+        if (hx) return hx
+      }
+      // Direct 64-hex
+      if (/^[0-9a-fA-F]{64}$/.test(s)) return s
     } catch {}
     return null
   }
@@ -148,11 +257,7 @@ export default function App() {
     if (!canvas) return
     ;(async () => {
       try {
-        const q = await import('qrcode')
-        const toCanvas = (q as any).toCanvas || (q as any).default?.toCanvas
-        if (typeof toCanvas === 'function') {
-          toCanvas(canvas, inviteUrl)
-        }
+  await drawQrWithLogo(canvas, inviteUrl)
       } catch {}
     })()
   }, [inviteOpen, inviteUrl])
@@ -283,19 +388,19 @@ export default function App() {
     return () => { try { off && off() } catch {} }
   }, [logModalOpen, logAuth])
 
-  // Handle invite links robustly: ?invite=<npub|hex>
+  // Handle invite links: ?invite=<npub|hex>
   useEffect(() => {
-    const processInvite = async (raw: string) => {
-      try { log(`Invite.detect ${raw.slice(0, 64)}`) } catch {}
-      // Decode to hex if npub
-      let inviterHex = raw
-      try {
-        if (raw.startsWith('npub')) {
-          const hx = npubToHex(raw)
-          if (hx) inviterHex = hx
-        }
-      } catch {}
-      if (!/^[0-9a-fA-F]{64}$/.test(inviterHex)) return
+    const params = new URLSearchParams(window.location.search)
+    // Accept alternate param names just in case
+    const invite = params.get('invite') || params.get('inviter') || ''
+    const parsedHex = parseInviteInput(invite)
+    if (!parsedHex) return
+    try { log(`Invite.detect ${invite.slice(0, 64)}`) } catch {}
+    // Clean URL
+    try { window.history.replaceState({}, '', window.location.pathname + window.location.hash) } catch {}
+    (async () => {
+      // Ensure we only act once per inviter
+      const inviterHex = parsedHex
       const ackKey = `invite_ack_${inviterHex}`
       if (localStorage.getItem(ackKey)) return
       // Ensure we have an account
@@ -309,56 +414,17 @@ export default function App() {
         sk = hexd
         try { log('Invite.autoAccountCreated') } catch {}
       }
-      // Try sending a hello DM with small retries; always select the peer
-      const tries = [700, 1200, 2000]
-      let sent = false
-      for (let i = 0; i < tries.length && !sent; i++) {
-        await new Promise(r => setTimeout(r, tries[i]))
-        try {
-          try { log(`Invite.helloDM.try${i+1} -> ${inviterHex.slice(0, 12)}…`) } catch {}
+      // Send hello DM (best-effort) and focus chat
+      try {
+        // slight delay to allow engine to start
+        setTimeout(async () => {
+          try { log(`Invite.helloDM -> ${inviterHex.slice(0, 12)}…`) } catch {}
           await sendDM(sk!, inviterHex, { t: 'Hi, I am here from now' })
-          sent = true
-        } catch (e: any) {
-          try { log(`Invite.helloDM.fail${i+1}: ${e?.message||e}`) } catch {}
-        }
-      }
-      // Focus chat regardless; mark ack so we don’t spam
-      selectPeer(inviterHex)
-      try { localStorage.setItem(ackKey, '1') } catch {}
-    }
-
-    const params = new URLSearchParams(window.location.search)
-    const invite = params.get('invite')
-    if (invite) {
-      // Persist pending invite in session in case of reloads
-      try { sessionStorage.setItem('pending_invite', invite) } catch {}
-      // Clean only the invite from URL, preserve other params like lang
-      try {
-        const next = new URLSearchParams(window.location.search)
-        next.delete('invite')
-        const qs = next.toString()
-        const newUrl = window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash
-        window.history.replaceState({}, '', newUrl)
-      } catch {}
-      ;(async () => { await processInvite(invite) })()
-    } else {
-      // Check if an invite was stored earlier
-      let pending: string | null = null
-      try { pending = sessionStorage.getItem('pending_invite') } catch {}
-      if (pending) {
-        ;(async () => { await processInvite(pending!) })()
-      }
-    }
-
-    // Also handle cases where app is already open and user navigates back with an invite
-    const onFocus = () => {
-      try {
-        const p = sessionStorage.getItem('pending_invite')
-        if (p) { processInvite(p) }
-      } catch {}
-    }
-    window.addEventListener('focus', onFocus)
-    return () => { window.removeEventListener('focus', onFocus) }
+          selectPeer(inviterHex)
+          localStorage.setItem(ackKey, '1')
+        }, 800)
+      } catch (e: any) { try { log(`Invite.error: ${e?.message||e}`) } catch {} }
+    })()
   }, [])
 
   // Prefetch heavy panels just-in-time (removed dynamic import to avoid TS module warning in isolated checks)
@@ -926,30 +992,29 @@ export default function App() {
               setMyPubkey(pub)
               sk = hexd
             }
-            // Build invite URL with my npub and current language
+            // Build invite URL with my npub and current language (+ tracking)
             const pk = useChatStore.getState().myPubkey
             if (!pk) return
             const npub = nip19.npubEncode(pk)
             const base = (import.meta as any).env?.BASE_URL || '/'
-            const link = `${window.location.origin}${base}?invite=${encodeURIComponent(npub)}&lang=${encodeURIComponent(locale)}`
+            const baseUrl = `${window.location.origin}${base}`
+            const link = buildInviteLink(baseUrl, npub, locale)
             setInviteUrl(link)
             setInviteOpen(true)
             try {
-        const message = t('invite.message')
+        const message = (t('invite.caption') || t('invite.message')) as string
               // Try sharing text+link+QR image
         const tryShareWithQR = async () => {
                 try {
-                  // Build QR image blob offscreen
-                  const { toCanvas } = await import('qrcode') as any
+                  // Build QR image blob offscreen (with logo overlay)
                   const off = document.createElement('canvas')
-                  await new Promise<void>((resolve) => {
-                    try { (toCanvas || (toCanvas as any)?.default?.toCanvas)(off, link, () => resolve()) } catch { resolve() }
-                  })
+                  off.width = 512; off.height = 512
+                  await drawQrWithLogo(off, link)
                   const blob: Blob | null = await new Promise(res => { try { off.toBlob(b => res(b), 'image/png') } catch { res(null) } })
                   if (!blob) return false
-      const file = new File([blob], 'globgram-invite.png', { type: 'image/png' })
-      const caption = `${message}\n${link}`
-  const data: any = { files: [file], text: caption, title: caption }
+      const file = new File([blob], `globgram-invite-${locale}.png`, { type: 'image/png' })
+      const caption = formatInviteCaption(message, link)
+      const data: any = { files: [file], text: caption, title: caption, url: link }
                   // @ts-ignore
                   if ((navigator as any).canShare && (navigator as any).canShare(data)) {
                     // @ts-ignore
@@ -964,30 +1029,25 @@ export default function App() {
               if ((navigator as any).share) {
                 try {
                   // @ts-ignore
-                  await (navigator as any).share({ title: t('invite.connectTitle'), text: `${message}\n${link}`, url: link })
+                  await (navigator as any).share({ title: t('invite.connectTitle'), text: formatInviteCaption(message, link), url: link })
                 } catch {
                   // @ts-ignore
-                  await (navigator as any).share({ title: t('invite.connectTitle'), text: `${message}\n${link}` })
+                  await (navigator as any).share({ title: t('invite.connectTitle'), text: formatInviteCaption(message, link) })
                 }
               } else {
                 // Try ClipboardItem with image+text, else fallback to text only
                 try {
-                  const { toCanvas } = await import('qrcode') as any
                   const off = document.createElement('canvas')
-                  await new Promise<void>((resolve) => {
-                    try { (toCanvas || (toCanvas as any)?.default?.toCanvas)(off, link, () => resolve()) } catch { resolve() }
-                  })
+                  off.width = 512; off.height = 512
+                  await drawQrWithLogo(off, link)
                   const blob: Blob | null = await new Promise(res => { try { off.toBlob(b => res(b), 'image/png') } catch { res(null) } })
                   if (blob && 'ClipboardItem' in window && (navigator.clipboard as any)?.write) {
-                    const item = new (window as any).ClipboardItem({
-                      'image/png': blob,
-                      'text/plain': new Blob([`${message}\n${link}`], { type: 'text/plain' }),
-                    })
+                    const item = new (window as any).ClipboardItem({ 'image/png': blob, 'text/plain': new Blob([formatInviteCaption(message, link)], { type: 'text/plain' }) })
                     await (navigator.clipboard as any).write([item])
                   } else {
-                    await navigator.clipboard.writeText(`${message}\n${link}`)
+                    await navigator.clipboard.writeText(formatInviteCaption(message, link))
                   }
-                } catch { await navigator.clipboard.writeText(`${message}\n${link}`) }
+                } catch { await navigator.clipboard.writeText(formatInviteCaption(message, link)) }
                 alert(t('invite.copied'))
               }
             } catch (e: any) { try { log(`Invite.share.error: ${e?.message||e}`) } catch {} }
@@ -1213,14 +1273,12 @@ export default function App() {
                   try {
                     const canvas = inviteCanvasRef.current
                     if (!canvas) return
-                    const blob: Blob | null = await new Promise(resolve => {
-                      try { canvas.toBlob(b => resolve(b), 'image/png') } catch { resolve(null) }
-                    })
+                    const blob: Blob | null = await new Promise(resolve => { try { canvas.toBlob(b => resolve(b), 'image/png') } catch { resolve(null) } })
                     if (!blob) return
                     const url = URL.createObjectURL(blob)
                     const a = document.createElement('a')
                     a.href = url
-                    a.download = 'globgram-invite.png'
+                    a.download = `globgram-invite-${locale}.png`
                     document.body.appendChild(a)
                     a.click()
                     a.remove()
@@ -1258,7 +1316,7 @@ export default function App() {
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button onClick={async () => {
                   // Copy invite text + link + QR image when possible
-                  const msg = t('invite.message') + '\n' + inviteUrl
+                  const msg = formatInviteCaption((t('invite.caption') || t('invite.message')) as string, inviteUrl)
                   try {
                     const canvas = inviteCanvasRef.current
                     if (canvas && 'ClipboardItem' in window && (navigator.clipboard as any)?.write) {
@@ -1278,14 +1336,14 @@ export default function App() {
                   } catch { try { await navigator.clipboard.writeText(msg) } catch {}; alert(t('invite.copied')) }
                 }}>{t('modal.invite.copyText')}</button>
                 <button onClick={async () => {
-                  const text = t('invite.message') + '\n' + inviteUrl
+                  const text = formatInviteCaption((t('invite.caption') || t('invite.message')) as string, inviteUrl)
                   const shareWithFiles = async () => {
                     const canvas = inviteCanvasRef.current
                     if (!canvas || !(navigator as any).canShare) return false
                     const blob: Blob | null = await new Promise(resolve => { try { canvas.toBlob(b => resolve(b), 'image/png') } catch { resolve(null) } })
                     if (!blob) return false
-                    const file = new File([blob], 'globgram-invite.png', { type: 'image/png' })
-                    const data: any = { files: [file], text, title: text }
+                    const file = new File([blob], `globgram-invite-${locale}.png`, { type: 'image/png' })
+                    const data: any = { files: [file], text, title: text, url: inviteUrl }
                     try {
                       // @ts-ignore
                       if ((navigator as any).canShare(data)) {
@@ -1481,17 +1539,11 @@ export default function App() {
       <div className={`fab-menu ${fabOpen ? '' : 'hidden'}`} style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8, alignItems: 'flex-end' }}>
               <button onClick={async () => {
                 setFabOpen(false)
-                let pk = prompt(t('fab.newChatPrompt')!) || ''
-                pk = pk.trim()
-                if (!pk) return
-                try {
-                  if (pk.startsWith('npub')) {
-                    const hx = npubToHex(pk)
-                    if (hx) pk = hx
-                  }
-                } catch {}
-                if (!/^[0-9a-fA-F]{64}$/.test(pk)) { alert(t('errors.invalidPubkey')); return }
-                selectPeer(pk)
+                const input = (prompt(t('fab.newChatPrompt')!) || '').trim()
+                if (!input) return
+                const hex = parseInviteInput(input)
+                if (!hex) { alert(t('errors.invalidPubkey')); return }
+                selectPeer(hex)
               }} aria-label={t('fab.startNewChat')} style={{ background: 'var(--accent)', color: '#fff' }}>+ {t('fab.newChat')}</button>
               <button onClick={async () => {
                 setFabOpen(false)
