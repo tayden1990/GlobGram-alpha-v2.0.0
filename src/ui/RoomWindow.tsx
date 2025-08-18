@@ -3,7 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { useRoomStore } from '../state/roomStore'
 import { useChatStore } from '../state/chatStore'
 import { sendRoom } from '../nostr/engine'
-import { blobToDataURL, dataURLSize } from '../nostr/utils'
+import { blobToDataURL, dataURLSize, MAX_ATTACHMENT_BYTES, prepareBlobForSend } from '../nostr/utils'
 import { useToast } from './Toast'
 import { THUMB_SIZE, PRELOAD_ROOT_MARGIN } from './constants'
 import { useIsMobile } from './useIsMobile'
@@ -47,6 +47,7 @@ export function RoomWindow() {
 	// preparing/progress state
 	const [preparing, setPreparing] = useState(false)
 	const [prepProgress, setPrepProgress] = useState(0)
+	const [sending, setSending] = useState(false)
 
 	// Grid layout ensures footer has its own row and never overlaps the scroller
 	
@@ -191,10 +192,10 @@ export function RoomWindow() {
 				e.preventDefault()
 				const f = e.dataTransfer?.files?.[0]
 				if (!f) return
-				if (f.size > 2 * 1024 * 1024) { show('File too large (>2MB)', 'error'); return }
+				if (f.size > MAX_ATTACHMENT_BYTES) { show('File too large (>10MB)', 'error'); return }
 				setPreparing(true); setPrepProgress(0)
-				const url = await blobToDataURL(f, (p) => setPrepProgress(p))
-				if (dataURLSize(url) > 2 * 1024 * 1024) { show('Encoded file too large', 'error'); return }
+				const url = await prepareBlobForSend(f, { onProgress: (p) => setPrepProgress(p) })
+				if (dataURLSize(url) > MAX_ATTACHMENT_BYTES) { show('Encoded file too large', 'error'); return }
 				setAttachment(url)
 				setPreparing(false); setPrepProgress(1)
 			}}
@@ -329,10 +330,10 @@ export function RoomWindow() {
 					const files = Array.from(e.target.files || [])
 					const urls: string[] = []
 					for (const file of files) {
-						if (file.size > 2 * 1024 * 1024) { show('File too large (>2MB)', 'error'); continue }
+						if (file.size > MAX_ATTACHMENT_BYTES) { show('File too large (>10MB)', 'error'); continue }
 						setPreparing(true); setPrepProgress(0)
-						const url = await blobToDataURL(file, (p) => setPrepProgress(p))
-						if (dataURLSize(url) > 2 * 1024 * 1024) { show('Encoded file too large', 'error'); continue }
+						const url = await prepareBlobForSend(file, { onProgress: (p) => setPrepProgress(p) })
+						if (dataURLSize(url) > MAX_ATTACHMENT_BYTES) { show('Encoded file too large', 'error'); continue }
 						urls.push(url)
 					}
 					if (urls.length === 1) setAttachment(urls[0])
@@ -392,16 +393,22 @@ export function RoomWindow() {
 					<button onClick={async () => {
 						if (!navigator.mediaDevices || typeof MediaRecorder === 'undefined') { show('Recording unsupported', 'error'); return }
 						const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-						const mr = new MediaRecorder(stream)
+						const audioMime = (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) ? 'audio/webm;codecs=opus' : undefined
+						let mr: MediaRecorder
+						try {
+							mr = new MediaRecorder(stream, { mimeType: audioMime as any, audioBitsPerSecond: 64_000 })
+						} catch {
+							mr = new MediaRecorder(stream)
+						}
 						mediaRecorderRef.current = mr
 						chunksRef.current = []
 						mr.ondataavailable = (ev) => { if (ev.data.size) chunksRef.current.push(ev.data) }
 						mr.onstop = async () => {
 							const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
-							if (blob.size > 1024 * 1024) { setRecording(false); show('Voice note too large (>1MB)', 'error'); return }
+							if (blob.size > MAX_ATTACHMENT_BYTES) { setRecording(false); show('Voice note too large (>10MB)', 'error'); return }
 							setPreparing(true); setPrepProgress(0)
-							const url = await blobToDataURL(blob, (p) => setPrepProgress(p))
-							if (dataURLSize(url) > 1024 * 1024) { setRecording(false); show('Encoded audio too large', 'error'); return }
+							const url = await prepareBlobForSend(blob, { onProgress: (p) => setPrepProgress(p) })
+							if (dataURLSize(url) > MAX_ATTACHMENT_BYTES) { setRecording(false); show('Encoded audio too large', 'error'); return }
 							setAttachment(url)
 							setRecording(false)
 							setPreparing(false); setPrepProgress(1)
@@ -421,19 +428,27 @@ export function RoomWindow() {
 					<button title="Record video" onClick={async () => {
 						if (!navigator.mediaDevices || typeof MediaRecorder === 'undefined') { show('Recording unsupported', 'error'); return }
 						try {
-							const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+							const stream = await navigator.mediaDevices.getUserMedia({
+								video: { width: { ideal: 640, max: 1280 }, height: { ideal: 360, max: 720 }, frameRate: { ideal: 24, max: 30 } },
+								audio: true
+							})
 							videoStreamRef.current = stream
 							const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus') ? 'video/webm;codecs=vp8,opus' : 'video/webm'
-							const mr = new MediaRecorder(stream, { mimeType: mime })
+							let mr: MediaRecorder
+							try {
+								mr = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 600_000, audioBitsPerSecond: 64_000 })
+							} catch {
+								mr = new MediaRecorder(stream, { mimeType: mime })
+							}
 							videoRecorderRef.current = mr
 							videoChunksRef.current = []
 							mr.ondataavailable = (ev) => { if (ev.data.size) videoChunksRef.current.push(ev.data) }
 							mr.onstop = async () => {
 								const blob = new Blob(videoChunksRef.current, { type: 'video/webm' })
-								if (blob.size > 2 * 1024 * 1024) { setVideoRecording(false); stream.getTracks().forEach(t => t.stop()); show('Video too large (>2MB)', 'error'); return }
+								if (blob.size > MAX_ATTACHMENT_BYTES) { setVideoRecording(false); stream.getTracks().forEach(t => t.stop()); show('Video too large (>10MB)', 'error'); return }
 								setPreparing(true); setPrepProgress(0)
-								const url = await blobToDataURL(blob, (p) => setPrepProgress(p))
-								if (dataURLSize(url) > 2 * 1024 * 1024) { setVideoRecording(false); stream.getTracks().forEach(t => t.stop()); show('Encoded video too large', 'error'); return }
+								const url = await prepareBlobForSend(blob, { onProgress: (p) => setPrepProgress(p) })
+								if (dataURLSize(url) > MAX_ATTACHMENT_BYTES) { setVideoRecording(false); stream.getTracks().forEach(t => t.stop()); show('Encoded video too large', 'error'); return }
 								setAttachment(url)
 								setVideoRecording(false)
 								stream.getTracks().forEach(t => t.stop())
@@ -471,11 +486,13 @@ export function RoomWindow() {
 							const p = (encOn && (attachment || attachments.length)) ? encPass : undefined
 							if (encOn && (attachment || attachments.length) && !p) { show('Enter a media passphrase', 'error'); return }
 							if (navigator.vibrate) try { navigator.vibrate(15) } catch {}
+							setSending(true)
 							await sendRoom(sk, roomId, text || undefined, { a: attachment || undefined, as: attachments.length ? attachments : undefined, p })
 					setText('')
 					setAttachment(null)
 					setAttachments([])
-				}} disabled={preparing || (!text && !attachment && attachments.length===0)}>Send</button>
+							setSending(false)
+					}} disabled={preparing || sending || (!text && !attachment && attachments.length===0)}>Send</button>
 				</div>
 				</div>
 			</footer>

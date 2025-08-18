@@ -66,3 +66,63 @@ export async function sha256Hex(bytes: Uint8Array): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', copy.buffer)
   return bytesToHex(new Uint8Array(digest))
 }
+
+// Max attachment size: 10 MB
+export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
+
+// Downscale and recompress an image blob to fit under max bytes
+export async function downscaleImage(
+  blob: Blob,
+  opts: { maxBytes?: number; maxDimension?: number; mime?: 'image/webp' | 'image/jpeg' } = {}
+): Promise<Blob> {
+  const maxBytes = opts.maxBytes ?? MAX_ATTACHMENT_BYTES
+  if (blob.size <= maxBytes) return blob
+  const maxDim = opts.maxDimension ?? 2048
+  const targetMime = opts.mime ?? 'image/jpeg'
+
+  const loadImage = (b: Blob) => new Promise<HTMLImageElement>((resolve, reject) => {
+    const url = URL.createObjectURL(b)
+    const img = new Image()
+    img.onload = () => { URL.revokeObjectURL(url); resolve(img) }
+    img.onerror = (e) => { URL.revokeObjectURL(url); reject(e) }
+    img.src = url
+  })
+
+  let img: HTMLImageElement
+  try { img = await loadImage(blob) } catch { return blob }
+  let { width, height } = img
+  const scale = Math.min(1, maxDim / Math.max(width, height))
+  width = Math.max(1, Math.floor(width * scale))
+  height = Math.max(1, Math.floor(height * scale))
+
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return blob
+  ctx.drawImage(img, 0, 0, width, height)
+
+  const qualities = [0.92, 0.85, 0.75, 0.6, 0.5]
+  let smallest: Blob | null = null
+  for (const q of qualities) {
+    const out: Blob = await new Promise((r) => canvas.toBlob((b) => r(b || blob), targetMime, q))
+    if (!smallest || out.size < smallest.size) smallest = out
+    if (out.size <= maxBytes) return out
+  }
+  return smallest || blob
+}
+
+// Prepare any blob (image/audio/video/other) for sending: compress image if possible, then produce data URL with progress
+export async function prepareBlobForSend(blob: Blob, opts?: { onProgress?: (p01: number) => void }): Promise<string> {
+  let working = blob
+  try {
+    if (working.type?.startsWith('image/')) {
+      working = await downscaleImage(working, { maxBytes: MAX_ATTACHMENT_BYTES, maxDimension: 2048, mime: 'image/jpeg' })
+    }
+  } catch {}
+  const url = await blobToDataURL(working, opts?.onProgress)
+  if (dataURLSize(url) > MAX_ATTACHMENT_BYTES) {
+    throw new Error('Encoded data exceeds 10 MB limit')
+  }
+  return url
+}
