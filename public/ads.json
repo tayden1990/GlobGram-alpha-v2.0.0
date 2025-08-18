@@ -5,7 +5,7 @@
       "id": "feedback",
       "text": "Send your feedback to developers",
       "url": "https://tayden1990.github.io/GlobGram-alpha-v2.0.0/?invite=npub1mvv4q84kd8lhjr8kx97ufg2dar3jfcj7h70njppuj6nwctmqfaust222jy&lang=en",
-      "active": false,
+  "active": true,
       "locales": ["en"],
       "placement": "top"
     },

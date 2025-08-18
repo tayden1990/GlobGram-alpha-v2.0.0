@@ -68,17 +68,5 @@ export async function loadPreparedAds(locale?: string, placement: 'top' = 'top')
       }
     }
   } catch {}
-  // Fallback to ad.txt if nothing
-  if (!out.length) {
-    try {
-      const r = await fetch(`${base}ad.txt`, { cache: 'no-store' })
-      if (r.ok) {
-        const text = (await r.text()).trim()
-        if (text) {
-          out.push({ id: 'ad.txt', text, displayText: stripUrls(text), url: extractFirstUrl(text) })
-        }
-      }
-    } catch {}
-  }
   return out
 }
