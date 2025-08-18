@@ -864,7 +864,7 @@ export default function App() {
             setInviteUrl(link)
             setInviteOpen(true)
             try {
-              const message = t('invite.message')
+        const message = t('invite.message')
               // Try sharing text+link+QR image
         const tryShareWithQR = async () => {
                 try {
@@ -876,8 +876,9 @@ export default function App() {
                   })
                   const blob: Blob | null = await new Promise(res => { try { off.toBlob(b => res(b), 'image/png') } catch { res(null) } })
                   if (!blob) return false
-          const file = new File([blob], 'globgram-invite.png', { type: 'image/png' })
-          const data: any = { files: [file], text: `${message}\n${link}`, title: t('invite.connectTitle') }
+      const file = new File([blob], 'globgram-invite.png', { type: 'image/png' })
+      const caption = `${message}\n${link}`
+      const data: any = { files: [file], text: caption, title: caption, url: link }
                   // @ts-ignore
                   if ((navigator as any).canShare && (navigator as any).canShare(data)) {
                     // @ts-ignore
@@ -1178,7 +1179,7 @@ export default function App() {
                     const blob: Blob | null = await new Promise(resolve => { try { canvas.toBlob(b => resolve(b), 'image/png') } catch { resolve(null) } })
                     if (!blob) return false
                     const file = new File([blob], 'globgram-invite.png', { type: 'image/png' })
-                    const data: any = { files: [file], text, title: t('invite.connectTitle') }
+                    const data: any = { files: [file], text, title: text, url: inviteUrl }
                     try {
                       // @ts-ignore
                       if ((navigator as any).canShare(data)) {
