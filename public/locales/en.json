@@ -123,6 +123,7 @@
 	"invite.autoStartMessage": "Hi! I accepted your invite. Let's chat.",
 	"invite.connectTitle": "Connect on GlobGram",
 	"invite.copied": "Invite text copied to clipboard.",
+	"invite.captionCopied": "Caption also copied to clipboard.",
 	"invite.caption": "Connect safely with me on GlobGram:",
 
 	"tabs.main": "Main sections",

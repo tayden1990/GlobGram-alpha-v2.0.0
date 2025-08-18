@@ -365,7 +365,12 @@ export default function App() {
     try {
       // Ensure we only act once per inviter
       const ackKey = `invite_ack_${inviterHex}`
-      if (localStorage.getItem(ackKey)) return
+      if (localStorage.getItem(ackKey)) {
+        try { log(`Invite.alreadyProcessed: ${inviterHex.slice(0, 12)}…`) } catch {}
+        // Still focus the conversation even if already processed
+        selectPeer(inviterHex)
+        return
+      }
       
       // Ensure we have an account
       let sk = localStorage.getItem('nostr_sk')
@@ -381,22 +386,39 @@ export default function App() {
       
       // Send hello DM (best-effort) and focus chat
       try {
-        // slight delay to allow engine to start and translations to load
+        // Give more time for engine to start and translations to load
+        const delay = urlLang ? 500 : 300
         setTimeout(async () => {
-          try { log(`Invite.helloDM -> ${inviterHex.slice(0, 12)}…`) } catch {}
-          // Wait a brief moment for translations if we just switched locale via ?lang
-          await new Promise(res => setTimeout(res, urlLang ? 300 : 150))
+          try { log(`Invite.helloDM.starting -> ${inviterHex.slice(0, 12)}…`) } catch {}
           
-          // Get localized greeting message with fallbacks
+          // Wait for translations if we just switched locale via ?lang
+          if (urlLang) {
+            await new Promise(res => setTimeout(res, 200))
+          }
+          
+          // Get localized greeting message with comprehensive fallbacks
           const getAutoStartMessage = () => {
             const pref = t('invite.autoStartMessage') as string
             const alt1 = t('chat.autoStartMessage') as string  
             const alt2 = t('invite.message') as string
             const pick = (val: string, key: string) => (val && val !== key ? val : '')
-            return pick(pref, 'invite.autoStartMessage') || 
-                   pick(alt1, 'chat.autoStartMessage') || 
-                   pick(alt2, 'invite.message') || 
-                   "Hi! I accepted your invite. Let's chat."
+            const msg = pick(pref, 'invite.autoStartMessage') || 
+                       pick(alt1, 'chat.autoStartMessage') || 
+                       pick(alt2, 'invite.message')
+            
+            if (msg) return msg
+            
+            // Final fallback based on language
+            if (urlLang === 'es') return "¡Hola! Acepté tu invitación. ¡Hablemos!"
+            if (urlLang === 'fr') return "Salut! J'ai accepté votre invitation. Parlons!"
+            if (urlLang === 'de') return "Hallo! Ich habe Ihre Einladung angenommen. Lass uns reden!"
+            if (urlLang === 'it') return "Ciao! Ho accettato il tuo invito. Parliamo!"
+            if (urlLang === 'pt') return "Olá! Aceitei seu convite. Vamos conversar!"
+            if (urlLang === 'ru') return "Привет! Я принял ваше приглашение. Давайте поговорим!"
+            if (urlLang === 'ja') return "こんにちは！あなたの招待を受け入れました。話しましょう！"
+            if (urlLang === 'zh') return "你好！我接受了你的邀请。让我们聊聊吧！"
+            
+            return "Hi! I accepted your invite. Let's chat."
           }
           
           let autoStartMsg = getAutoStartMessage()
@@ -416,12 +438,15 @@ export default function App() {
             }
           }
           
-          // Focus on the conversation
+          // Focus on the conversation and mark as processed
           selectPeer(inviterHex)
           localStorage.setItem(ackKey, '1')
+          
           // Clear pending invite
           setPendingInvite(null)
-        }, 800)
+          
+          try { log(`Invite.completed: ${inviterHex.slice(0, 12)}…`) } catch {}
+        }, delay)
       } catch (e: any) { try { log(`Invite.error: ${e?.message||e}`) } catch {} }
     } catch (e: any) { try { log(`Invite.processError: ${e?.message||e}`) } catch {} }
   }
@@ -1013,9 +1038,11 @@ export default function App() {
             setInviteUrl(link)
             setInviteOpen(true)
             try {
-  const message = getInviteMessage()
-              // Try sharing text+link+QR image
-        const tryShareWithQR = async () => {
+              const message = getInviteMessage()
+              const caption = formatInviteCaption(message, link)
+              
+              // Try sharing text+link+QR image with improved Web Share logic
+              const tryShareWithQR = async () => {
                 try {
                   // Build QR image blob offscreen
                   const { toCanvas } = await import('qrcode') as any
@@ -1025,69 +1052,107 @@ export default function App() {
                   })
                   const blob: Blob | null = await new Promise(res => { try { off.toBlob(b => res(b), 'image/png') } catch { res(null) } })
                   if (!blob) return false
-      const file = new File([blob], 'globgram-invite.png', { type: 'image/png' })
-      const caption = formatInviteCaption(message, link)
-      // Try different Web Share approaches for better platform compatibility
-      const shareData1 = { files: [file], text: caption }
-      const shareData2 = { files: [file], title: caption }
-      const shareData3 = { files: [file] }
+                  
+                  const file = new File([blob], 'globgram-invite.png', { type: 'image/png' })
+                  
                   // @ts-ignore
-                  if ((navigator as any).canShare) {
+                  if ((navigator as any).share) {
                     try {
-                      // @ts-ignore - Try with text field first
-                      if ((navigator as any).canShare(shareData1)) {
+                      // Strategy 1: Try files with text as separate field
+                      try {
+                        const shareData = { files: [file], text: caption, title: t('invite.connectTitle') }
                         // @ts-ignore
-                        await (navigator as any).share(shareData1)
-                        return true
+                        if ((navigator as any).canShare && (navigator as any).canShare(shareData)) {
+                          // @ts-ignore
+                          await (navigator as any).share(shareData)
+                          return true
+                        }
+                      } catch (e) {
+                        console.log('Files+text share failed:', e)
                       }
-                      // @ts-ignore - Try with title field
-                      if ((navigator as any).canShare(shareData2)) {
+                      
+                      // Strategy 2: Try files with caption as title
+                      try {
+                        const shareData = { files: [file], title: caption }
                         // @ts-ignore
-                        await (navigator as any).share(shareData2)
-                        return true
+                        if ((navigator as any).canShare && (navigator as any).canShare(shareData)) {
+                          // @ts-ignore
+                          await (navigator as any).share(shareData)
+                          return true
+                        }
+                      } catch (e) {
+                        console.log('Files+title share failed:', e)
                       }
-                      // @ts-ignore - Try files only, then share text separately
-                      if ((navigator as any).canShare(shareData3)) {
+                      
+                      // Strategy 3: Files only, then copy text
+                      try {
+                        const shareData = { files: [file] }
                         // @ts-ignore
-                        await (navigator as any).share(shareData3)
-                        // Copy caption to clipboard as fallback
-                        try { await navigator.clipboard.writeText(caption) } catch {}
-                        return true
+                        if ((navigator as any).canShare && (navigator as any).canShare(shareData)) {
+                          // @ts-ignore
+                          await (navigator as any).share(shareData)
+                          // Immediately copy caption to clipboard as fallback
+                          try { 
+                            await navigator.clipboard.writeText(caption)
+                            // Show user that caption was copied
+                            setTimeout(() => alert(t('invite.copied') + '\n' + t('invite.captionCopied')), 100)
+                          } catch {}
+                          return true
+                        }
+                      } catch (e) {
+                        console.log('Files-only share failed:', e)
                       }
                     } catch (shareErr) {
-                      console.warn('Web Share with files failed:', shareErr)
+                      console.warn('All file sharing strategies failed:', shareErr)
                     }
                   }
-                } catch {}
+                } catch (e) {
+                  console.warn('QR generation failed:', e)
+                }
                 return false
               }
-              // @ts-ignore - Web Share API optional
-              if (await tryShareWithQR()) { try { log('Invite.share.success.qr') } catch {}; return }
+              
+              // Try QR sharing first
+              if (await tryShareWithQR()) { 
+                try { log('Invite.share.success.qr') } catch {}
+                return 
+              }
+              
+              // Fallback to text-only sharing
+              // @ts-ignore
               if ((navigator as any).share) {
                 try {
                   // @ts-ignore
-                  await (navigator as any).share({ title: t('invite.connectTitle'), text: formatInviteCaption(message, link) })
-                } catch {
-                  // @ts-ignore
-                  await (navigator as any).share({ title: t('invite.connectTitle'), text: formatInviteCaption(message, link) })
+                  await (navigator as any).share({ title: t('invite.connectTitle'), text: caption })
+                  return
+                } catch (e) {
+                  console.log('Text-only share failed:', e)
                 }
-              } else {
-                // Try ClipboardItem with image+text, else fallback to text only
-                try {
-                  const { toCanvas } = await import('qrcode') as any
-                  const off = document.createElement('canvas')
-                  await new Promise<void>((resolve) => {
-                    try { (toCanvas || (toCanvas as any)?.default?.toCanvas)(off, link, () => resolve()) } catch { resolve() }
+              }
+              
+              // Final fallback: clipboard with image+text or text-only
+              try {
+                const { toCanvas } = await import('qrcode') as any
+                const off = document.createElement('canvas')
+                await new Promise<void>((resolve) => {
+                  try { (toCanvas || (toCanvas as any)?.default?.toCanvas)(off, link, () => resolve()) } catch { resolve() }
+                })
+                const blob: Blob | null = await new Promise(res => { try { off.toBlob(b => res(b), 'image/png') } catch { res(null) } })
+                if (blob && 'ClipboardItem' in window && (navigator.clipboard as any)?.write) {
+                  const item = new (window as any).ClipboardItem({ 
+                    'image/png': blob, 
+                    'text/plain': new Blob([caption], { type: 'text/plain' }) 
                   })
-                  const blob: Blob | null = await new Promise(res => { try { off.toBlob(b => res(b), 'image/png') } catch { res(null) } })
-                  if (blob && 'ClipboardItem' in window && (navigator.clipboard as any)?.write) {
-                    const item = new (window as any).ClipboardItem({ 'image/png': blob, 'text/plain': new Blob([formatInviteCaption(message, link)], { type: 'text/plain' }) })
-                    await (navigator.clipboard as any).write([item])
-                  } else {
-                    await navigator.clipboard.writeText(formatInviteCaption(message, link))
-                  }
-                } catch { await navigator.clipboard.writeText(formatInviteCaption(message, link)) }
+                  await (navigator.clipboard as any).write([item])
+                } else {
+                  await navigator.clipboard.writeText(caption)
+                }
                 alert(t('invite.copied'))
+              } catch { 
+                try {
+                  await navigator.clipboard.writeText(caption)
+                  alert(t('invite.copied'))
+                } catch {}
               }
             } catch (e: any) { try { log(`Invite.share.error: ${e?.message||e}`) } catch {} }
             }}>{t('actions.invite')}</button>
