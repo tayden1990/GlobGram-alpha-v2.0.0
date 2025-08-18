@@ -11,6 +11,7 @@
 	"modal.invite.linkLabel": "Invite link",
 	"modal.invite.copyText": "Copy invite text",
 	"modal.invite.shareAll": "Share text + link (+ QR if supported)",
+	"modal.invite.captionText": "Full invite message",
 
 	"settings.title": "Settings",
 	"settings.keys": "Keys",

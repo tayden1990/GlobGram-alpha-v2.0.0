@@ -387,12 +387,25 @@ export default function App() {
       // Send hello DM (best-effort) and focus chat
       try {
         // Give more time for engine to start and translations to load
-        const delay = urlLang ? 500 : 300
+        const delay = urlLang ? 800 : 600  // Increased delay to ensure engine is ready
         setTimeout(async () => {
           try { log(`Invite.helloDM.starting -> ${inviterHex.slice(0, 12)}…`) } catch {}
           
           // Wait for translations if we just switched locale via ?lang
           if (urlLang) {
+            await new Promise(res => setTimeout(res, 300))
+          }
+          
+          // Ensure NostrEngine has started
+          let retries = 0
+          while (retries < 10) {
+            const currentSk = localStorage.getItem('nostr_sk')
+            if (currentSk === sk) {
+              // Engine should be running, wait a bit more
+              await new Promise(res => setTimeout(res, 100))
+              break
+            }
+            retries++
             await new Promise(res => setTimeout(res, 200))
           }
           
@@ -1036,7 +1049,8 @@ export default function App() {
             const base = (import.meta as any).env?.BASE_URL || '/'
             const link = `${window.location.origin}${base}?invite=${encodeURIComponent(npub)}&lang=${encodeURIComponent(locale)}`
             setInviteUrl(link)
-            setInviteOpen(true)
+            
+            // Quick share attempt first, then open modal as fallback
             try {
               const message = getInviteMessage()
               const caption = formatInviteCaption(message, link)
@@ -1047,10 +1061,26 @@ export default function App() {
                   // Build QR image blob offscreen
                   const { toCanvas } = await import('qrcode') as any
                   const off = document.createElement('canvas')
+                  off.width = 256
+                  off.height = 256
                   await new Promise<void>((resolve) => {
-                    try { (toCanvas || (toCanvas as any)?.default?.toCanvas)(off, link, () => resolve()) } catch { resolve() }
+                    try { 
+                      (toCanvas || (toCanvas as any)?.default?.toCanvas)(off, link, { width: 256 }, (err: any) => {
+                        if (err) console.warn('QR generation error:', err)
+                        resolve()
+                      }) 
+                    } catch (e) { 
+                      console.warn('QR generation failed:', e)
+                      resolve() 
+                    }
                   })
-                  const blob: Blob | null = await new Promise(res => { try { off.toBlob(b => res(b), 'image/png') } catch { res(null) } })
+                  const blob: Blob | null = await new Promise(res => { 
+                    try { 
+                      off.toBlob(b => res(b), 'image/png', 0.9) 
+                    } catch { 
+                      res(null) 
+                    } 
+                  })
                   if (!blob) return false
                   
                   const file = new File([blob], 'globgram-invite.png', { type: 'image/png' })
@@ -1124,37 +1154,22 @@ export default function App() {
                 try {
                   // @ts-ignore
                   await (navigator as any).share({ title: t('invite.connectTitle'), text: caption })
+                  try { log('Invite.share.success.text') } catch {}
                   return
                 } catch (e) {
                   console.log('Text-only share failed:', e)
                 }
               }
               
-              // Final fallback: clipboard with image+text or text-only
-              try {
-                const { toCanvas } = await import('qrcode') as any
-                const off = document.createElement('canvas')
-                await new Promise<void>((resolve) => {
-                  try { (toCanvas || (toCanvas as any)?.default?.toCanvas)(off, link, () => resolve()) } catch { resolve() }
-                })
-                const blob: Blob | null = await new Promise(res => { try { off.toBlob(b => res(b), 'image/png') } catch { res(null) } })
-                if (blob && 'ClipboardItem' in window && (navigator.clipboard as any)?.write) {
-                  const item = new (window as any).ClipboardItem({ 
-                    'image/png': blob, 
-                    'text/plain': new Blob([caption], { type: 'text/plain' }) 
-                  })
-                  await (navigator.clipboard as any).write([item])
-                } else {
-                  await navigator.clipboard.writeText(caption)
-                }
-                alert(t('invite.copied'))
-              } catch { 
-                try {
-                  await navigator.clipboard.writeText(caption)
-                  alert(t('invite.copied'))
-                } catch {}
-              }
-            } catch (e: any) { try { log(`Invite.share.error: ${e?.message||e}`) } catch {} }
+              // If sharing failed, open modal
+              console.log('Direct sharing failed, opening modal')
+              setInviteOpen(true)
+              
+            } catch (e: any) { 
+              try { log(`Invite.share.error: ${e?.message||e}`) } catch {} 
+              // On any error, open modal as fallback
+              setInviteOpen(true)
+            }
             }}>{t('actions.invite')}</button>
           <label style={{ fontSize: 8, color: 'var(--muted)' }}>{t('actions.theme')}</label>
           <select value={theme} onChange={(e) => applyTheme(e.target.value as any)}>
