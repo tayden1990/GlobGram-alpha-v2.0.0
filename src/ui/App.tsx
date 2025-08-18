@@ -22,6 +22,26 @@ const ChatWindowLazy = lazy(() => import('./ChatWindow').then(m => ({ default: m
 const RoomWindowLazy = lazy(() => import('./RoomWindow').then(m => ({ default: m.RoomWindow })))
 
 export default function App() {
+  // Helper: safely decode an nsec bech32 string to 64-char hex
+  const nsecToHex = (n: string): string | null => {
+    try {
+      const dec: any = nip19.decode(n)
+      if (dec && dec.type === 'nsec' && dec.data) {
+        return bytesToHex(dec.data as Uint8Array)
+      }
+    } catch {}
+    return null
+  }
+  // Helper: safely decode an npub bech32 string to 64-char hex
+  const npubToHex = (n: string): string | null => {
+    try {
+      const dec: any = nip19.decode(n)
+      if (dec && dec.type === 'npub' && dec.data) {
+        return bytesToHex(dec.data as Uint8Array)
+      }
+    } catch {}
+    return null
+  }
   const isMobile = useIsMobile(900)
   const selectedPeer = useChatStore(s => s.selectedPeer)
   const selectPeer = useChatStore(s => s.selectPeer)
@@ -224,8 +244,8 @@ export default function App() {
       let inviterHex = invite
       try {
         if (invite.startsWith('npub')) {
-          const dec = nip19.decode(invite)
-          inviterHex = typeof dec.data === 'string' ? dec.data : bytesToHex(dec.data as Uint8Array)
+          const hx = npubToHex(invite)
+          if (hx) inviterHex = hx
         }
       } catch {}
       if (!/^[0-9a-fA-F]{64}$/.test(inviterHex)) return
@@ -561,21 +581,64 @@ export default function App() {
                     if (!f) return
                     try {
                       const txt = await f.text()
-                      let sk = txt.trim()
+                      let secretHex: string | null = null
+                      // Try JSON formats first
                       try {
                         const j = JSON.parse(txt)
-                        if (typeof j?.sk === 'string') sk = j.sk.trim()
+                        // Encrypted backup v2
+                        if (j && j.v === 2 && Array.isArray(j.salt) && Array.isArray(j.iv) && Array.isArray(j.data)) {
+                          const password = prompt('Enter password to decrypt key backup:')
+                          if (!password) { alert('Import cancelled'); return }
+                          const enc = new TextEncoder()
+                          const salt = new Uint8Array(j.salt)
+                          const iv = new Uint8Array(j.iv)
+                          const data = new Uint8Array(j.data)
+                          const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey'])
+                          const dkey = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 100_000, hash: 'SHA-256' }, keyMaterial, { name: 'AES-GCM', length: 256 }, true, ['decrypt'])
+                          const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, dkey, data)
+                          const decoded = JSON.parse(new TextDecoder().decode(new Uint8Array(plaintext)))
+                          if (decoded && typeof decoded.secretHex === 'string') secretHex = decoded.secretHex.trim()
+                        } else {
+                          // Plain backup v1 or generic JSON
+                          if (typeof j?.secretHex === 'string') secretHex = j.secretHex.trim()
+                          else if (typeof j?.hex === 'string') secretHex = j.hex.trim()
+                          else if (typeof j?.sk === 'string') secretHex = j.sk.trim()
+                          else if (typeof j?.nsec === 'string' && j.nsec) {
+                            const hx = nsecToHex(j.nsec)
+                            if (hx) secretHex = hx
+                          } else if (j?.version === 1) {
+                            if (typeof j?.secretHex === 'string') secretHex = j.secretHex.trim()
+                            else if (typeof j?.nsec === 'string') {
+                              const hx = nsecToHex(j.nsec)
+                              if (hx) secretHex = hx
+                            } else if (typeof j?.sk === 'string') secretHex = j.sk.trim()
+                          }
+                        }
                       } catch {}
-                      if (sk.startsWith('nsec')) {
-                        try {
-                          const dec = nip19.decode(sk)
-                          const data = dec.data as Uint8Array
-                          sk = bytesToHex(data)
-                        } catch {}
+                      // Fallback to plain text formats
+                      if (!secretHex) {
+                        const trimmed = txt.trim()
+                        if (trimmed.startsWith('nsec')) {
+                          const hx = nsecToHex(trimmed)
+                          if (hx) secretHex = hx
+                        } else if (/^[0-9a-fA-F]{64}$/.test(trimmed)) {
+                          secretHex = trimmed
+                        } else {
+                          const lines = trimmed.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+                          const maybeNsec = lines.find(l => l.startsWith('nsec'))
+                          if (maybeNsec) {
+                            const hx = nsecToHex(maybeNsec)
+                            if (hx) secretHex = hx
+                          }
+                          if (!secretHex) {
+                            const maybeHex = lines.find(l => /^[0-9a-fA-F]{64}$/.test(l))
+                            if (maybeHex) secretHex = maybeHex
+                          }
+                        }
                       }
-                      if (!/^[0-9a-fA-F]{64}$/.test(sk)) { alert('Invalid key format. Provide 64-char hex or nsec.'); return }
-                      const pub = getPublicKey(hexToBytes(sk))
-                      try { localStorage.setItem('nostr_sk', sk) } catch {}
+                      if (!secretHex || !/^[0-9a-fA-F]{64}$/.test(secretHex)) { alert('Invalid key format. Provide 64-char hex, nsec, or a valid backup file.'); return }
+                      const pub = getPublicKey(hexToBytes(secretHex))
+                      try { localStorage.setItem('nostr_sk', secretHex) } catch {}
                       setMyPubkey(pub)
                       setKeyReady(true)
                     } catch {
@@ -1095,8 +1158,8 @@ export default function App() {
                 if (!pk) return
                 try {
                   if (pk.startsWith('npub')) {
-                    const dec = nip19.decode(pk)
-                    pk = typeof dec.data === 'string' ? dec.data : bytesToHex(dec.data as Uint8Array)
+                    const hx = npubToHex(pk)
+                    if (hx) pk = hx
                   }
                 } catch {}
                 if (!/^[0-9a-fA-F]{64}$/.test(pk)) { alert('Invalid pubkey'); return }
