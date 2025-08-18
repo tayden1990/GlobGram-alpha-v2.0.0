@@ -2,7 +2,7 @@
 
 GlobGram is a lightweight, mobile‑first chat app powered by the Nostr protocol. It’s a privacy‑first, PWA‑enabled messenger with end‑to‑end encrypted DMs, Rooms, media sharing, offline support, and a focus on user data ownership.
 
-Built with React + TypeScript + Vite.
+Built with React 18, TypeScript, Vite, and nostr-tools.
 
 ## What is Nostr?
 
@@ -35,6 +35,27 @@ Useful references: NIPs (Nostr Improvement Proposals) such as NIP‑01 (base pro
 - Diagnostics & Logs
 	- Password‑gated log viewer (4522815), unlimited IndexedDB persistence, export/clear
 - Accessibility & Mobile‑first UI
+
+### Internationalization
+- Multi‑language UI with auto‑detect, persistence, and runtime switching (Settings or first onboarding step)
+- Supported languages: 🇺🇸 English (`en`), 🇮🇷 فارسی (`fa`, RTL), 🇪🇸 Español (`es`), 🇫🇷 Français (`fr`), 🇩🇪 Deutsch (`de`), 🇵🇹 Português (`pt`), 🇷🇺 Русский (`ru`), 🇸🇦 العربية (`ar`, RTL)
+- RTL locales automatically set `dir="rtl"` and add a `.rtl` class on `<html>`
+- Dev‑time warning for missing translation keys in the console
+
+### Onboarding
+- Step 0: App + Nostr intro, choose language
+- Step 1: Notifications permission
+- Step 2: Microphone permission
+- Step 3: Camera permission
+- Step 4: Create or import your Nostr key (hex or nsec)
+- Step 5: Install the PWA (if supported)
+- Step 6: Quick tips
+
+### Invite flow
+- Generate an invite link containing your `npub`
+- Show a QR code (downloadable as PNG)
+- Share message + link using the Web Share API (and include QR file when supported)
+- One‑click “Copy invite text” fallback
 
 ## Security and encryption
 
@@ -83,6 +104,8 @@ Preview (optional)
 npm run preview
 ```
 
+Tip: If you see an update banner in the app, you can click “Update now” or wait for the short auto‑apply countdown.
+
 ## Using GlobGram
 
 1) Create or import a key
@@ -102,6 +125,29 @@ npm run preview
 
 5) Install and go offline
 - Add to Home Screen (mobile) or “Install” (desktop) for a PWA experience. Basic functionality and cached UI work offline; messages send when back online.
+
+6) Invite friends
+- Click “Invite a friend” in the header
+- Share the text + link via your system share sheet (when available), or copy the invite text
+- Show the QR code to scan, or download it as a PNG
+
+## Internationalization (i18n)
+
+Runtime i18n is provided by `src/i18n/index.tsx` with dynamic JSON loading per locale.
+
+- Auto‑detects the browser language on first run and persists the user choice in `localStorage`
+- Language can be changed from Settings or during onboarding (step 0)
+- RTL locales (fa, ar) automatically switch text direction and add a `.rtl` class on the `<html>` element
+- In development, missing keys log a warning to the console: `[i18n] Missing key for locale ...`
+
+Add a new language
+1. Duplicate `src/i18n/locales/en.json` to `src/i18n/locales/<code>.json` and translate
+2. In `src/i18n/index.tsx`, add the locale to:
+	- `loaders` (dynamic import)
+	- `localeNames` (display name)
+	- `localeFlags` (optional emoji flag shown next to the name)
+	- Add to RTL set if needed: `new Set(['fa', 'ar', ...])`
+3. Build and run; the language should appear in onboarding and settings
 
 ## Deployment (GitHub Pages)
 
@@ -127,6 +173,23 @@ Tag the repo with a semver tag (e.g., `v0.1.0`) to trigger the Release workflow 
 npm version patch
 git push --follow-tags
 ```
+
+## Troubleshooting
+
+- App didn’t update after a deploy
+	- Click the “Update now” button in the in‑app banner when shown, or reload the page
+	- As a last resort, unregister service workers and clear caches, then reload
+- Install prompt didn’t appear
+	- Ensure HTTPS (or localhost), not in private browsing
+	- App must not already be installed/opened in app‑mode
+	- On iOS Safari, use Share → Add to Home Screen
+- Media/camera/microphone errors
+	- Ensure permissions are granted (see statuses in onboarding)
+	- Some browsers/devices may not support certain capture APIs
+- Copy/share issues
+	- Web Share varies by platform; the app falls back to copying invite text to the clipboard
+- Missing translations
+	- In dev, missing keys log to the console; ensure the key exists in the locale JSON
 
 ## Roadmap (selected)
 
