@@ -16,12 +16,14 @@ import { bytesToHex } from '../nostr/utils'
 import { createRoom, refreshSubscriptions, sendDM } from '../nostr/engine'
 import { useSettingsStore } from './settingsStore'
 import { getLogs, clearLogs, onLog, log, setLogMinLevel, getPersistedLogsText, clearPersistedLogs } from './logger'
+import { useI18n } from '../i18n'
 // Lazy-load QRCode only when needed to reduce initial bundle size
 
 const ChatWindowLazy = lazy(() => import('./ChatWindow').then(m => ({ default: m.ChatWindow })))
 const RoomWindowLazy = lazy(() => import('./RoomWindow').then(m => ({ default: m.RoomWindow })))
 
 export default function App() {
+  const { t, locale, setLocale, availableLocales } = useI18n()
   // Helper: safely decode an nsec bech32 string to 64-char hex
   const nsecToHex = (n: string): string | null => {
     try {
@@ -481,13 +483,31 @@ export default function App() {
         <div role="dialog" aria-modal="true" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div style={{ width: 'min(720px, 96vw)', maxHeight: '92vh', overflow: 'auto', background: 'var(--card)', color: 'var(--fg)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: '0 10px 32px rgba(0,0,0,0.35)', padding: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <h2 style={{ margin: 0 }}>Welcome to GlobGram</h2>
-              <button onClick={() => setOnboardingOpen(false)} aria-label="Close">✖</button>
+              <h2 style={{ margin: 0 }}>{t('onboarding.welcome')}</h2>
+              <button onClick={() => setOnboardingOpen(false)} aria-label={t('common.close')}>✖</button>
             </div>
             {obStep === 0 && (
               <div>
-                <h3>Step 1 — Notifications</h3>
-                <p>Allow notifications to get message alerts.</p>
+                <h3>{t('onboarding.intro.title')}</h3>
+                <p>{t('onboarding.intro.desc')}</p>
+                <p style={{ marginTop: -8, opacity: 0.9 }}>{t('onboarding.intro.nostr')}</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
+                  <label style={{ fontSize: 12, color: 'var(--muted)' }}>{t('onboarding.intro.chooseLanguage')}</label>
+                  <select value={locale} onChange={(e) => setLocale(e.target.value)}>
+                    {availableLocales.map(l => (
+                      <option key={l.code} value={l.code}>{l.name}</option>
+                    ))}
+                  </select>
+                  <div style={{ marginLeft: 'auto' }}>
+                    <button onClick={() => setObStep(1)}>{t('common.next')}</button>
+                  </div>
+                </div>
+              </div>
+            )}
+            {obStep === 1 && (
+              <div>
+                <h3>{t('onboarding.step1.title')}</h3>
+                <p>{t('onboarding.step1.desc')}</p>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <button onClick={async () => {
                     try {
@@ -497,23 +517,24 @@ export default function App() {
                       const r = await Notification.requestPermission()
                       setNotifStatus(r === 'granted' ? 'granted' : 'denied')
                     } catch { setNotifStatus('unsupported') }
-                  }}>Allow notifications</button>
+                  }}>{t('onboarding.allowNotifications')}</button>
                   <span style={{ color: 'var(--muted)', fontSize: 12 }}>
-                    {notifStatus === 'idle' && 'Not requested yet'}
-                    {notifStatus === 'granted' && 'Granted'}
-                    {notifStatus === 'denied' && 'Denied'}
-                    {notifStatus === 'unsupported' && 'Not supported'}
+                    {notifStatus === 'idle' && t('status.notRequested')}
+                    {notifStatus === 'granted' && t('status.granted')}
+                    {notifStatus === 'denied' && t('status.denied')}
+                    {notifStatus === 'unsupported' && t('status.unsupported')}
                   </span>
-                  <div style={{ marginLeft: 'auto' }}>
-                    <button onClick={() => setObStep(1)}>Next →</button>
+                  <div style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8 }}>
+                    <button onClick={() => setObStep(0)}>← {t('common.back')}</button>
+                    <button onClick={() => setObStep(2)}>{t('common.next')}</button>
                   </div>
                 </div>
               </div>
             )}
-            {obStep === 1 && (
+            {obStep === 2 && (
               <div>
-                <h3>Step 2 — Microphone</h3>
-                <p>Enable microphone to record voice notes.</p>
+                <h3>{t('onboarding.step2.title')}</h3>
+                <p>{t('onboarding.step2.desc')}</p>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <button onClick={async () => {
                     try {
@@ -522,24 +543,24 @@ export default function App() {
                       try { stream.getTracks().forEach(t => t.stop()) } catch {}
                       setMicStatus('granted')
                     } catch { setMicStatus('denied') }
-                  }}>Allow microphone</button>
+                  }}>{t('onboarding.allowMic')}</button>
                   <span style={{ color: 'var(--muted)', fontSize: 12 }}>
-                    {micStatus === 'idle' && 'Not requested yet'}
-                    {micStatus === 'granted' && 'Granted'}
-                    {micStatus === 'denied' && 'Denied'}
-                    {micStatus === 'unsupported' && 'Not supported'}
+                    {micStatus === 'idle' && t('status.notRequested')}
+                    {micStatus === 'granted' && t('status.granted')}
+                    {micStatus === 'denied' && t('status.denied')}
+                    {micStatus === 'unsupported' && t('status.unsupported')}
                   </span>
                   <div style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8 }}>
-                    <button onClick={() => setObStep(0)}>← Back</button>
-                    <button onClick={() => setObStep(2)}>Next →</button>
+                    <button onClick={() => setObStep(1)}>← {t('common.back')}</button>
+                    <button onClick={() => setObStep(3)}>{t('common.next')}</button>
                   </div>
                 </div>
               </div>
             )}
-            {obStep === 2 && (
+            {obStep === 3 && (
               <div>
-                <h3>Step 3 — Camera</h3>
-                <p>Enable camera to take photos and record videos.</p>
+                <h3>{t('onboarding.step3.title')}</h3>
+                <p>{t('onboarding.step3.desc')}</p>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <button onClick={async () => {
                     try {
@@ -548,24 +569,24 @@ export default function App() {
                       try { stream.getTracks().forEach(t => t.stop()) } catch {}
                       setCamStatus('granted')
                     } catch { setCamStatus('denied') }
-                  }}>Allow camera</button>
+                  }}>{t('onboarding.allowCamera')}</button>
                   <span style={{ color: 'var(--muted)', fontSize: 12 }}>
-                    {camStatus === 'idle' && 'Not requested yet'}
-                    {camStatus === 'granted' && 'Granted'}
-                    {camStatus === 'denied' && 'Denied'}
-                    {camStatus === 'unsupported' && 'Not supported'}
+                    {camStatus === 'idle' && t('status.notRequested')}
+                    {camStatus === 'granted' && t('status.granted')}
+                    {camStatus === 'denied' && t('status.denied')}
+                    {camStatus === 'unsupported' && t('status.unsupported')}
                   </span>
                   <div style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8 }}>
-                    <button onClick={() => setObStep(1)}>← Back</button>
-                    <button onClick={() => setObStep(3)}>Next →</button>
+                    <button onClick={() => setObStep(2)}>← {t('common.back')}</button>
+                    <button onClick={() => setObStep(4)}>{t('common.next')}</button>
                   </div>
                 </div>
               </div>
             )}
-            {obStep === 3 && (
+            {obStep === 4 && (
               <div>
-                <h3>Step 4 — Your key</h3>
-                <p>Generate a new key or import an existing one (hex or nsec). It stays in your browser.</p>
+                <h3>{t('onboarding.step4.title')}</h3>
+                <p>{t('onboarding.step4.desc')}</p>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <button onClick={() => {
                     const secret = generateSecretKey()
@@ -574,8 +595,8 @@ export default function App() {
                     try { localStorage.setItem('nostr_sk', hexd) } catch {}
                     setMyPubkey(pub)
                     setKeyReady(true)
-                  }}>Generate new key</button>
-                  <button onClick={() => keyFileRef.current?.click()}>Import from file…</button>
+                  }}>{t('onboarding.generateKey')}</button>
+                  <button onClick={() => keyFileRef.current?.click()}>{t('onboarding.importFromFile')}</button>
                   <input ref={keyFileRef} type="file" accept=".txt,.json,.key" style={{ display: 'none' }} onChange={async (e) => {
                     const f = e.target.files?.[0]
                     if (!f) return
@@ -587,8 +608,8 @@ export default function App() {
                         const j = JSON.parse(txt)
                         // Encrypted backup v2
                         if (j && j.v === 2 && Array.isArray(j.salt) && Array.isArray(j.iv) && Array.isArray(j.data)) {
-                          const password = prompt('Enter password to decrypt key backup:')
-                          if (!password) { alert('Import cancelled'); return }
+                          const password = prompt(t('onboarding.import.passwordPrompt')!)
+                          if (!password) { alert(t('onboarding.import.cancelled')); return }
                           const enc = new TextEncoder()
                           const salt = new Uint8Array(j.salt)
                           const iv = new Uint8Array(j.iv)
@@ -636,33 +657,33 @@ export default function App() {
                           }
                         }
                       }
-                      if (!secretHex || !/^[0-9a-fA-F]{64}$/.test(secretHex)) { alert('Invalid key format. Provide 64-char hex, nsec, or a valid backup file.'); return }
+                      if (!secretHex || !/^[0-9a-fA-F]{64}$/.test(secretHex)) { alert(t('errors.invalidKey')); return }
                       const pub = getPublicKey(hexToBytes(secretHex))
                       try { localStorage.setItem('nostr_sk', secretHex) } catch {}
                       setMyPubkey(pub)
                       setKeyReady(true)
                     } catch {
-                      alert('Failed to read key file')
+                      alert(t('errors.readKeyFailed'))
                     } finally {
                       try { (e.target as HTMLInputElement).value = '' } catch {}
                     }
                   }} />
-                  {keyReady ? <span style={{ color: 'var(--muted)', fontSize: 12 }}>Key ready ✓</span> : <span style={{ color: 'var(--muted)', fontSize: 12 }}>No key yet</span> }
+                  {keyReady ? <span style={{ color: 'var(--muted)', fontSize: 12 }}>{t('onboarding.keyReady')}</span> : <span style={{ color: 'var(--muted)', fontSize: 12 }}>{t('onboarding.noKey')}</span> }
                   <div style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8 }}>
-                    <button onClick={() => setObStep(2)}>← Back</button>
-                    <button disabled={!keyReady} onClick={() => setObStep(4)}>Next →</button>
+                    <button onClick={() => setObStep(3)}>← {t('common.back')}</button>
+                    <button disabled={!keyReady} onClick={() => setObStep(5)}>{t('common.next')}</button>
                   </div>
                 </div>
               </div>
             )}
-            {obStep === 4 && (
+            {obStep === 5 && (
               <div>
-                <h3>Step 5 — Install the app</h3>
-                <p>Install GlobGram to your device for a faster, more app-like experience.</p>
+                <h3>{t('onboarding.step5.title')}</h3>
+                <p>{t('onboarding.step5.desc')}</p>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <button
                     disabled={!installAvailable || isStandalone}
-                    title={isStandalone ? 'Already installed' : (installAvailable ? 'Install the app' : 'Install prompt not available yet')}
+                    title={isStandalone ? t('install.alreadyInstalled') : (installAvailable ? t('install.installApp') : t('install.promptNotAvailable'))}
                     onClick={async () => {
                       setInstallError(null)
                       const prompt = installPromptRef.current
@@ -682,14 +703,14 @@ export default function App() {
                         setInstallAvailable(false)
                       }
                     }}
-                  >Install app</button>
+                  >{t('install.installApp')}</button>
                   <span style={{ color: 'var(--muted)', fontSize: 12 }}>
-                    {isStandalone && 'Installed ✓'}
-                    {!isStandalone && installStatus === 'idle' && (installAvailable ? 'Ready to install' : 'Waiting for install prompt…')}
-                    {installStatus === 'prompting' && 'Showing prompt…'}
-                    {installStatus === 'accepted' && 'Install accepted'}
-                    {installStatus === 'dismissed' && 'Install dismissed'}
-                    {installStatus === 'installed' && 'Installed ✓'}
+                    {isStandalone && t('install.status.installed')}
+                    {!isStandalone && installStatus === 'idle' && (installAvailable ? t('install.status.ready') : t('install.status.waiting'))}
+                    {installStatus === 'prompting' && t('install.status.prompting')}
+                    {installStatus === 'accepted' && t('install.status.accepted')}
+                    {installStatus === 'dismissed' && t('install.status.dismissed')}
+                    {installStatus === 'installed' && t('install.status.installed')}
                   </span>
                   {installError && (
                     <div style={{ color: 'var(--danger, #e57373)', fontSize: 12 }}>
@@ -698,19 +719,19 @@ export default function App() {
                   )}
                   {!installAvailable && (
                     <div style={{ width: '100%', color: 'var(--muted)', fontSize: 12 }}>
-                      <div>Tip: the install prompt appears when the app meets PWA criteria. Try these:</div>
+                      <div>{t('install.tipTitle')}</div>
                       <ul style={{ margin: '6px 0 0 18px', padding: 0 }}>
-                        <li>Reload once so the service worker takes control.</li>
-                        <li>Use HTTPS or localhost; avoid private windows.</li>
-                        <li>Not already installed and opened in app mode.</li>
+                        <li>{t('install.tip.reloadOnce')}</li>
+                        <li>{t('install.tip.https')}</li>
+                        <li>{t('install.tip.notInstalled')}</li>
                         <li>
                           {(() => {
                             const ua = navigator.userAgent.toLowerCase()
                             const isiOS = /iphone|ipad|ipod/.test(ua)
                             const isChromium = /chrome|edg|crios/.test(ua)
-                            if (isiOS) return 'On iOS Safari: Share → Add to Home Screen.'
-                            if (isChromium) return 'On Chrome/Edge desktop: click the “Install” icon in the address bar.'
-                            return 'Use your browser menu to Install/Add to Home Screen.'
+                            if (isiOS) return t('install.tip.ios')
+                            if (isChromium) return t('install.tip.chromium')
+                            return t('install.tip.generic')
                           })()}
                         </li>
                       </ul>
@@ -718,35 +739,35 @@ export default function App() {
                         <button onClick={() => {
                           try { navigator.serviceWorker.controller?.postMessage({ type: 'GET_VERSION' }) } catch {}
                           navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.update().catch(()=>{}))).catch(()=>{})
-                        }}>Check again</button>
-                        <button onClick={() => window.location.reload()} style={{ marginLeft: 8 }}>Reload</button>
+                        }}>{t('common.checkAgain')}</button>
+                        <button onClick={() => window.location.reload()} style={{ marginLeft: 8 }}>{t('common.reload')}</button>
                       </div>
                       <div style={{ marginTop: 6, opacity: 0.8 }}>
-                        Readiness: {isSecureContext ? 'secure' : 'insecure'} · SW: {navigator.serviceWorker?.controller ? 'controlled' : 'no controller yet'} ·
-                        BIP: {bipCapturedAt ? new Date(bipCapturedAt).toLocaleTimeString() : 'not yet'}
+                        {t('install.readiness')}: {isSecureContext ? t('install.secure') : t('install.insecure')} · SW: {navigator.serviceWorker?.controller ? t('install.swControlled') : t('install.swNoController')} ·
+                        BIP: {bipCapturedAt ? new Date(bipCapturedAt).toLocaleTimeString() : t('install.notYet')}
                       </div>
                     </div>
                   )}
                   <div style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8 }}>
-                    <button onClick={() => setObStep(3)}>← Back</button>
-                    <button onClick={() => setObStep(5)}>Next →</button>
+                    <button onClick={() => setObStep(4)}>← {t('common.back')}</button>
+                    <button onClick={() => setObStep(6)}>{t('common.next')}</button>
                   </div>
                 </div>
               </div>
             )}
-            {obStep === 5 && (
+            {obStep === 6 && (
               <div>
-                <h3>Step 6 — Quick guide</h3>
+                <h3>{t('onboarding.step6.title')}</h3>
                 <ul>
-                  <li>Use “Connect safely with your friend” to share an invite link or QR.</li>
-                  <li>Start a chat and send text or media; press Enter to send (Shift+Enter for new line).</li>
-                  <li>Optionally encrypt media with a passphrase for extra protection.</li>
-                  <li>Statuses: ⏳ Sending, ✓ Sent, ✓✓ Delivered. Retry on failures.</li>
-                  <li>On mobile, only the conversation area scrolls; header/footer stay pinned.</li>
+                  <li>{t('onboarding.step6.tip1')}</li>
+                  <li>{t('onboarding.step6.tip2')}</li>
+                  <li>{t('onboarding.step6.tip3')}</li>
+                  <li>{t('onboarding.step6.tip4')}</li>
+                  <li>{t('onboarding.step6.tip5')}</li>
                 </ul>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                  <button onClick={() => setObStep(4)}>← Back</button>
-                  <button onClick={() => { try { localStorage.setItem('onboarding_done', '1') } catch {}; setOnboardingOpen(false) }}>Finish</button>
+                  <button onClick={() => setObStep(5)}>← {t('common.back')}</button>
+                  <button onClick={() => { try { localStorage.setItem('onboarding_done', '1') } catch {}; setOnboardingOpen(false) }}>{t('common.finish')}</button>
                 </div>
               </div>
             )}
@@ -762,7 +783,7 @@ export default function App() {
         </div>
         {/* <span style={{ color: 'var(--muted)' }}>Decentralized DMs over Nostr</span> */}
         <div style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, alignItems: 'center' }}>
-            <button title="Invite a friend" aria-label="Invite a friend" onClick={async () => {
+            <button title={t('actions.invite')} aria-label={t('actions.invite')} onClick={async () => {
             // Ensure we have a key
             let sk = localStorage.getItem('nostr_sk')
             if (!sk) {
@@ -812,19 +833,19 @@ export default function App() {
               alert('Invite text copied to clipboard.')
               }
             } catch (e: any) { try { log(`Invite.share.error: ${e?.message||e}`) } catch {} }
-            }}>Invite a friend</button>
-          <label style={{ fontSize: 8, color: 'var(--muted)' }}>Theme</label>
+            }}>{t('actions.invite')}</button>
+          <label style={{ fontSize: 8, color: 'var(--muted)' }}>{t('actions.theme')}</label>
           <select value={theme} onChange={(e) => applyTheme(e.target.value as any)}>
-            <option value="system">System</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
+            <option value="system">{t('theme.system')}</option>
+            <option value="light">{t('theme.light')}</option>
+            <option value="dark">{t('theme.dark')}</option>
           </select>
-          <button aria-label="Open settings" title="Settings" onClick={() => setSettingsOpen(true)}>⚙️</button>
+          <button aria-label={t('actions.settings')} title={t('actions.settings')} onClick={() => setSettingsOpen(true)}>⚙️</button>
         </div>
         </div>
         {updateAvailable && (
           <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderTop: '1px solid var(--border)', background: 'var(--card)', color: 'var(--fg)' }}>
-            <span style={{ fontSize: 13 }}>A new version is available{swVersion ? ` (${swVersion})` : ''}. {updateCountdown !== null ? `Updating in ${updateCountdown}s…` : ''}</span>
+            <span style={{ fontSize: 13 }}>{t('update.available')}{swVersion ? ` (${swVersion})` : ''}. {updateCountdown !== null ? t('update.countdown', { s: updateCountdown }) : ''}</span>
             <button onClick={async () => {
               try {
                 const reg = await navigator.serviceWorker.getRegistration()
@@ -835,8 +856,8 @@ export default function App() {
                   window.location.reload()
                 }
               } catch { window.location.reload() }
-            }}>Update now</button>
-            <button onClick={() => { setUpdateAvailable(false); setUpdateCountdown(null) }} style={{ marginLeft: 'auto' }}>Dismiss</button>
+            }}>{t('update.now')}</button>
+            <button onClick={() => { setUpdateAvailable(false); setUpdateCountdown(null) }} style={{ marginLeft: 'auto' }}>{t('common.dismiss')}</button>
           </div>
         )}
       </div>
@@ -844,31 +865,39 @@ export default function App() {
       {settingsOpen && (
         <Modal onClose={() => setSettingsOpen(false)}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <h3 style={{ margin: 0 }}>Settings</h3>
-            <button onClick={() => setSettingsOpen(false)} aria-label="Close settings">✖</button>
+            <h3 style={{ margin: 0 }}>{t('settings.title')}</h3>
+            <button onClick={() => setSettingsOpen(false)} aria-label={t('common.close')}>✖</button>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <details>
-              <summary style={{ cursor: 'pointer', userSelect: 'none' }}>Keys</summary>
+              <summary style={{ cursor: 'pointer', userSelect: 'none' }}>{t('settings.keys')}</summary>
               <div style={{ marginTop: 8 }}>
                 <KeyManager />
               </div>
             </details>
             <details>
-              <summary style={{ cursor: 'pointer', userSelect: 'none' }}>Relays</summary>
+              <summary style={{ cursor: 'pointer', userSelect: 'none' }}>{t('settings.relays')}</summary>
               <div style={{ marginTop: 8 }}>
                 <RelayManager />
               </div>
             </details>
             <details open>
-              <summary style={{ cursor: 'pointer', userSelect: 'none' }}>Preferences</summary>
+              <summary style={{ cursor: 'pointer', userSelect: 'none' }}>{t('settings.preferences')}</summary>
               <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                   <input type="checkbox" checked={powMining} onChange={(e) => { setPowMining(e.target.checked); try { log(`Settings: powMining=${e.target.checked}`) } catch {} }} />
-                  Enable PoW mining (for relays that require NIP-13)
+                  {t('settings.powMining')}
                 </label>
-                <button onClick={() => { try { localStorage.removeItem('onboarding_done') } catch {}; try { log('Onboarding: reset requested') } catch {}; window.location.reload() }}>Run onboarding again</button>
-                <button onClick={() => { setLogAuth('required'); setLogModalOpen(true) }}>View log</button>
+                <button onClick={() => { try { localStorage.removeItem('onboarding_done') } catch {}; try { log('Onboarding: reset requested') } catch {}; window.location.reload() }}>{t('settings.onboardingAgain')}</button>
+                <button onClick={() => { setLogAuth('required'); setLogModalOpen(true) }}>{t('settings.viewLog')}</button>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 12, color: 'var(--muted)' }}>{t('settings.language')}</span>
+                  <select value={locale} onChange={(e) => setLocale(e.target.value)}>
+                    {availableLocales.map(l => (
+                      <option key={l.code} value={l.code}>{l.name}</option>
+                    ))}
+                  </select>
+                </label>
               </div>
             </details>
           </div>
@@ -878,44 +907,44 @@ export default function App() {
         <Modal onClose={() => { setLogModalOpen(false); setLogAuth('idle') }}>
           {logAuth !== 'granted' ? (
             <div>
-              <h3 style={{ marginTop: 0 }}>Unlock logs</h3>
-              <p style={{ marginTop: 0 }}>Enter password to view logs.</p>
-              <input type="password" placeholder="Password" id="log-pass" />
+              <h3 style={{ marginTop: 0 }}>{t('logs.unlockTitle')}</h3>
+              <p style={{ marginTop: 0 }}>{t('logs.unlockDesc')}</p>
+              <input type="password" placeholder={t('common.password')} id="log-pass" />
               <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                 <button onClick={() => {
                   const inp = (document.getElementById('log-pass') as HTMLInputElement | null)
                   const ok = inp && inp.value === '4522815'
                   if (ok) setLogAuth('granted'); else setLogAuth('denied')
-                }}>Unlock</button>
-                <button onClick={() => { setLogModalOpen(false); setLogAuth('idle') }}>Cancel</button>
+                }}>{t('common.unlock')}</button>
+                <button onClick={() => { setLogModalOpen(false); setLogAuth('idle') }}>{t('common.cancel')}</button>
               </div>
-              {logAuth === 'denied' && (<div style={{ color: 'var(--danger, #d32f2f)', marginTop: 8 }}>Incorrect password.</div>)}
+              {logAuth === 'denied' && (<div style={{ color: 'var(--danger, #d32f2f)', marginTop: 8 }}>{t('logs.incorrectPassword')}</div>)}
             </div>
           ) : (
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-                <h3 style={{ margin: 0 }}>Logs</h3>
+                <h3 style={{ margin: 0 }}>{t('logs.title')}</h3>
                 <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <label style={{ fontSize: 12, color: 'var(--muted)' }}>Level</label>
+                  <label style={{ fontSize: 12, color: 'var(--muted)' }}>{t('logs.level')}</label>
                   <select value={logLevel} onChange={(e) => setLogLevel(e.target.value as any)}>
-                    <option value="all">All</option>
-                    <option value="info">Info</option>
-                    <option value="warn">Warn</option>
-                    <option value="error">Error</option>
+                    <option value="all">{t('logs.level.all')}</option>
+                    <option value="info">{t('logs.level.info')}</option>
+                    <option value="warn">{t('logs.level.warn')}</option>
+                    <option value="error">{t('logs.level.error')}</option>
                   </select>
                   <button onClick={async () => {
                     try {
                       const text = (getLogs() || []).map(e => `${new Date(e.ts).toISOString()} [${e.level.toUpperCase()}] ${e.msg}`).join('\n')
                       await navigator.clipboard.writeText(text)
                     } catch {}
-                  }}>Copy</button>
+                  }}>{t('common.copy')}</button>
                   <button onClick={async () => {
                     try {
                       const items = (getLogs() || []).filter(e => logLevel==='all' ? true : e.level===logLevel)
                       const text = items.map(e => `${new Date(e.ts).toISOString()} [${e.level.toUpperCase()}] ${e.msg}`).join('\n')
                       await navigator.clipboard.writeText(text)
                     } catch {}
-                  }}>Copy filtered</button>
+                  }}>{t('common.copyFiltered')}</button>
                   <button onClick={() => {
                     try {
                       const items = (getLogs() || [])
@@ -930,7 +959,7 @@ export default function App() {
                       a.remove()
                       URL.revokeObjectURL(url)
                     } catch {}
-                  }}>Download</button>
+                  }}>{t('common.download')}</button>
                   <button onClick={async () => {
                     try {
                       const text = await getPersistedLogsText('all')
@@ -944,7 +973,7 @@ export default function App() {
                       a.remove()
                       URL.revokeObjectURL(url)
                     } catch {}
-                  }}>Download all (persisted)</button>
+                  }}>{t('common.downloadAllPersisted')}</button>
                   <button onClick={() => {
                     try {
                       const items = (getLogs() || []).filter(e => logLevel==='all' ? true : e.level===logLevel)
@@ -959,9 +988,9 @@ export default function App() {
                       a.remove()
                       URL.revokeObjectURL(url)
                     } catch {}
-                  }}>Download filtered</button>
-                  <button onClick={async () => { try { await clearPersistedLogs() } catch {} }}>Clear persisted</button>
-                  <button onClick={() => { try { clearLogs(); setLogTick(t => (t + 1) % 1_000_000) } catch {} }}>Clear</button>
+                  }}>{t('common.downloadFiltered')}</button>
+                  <button onClick={async () => { try { await clearPersistedLogs() } catch {} }}>{t('common.clearPersisted')}</button>
+                  <button onClick={() => { try { clearLogs(); setLogTick(t => (t + 1) % 1_000_000) } catch {} }}>{t('common.clear')}</button>
                 </div>
               </div>
               <div style={{ marginTop: 8, maxHeight: '60vh', overflow: 'auto', border: '1px solid var(--border)', padding: 8, borderRadius: 8, background: 'var(--card)' }}>
@@ -978,25 +1007,25 @@ export default function App() {
       {inviteOpen && (
         <Modal onClose={() => setInviteOpen(false)}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <h3 style={{ margin: 0 }}>Invite a friend</h3>
-            <button onClick={() => setInviteOpen(false)} aria-label="Close">✖</button>
+            <h3 style={{ margin: 0 }}>{t('modal.invite.title')}</h3>
+            <button onClick={() => setInviteOpen(false)} aria-label={t('common.close')}>✖</button>
           </div>
-          <p style={{ marginTop: 0 }}>Scan or share this link to connect directly with you:</p>
+          <p style={{ marginTop: 0 }}>{t('modal.invite.desc')}</p>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             <canvas ref={inviteCanvasRef} width={200} height={200} style={{ borderRadius: 8, background: '#fff' }} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 240 }}>
               <input readOnly value={inviteUrl} style={{ width: '100%' }} />
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button onClick={async () => { try { await navigator.clipboard.writeText(inviteUrl); } catch {} }}>Copy link</button>
+                <button onClick={async () => { try { await navigator.clipboard.writeText(inviteUrl); } catch {} }}>{t('common.copyLink')}</button>
                 <button onClick={async () => {
                   try {
-                    const message = 'Join me on GlobGram. Tap the link to start a secure chat.'
+                    const message = t('invite.message')
                     // @ts-ignore
                     if (navigator.share) {
                       try { log('InviteModal.share.attempt') } catch {}
                       const payloads: any[] = [
-                        { title: 'Connect on GlobGram', text: message, url: inviteUrl },
-                        { title: 'Connect on GlobGram', text: `${message}\n${inviteUrl}` },
+                        { title: t('invite.connectTitle'), text: message, url: inviteUrl },
+                        { title: t('invite.connectTitle'), text: `${message}\n${inviteUrl}` },
                       ]
                       let shared = false
                       for (const p of payloads) {
@@ -1009,17 +1038,17 @@ export default function App() {
                       }
                       if (!shared) {
                         try { await navigator.clipboard.writeText(`${message}\n${inviteUrl}`) } catch {}
-                        alert('Invite text copied to clipboard.')
+                        alert(t('invite.copied'))
                       } else {
                         try { log('InviteModal.share.success') } catch {}
                       }
                     } else {
                       try { await navigator.clipboard.writeText(`${message}\n${inviteUrl}`) } catch {}
                       try { log('InviteModal.share.unsupported') } catch {}
-                      alert('Invite text copied to clipboard.')
+                      alert(t('invite.copied'))
                     }
                   } catch (e: any) { try { log(`InviteModal.share.error: ${e?.message||e}`) } catch {} }
-                }}>Share…</button>
+                }}>{t('common.share')}</button>
               </div>
             </div>
           </div>
@@ -1029,19 +1058,19 @@ export default function App() {
       {isMobile ? (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', padding: 16, gap: 10 }}>
           <NostrEngine />
-          <div role="tablist" aria-label="Main sections" style={{ display: 'flex', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 999, padding: 4 }}>
-            <button role="tab" aria-selected={activeTab==='chats'} onClick={() => { setActiveTab('chats'); setRoomDrawerOpen(false) }} style={{ flex: 1, borderRadius: 999, padding: '8px 12px', background: activeTab==='chats'? 'var(--accent)' : 'transparent', color: activeTab==='chats'? '#fff':'var(--fg)', border: 'none' }}>Chats</button>
-            <button role="tab" aria-selected={activeTab==='rooms'} onClick={() => { setActiveTab('rooms'); setChatDrawerOpen(false) }} style={{ flex: 1, borderRadius: 999, padding: '8px 12px', background: activeTab==='rooms'? 'var(--accent)' : 'transparent', color: activeTab==='rooms'? '#fff':'var(--fg)', border: 'none' }}>Rooms</button>
+          <div role="tablist" aria-label={t('tabs.main')} style={{ display: 'flex', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 999, padding: 4 }}>
+            <button role="tab" aria-selected={activeTab==='chats'} onClick={() => { setActiveTab('chats'); setRoomDrawerOpen(false) }} style={{ flex: 1, borderRadius: 999, padding: '8px 12px', background: activeTab==='chats'? 'var(--accent)' : 'transparent', color: activeTab==='chats'? '#fff':'var(--fg)', border: 'none' }}>{t('tabs.chats')}</button>
+            <button role="tab" aria-selected={activeTab==='rooms'} onClick={() => { setActiveTab('rooms'); setChatDrawerOpen(false) }} style={{ flex: 1, borderRadius: 999, padding: '8px 12px', background: activeTab==='rooms'? 'var(--accent)' : 'transparent', color: activeTab==='rooms'? '#fff':'var(--fg)', border: 'none' }}>{t('tabs.rooms')}</button>
           </div>
           <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', border: '1px solid var(--border)', background: 'var(--card)', borderRadius: 8, overflow: 'hidden', position: 'relative', height: 0 }}>
             {activeTab === 'chats' ? (
               <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%' }}>
                 <div className="sticky-top" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 8px', borderBottom: '1px solid var(--border)', background: 'var(--card)' }}>
-                  <button ref={chatButtonRef} title="Show chats" aria-label="Show chats list" onClick={() => setChatDrawerOpen(true)}>☰</button>
-                  <div style={{ color: 'var(--muted)', fontSize: 12 }}>Chats</div>
+                  <button ref={chatButtonRef} title={t('tabs.showChats')} aria-label={t('tabs.showChatsList')} onClick={() => setChatDrawerOpen(true)}>☰</button>
+                  <div style={{ color: 'var(--muted)', fontSize: 12 }}>{t('tabs.chats')}</div>
                 </div>
                 <div style={{ flex: 1, minHeight: 0, height: 0 }}>
-                  <Suspense fallback={<div className="app-loading" style={{ padding: 16, textAlign: 'center' }}><Logo size={56} animated /><div className="hint">Loading chat…</div></div>}>
+                  <Suspense fallback={<div className="app-loading" style={{ padding: 16, textAlign: 'center' }}><Logo size={56} animated /><div className="hint">{t('loading.chat')}</div></div>}>
                     <ChatWindowLazy />
                   </Suspense>
                 </div>
@@ -1049,11 +1078,11 @@ export default function App() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%' }}>
                 <div className="sticky-top" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 8px', borderBottom: '1px solid var(--border)', background: 'var(--card)' }}>
-                  <button ref={roomButtonRef} title="Show rooms" aria-label="Show rooms list" onClick={() => setRoomDrawerOpen(true)}>☰</button>
-                  <div style={{ color: 'var(--muted)', fontSize: 12 }}>Rooms</div>
+                  <button ref={roomButtonRef} title={t('tabs.showRooms')} aria-label={t('tabs.showRoomsList')} onClick={() => setRoomDrawerOpen(true)}>☰</button>
+                  <div style={{ color: 'var(--muted)', fontSize: 12 }}>{t('tabs.rooms')}</div>
                 </div>
                 <div style={{ flex: 1, minHeight: 0, height: 0 }}>
-                  <Suspense fallback={<div className="app-loading" style={{ padding: 16, textAlign: 'center' }}><Logo size={56} animated /><div className="hint">Loading room…</div></div>}>
+                  <Suspense fallback={<div className="app-loading" style={{ padding: 16, textAlign: 'center' }}><Logo size={56} animated /><div className="hint">{t('loading.room')}</div></div>}>
                     <RoomWindowLazy />
                   </Suspense>
                 </div>
@@ -1061,7 +1090,7 @@ export default function App() {
             )}
             {/* Chat drawer */}
             {chatDrawerOpen && (
-              <div role="dialog" aria-label="Chats" onClick={() => { setClosing('chat'); setTimeout(() => { setChatDrawerOpen(false); setClosing('none'); chatButtonRef.current?.focus() }, 160) }} className={`drawer-overlay ${closing==='chat' ? 'closing' : ''}`} style={{ position: 'absolute', inset: 0, display: 'flex' }}>
+              <div role="dialog" aria-label={t('tabs.chats')} onClick={() => { setClosing('chat'); setTimeout(() => { setChatDrawerOpen(false); setClosing('none'); chatButtonRef.current?.focus() }, 160) }} className={`drawer-overlay ${closing==='chat' ? 'closing' : ''}`} style={{ position: 'absolute', inset: 0, display: 'flex' }}>
                 <div
                   onClick={(e) => e.stopPropagation()}
                   onTouchStart={(e) => { const t = e.touches[0]; chatSwipeRef.current = { x: t.clientX, y: t.clientY, active: true } }}
@@ -1085,7 +1114,7 @@ export default function App() {
             )}
             {/* Room drawer */}
             {roomDrawerOpen && (
-              <div role="dialog" aria-label="Rooms" onClick={() => { setClosing('room'); setTimeout(() => { setRoomDrawerOpen(false); setClosing('none'); roomButtonRef.current?.focus() }, 160) }} className={`drawer-overlay ${closing==='room' ? 'closing' : ''}`} style={{ position: 'absolute', inset: 0, display: 'flex' }}>
+              <div role="dialog" aria-label={t('tabs.rooms')} onClick={() => { setClosing('room'); setTimeout(() => { setRoomDrawerOpen(false); setClosing('none'); roomButtonRef.current?.focus() }, 160) }} className={`drawer-overlay ${closing==='room' ? 'closing' : ''}`} style={{ position: 'absolute', inset: 0, display: 'flex' }}>
                 <div
                   onClick={(e) => e.stopPropagation()}
                   onTouchStart={(e) => { const t = e.touches[0]; roomSwipeRef.current = { x: t.clientX, y: t.clientY, active: true } }}
@@ -1119,12 +1148,12 @@ export default function App() {
                 <ChatList onCollapse={() => { setChatListOpen(false); setTimeout(() => chatHandleRef.current?.focus(), 0) }} />
               ) : (
                 <div style={{ width: 44, borderRight: '1px solid var(--border)', background: 'var(--card)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-                  <button ref={chatHandleRef} title="Show chats (Alt+1)" aria-keyshortcuts="Alt+1" aria-label="Show chats list" aria-controls="chatListNav" aria-expanded={false} onClick={() => { setChatListOpen(true); setTimeout(() => (document.querySelector('#chatListNav input') as HTMLInputElement | null)?.focus(), 0) }}>☰</button>
+                  <button ref={chatHandleRef} title={`${t('tabs.showChats')} (Alt+1)`} aria-keyshortcuts="Alt+1" aria-label={t('tabs.showChatsList')} aria-controls="chatListNav" aria-expanded={false} onClick={() => { setChatListOpen(true); setTimeout(() => (document.querySelector('#chatListNav input') as HTMLInputElement | null)?.focus(), 0) }}>☰</button>
                   <span style={{ fontSize: 10, color: 'var(--muted)' }}>Alt+1</span>
                 </div>
               )}
               <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-                <Suspense fallback={<div className="app-loading" style={{ padding: 16, textAlign: 'center' }}><Logo size={64} animated /><div className="hint">Loading chat…</div></div>}>
+                <Suspense fallback={<div className="app-loading" style={{ padding: 16, textAlign: 'center' }}><Logo size={64} animated /><div className="hint">{t('loading.chat')}</div></div>}>
                   <ChatWindowLazy />
                 </Suspense>
               </div>
@@ -1135,12 +1164,12 @@ export default function App() {
                 <RoomList onCollapse={() => { setRoomListOpen(false); setTimeout(() => roomHandleRef.current?.focus(), 0) }} />
               ) : (
                 <div style={{ width: 44, borderRight: '1px solid var(--border)', background: 'var(--card)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-                  <button ref={roomHandleRef} title="Show rooms (Alt+2)" aria-keyshortcuts="Alt+2" aria-label="Show rooms list" aria-controls="roomListNav" aria-expanded={false} onClick={() => { setRoomListOpen(true); setTimeout(() => (document.querySelector('#roomListNav input') as HTMLInputElement | null)?.focus(), 0) }}>☰</button>
+                  <button ref={roomHandleRef} title={`${t('tabs.showRooms')} (Alt+2)`} aria-keyshortcuts="Alt+2" aria-label={t('tabs.showRoomsList')} aria-controls="roomListNav" aria-expanded={false} onClick={() => { setRoomListOpen(true); setTimeout(() => (document.querySelector('#roomListNav input') as HTMLInputElement | null)?.focus(), 0) }}>☰</button>
                   <span style={{ fontSize: 10, color: 'var(--muted)' }}>Alt+2</span>
                 </div>
               )}
               <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-                <Suspense fallback={<div className="app-loading" style={{ padding: 16, textAlign: 'center' }}><Logo size={64} animated /><div className="hint">Loading room…</div></div>}>
+                <Suspense fallback={<div className="app-loading" style={{ padding: 16, textAlign: 'center' }}><Logo size={64} animated /><div className="hint">{t('loading.room')}</div></div>}>
                   <RoomWindowLazy />
                 </Suspense>
               </div>
@@ -1153,7 +1182,7 @@ export default function App() {
       <div className={`fab-menu ${fabOpen ? '' : 'hidden'}`} style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8, alignItems: 'flex-end' }}>
               <button onClick={async () => {
                 setFabOpen(false)
-                let pk = prompt('New chat: enter pubkey hex or npub') || ''
+                let pk = prompt(t('fab.newChatPrompt')!) || ''
                 pk = pk.trim()
                 if (!pk) return
                 try {
@@ -1162,21 +1191,21 @@ export default function App() {
                     if (hx) pk = hx
                   }
                 } catch {}
-                if (!/^[0-9a-fA-F]{64}$/.test(pk)) { alert('Invalid pubkey'); return }
+                if (!/^[0-9a-fA-F]{64}$/.test(pk)) { alert(t('errors.invalidPubkey')); return }
                 selectPeer(pk)
-              }} aria-label="Start new chat" style={{ background: 'var(--accent)', color: '#fff' }}>+ New chat</button>
+              }} aria-label={t('fab.startNewChat')} style={{ background: 'var(--accent)', color: '#fff' }}>+ {t('fab.newChat')}</button>
               <button onClick={async () => {
                 setFabOpen(false)
-                const name = prompt('Room name (optional)') || undefined
-                const about = prompt('About (optional)') || undefined
+                const name = prompt(t('fab.roomNameOptional')!) || undefined
+                const about = prompt(t('fab.aboutOptional')!) || undefined
                 const picture = undefined
                 const sk = localStorage.getItem('nostr_sk')
-                if (!sk) { alert('No key'); return }
+                if (!sk) { alert(t('errors.noKey')); return }
                 const id = await createRoom(sk, { name, about, picture })
                 selectRoom(id)
-              }} aria-label="Create new room" style={{ background: 'var(--accent)', color: '#fff' }}>+ New room</button>
+              }} aria-label={t('fab.createNewRoom')} style={{ background: 'var(--accent)', color: '#fff' }}>+ {t('fab.newRoom')}</button>
             </div>
-          <button aria-label="Open quick actions" onClick={() => { if (navigator.vibrate) try { navigator.vibrate(10) } catch {}; setFabOpen(v => !v) }} style={{ width: 56, height: 56, borderRadius: 999, background: 'var(--accent)', color: '#fff', border: 'none', boxShadow: '0 6px 16px rgba(0,0,0,0.2)', fontSize: 22 }}>＋</button>
+          <button aria-label={t('fab.openActions')} onClick={() => { if (navigator.vibrate) try { navigator.vibrate(10) } catch {}; setFabOpen(v => !v) }} style={{ width: 56, height: 56, borderRadius: 999, background: 'var(--accent)', color: '#fff', border: 'none', boxShadow: '0 6px 16px rgba(0,0,0,0.2)', fontSize: 22 }}>＋</button>
         </div>
       )}
     </div>

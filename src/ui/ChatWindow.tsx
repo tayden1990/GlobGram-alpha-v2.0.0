@@ -6,9 +6,11 @@ import { blobToDataURL, dataURLSize, MAX_ATTACHMENT_BYTES, prepareBlobForSend } 
 import { useToast } from './Toast'
 import { THUMB_SIZE, PRELOAD_ROOT_MARGIN } from './constants'
 import { log } from './logger'
+import { useI18n } from '../i18n'
 import { useIsMobile } from './useIsMobile'
 
 export function ChatWindow() {
+  const { t } = useI18n()
   const isMobile = useIsMobile(900)
   const selectedPeer = useChatStore(s => s.selectedPeer)
   const conversations = useChatStore(s => s.conversations)
@@ -196,7 +198,7 @@ export function ChatWindow() {
     } catch {}
   }, [selectedPeer])
 
-  if (!selectedPeer) return <section style={{ flex: 1, padding: 16, height: '100%' }}>Select a chat</section>
+  if (!selectedPeer) return <section style={{ flex: 1, padding: 16, height: '100%' }}>{t('chat.selectPrompt')}</section>
 
   return (
   <section role="main" aria-label="Direct messages" style={{ 
@@ -209,10 +211,10 @@ export function ChatWindow() {
       e.preventDefault()
   const f = e.dataTransfer?.files?.[0]
       if (!f) return
-    if (f.size > MAX_ATTACHMENT_BYTES) { show('File too large (>10MB)', 'error'); return }
+  if (f.size > MAX_ATTACHMENT_BYTES) { show(t('errors.fileTooLarge')!, 'error'); return }
   setPreparing(true); setPrepProgress(0)
   const url = await prepareBlobForSend(f, { onProgress: (p) => setPrepProgress(p) })
-    if (dataURLSize(url) > MAX_ATTACHMENT_BYTES) { show('Encoded file too large', 'error'); return }
+  if (dataURLSize(url) > MAX_ATTACHMENT_BYTES) { show(t('errors.encodedFileTooLarge')!, 'error'); return }
   setAttachment(url)
   setPreparing(false); setPrepProgress(1)
   try { log(`ChatWindow.drop.attach size=${dataURLSize(url)}`) } catch {}
@@ -242,32 +244,32 @@ export function ChatWindow() {
                     {m.text && (
                       <div style={{ background: 'var(--bubble)', color: 'var(--bubble-fg)', borderRadius: 12, padding: '8px 10px' }}>{m.text}</div>
                     )}
-          {m.attachment?.startsWith('data:image/') && (
-                      <div title="Open image" onClick={() => setLightbox({ type: 'image', src: m.attachment! })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: 'var(--border)', cursor: 'pointer', justifySelf: 'start' }}>
+                    {m.attachment?.startsWith('data:image/') && (
+                      <div title={t('chat.openImage')!} onClick={() => setLightbox({ type: 'image', src: m.attachment! })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: 'var(--border)', cursor: 'pointer', justifySelf: 'start' }}>
             <img src={m.attachment} alt="image" loading="lazy" decoding="async" onLoad={() => rowVirtualizer.measure()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                       </div>
                     )}
           {m.attachment?.startsWith('data:video/') && (
-                      <div title="Play video" onClick={() => setLightbox({ type: 'video', src: m.attachment! })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: '#000', position: 'relative', cursor: 'pointer', justifySelf: 'start' }}>
+                      <div title={t('chat.playVideo')!} onClick={() => setLightbox({ type: 'video', src: m.attachment! })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: '#000', position: 'relative', cursor: 'pointer', justifySelf: 'start' }}>
             <video src={m.attachment} muted preload="metadata" onLoadedMetadata={() => rowVirtualizer.measure()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
                         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 28, textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>▶</div>
                       </div>
                     )}
                     {/* spacer to ensure separation from media above */}
                     <div style={{ height: 2 }} />
-                    {m.attachment?.startsWith('data:audio/') && (
+          {m.attachment?.startsWith('data:audio/') && (
                       <div style={{ width: THUMB_SIZE, justifySelf: 'start' }}>
-                        <button title="Play audio" onClick={() => setLightbox({ type: 'audio', src: m.attachment! })} className="msg-audio" style={{ width: '100%', padding: '6px 10px', borderRadius: 16, background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--fg)', cursor: 'pointer' }}>♫ Audio</button>
+            <button title={t('chat.playAudio')!} onClick={() => setLightbox({ type: 'audio', src: m.attachment! })} className="msg-audio" style={{ width: '100%', padding: '6px 10px', borderRadius: 16, background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--fg)', cursor: 'pointer' }}>{t('chat.audio')}</button>
                       </div>
                     )}
                     {m.attachment && m.attachment.startsWith('data:') && !m.attachment.startsWith('data:image/') && !m.attachment.startsWith('data:video/') && !m.attachment.startsWith('data:audio/') && (
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                         <a href={m.attachment!} download={filenameForDataUrl(m.attachment!)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--accent)' }} onClick={() => { try { log(`ChatWindow.download.file size=${dataURLSize(m.attachment!)}B`) } catch {} }}>
-                          📎 Download file ({readableSize(dataURLSize(m.attachment))})
+                          {t('chat.downloadFile', { size: readableSize(dataURLSize(m.attachment)) })}
                         </a>
                         <button style={{ fontSize: 12 }} onClick={async () => {
-                          try { await navigator.clipboard.writeText(m.attachment!); show('Link copied', 'success'); try { log(`ChatWindow.copy.link size=${dataURLSize(m.attachment!)}B`) } catch {} } catch { show('Copy failed', 'error'); try { log('ChatWindow.copy.link.error') } catch {} }
-                        }}>Copy link</button>
+                          try { await navigator.clipboard.writeText(m.attachment!); show(t('chat.linkCopied')!, 'success'); try { log(`ChatWindow.copy.link size=${dataURLSize(m.attachment!)}B`) } catch {} } catch { show(t('chat.copyFailed')!, 'error'); try { log('ChatWindow.copy.link.error') } catch {} }
+                        }}>{t('chat.copyLink')}</button>
                         <button style={{ fontSize: 12 }} onClick={async () => {
                           try {
                             const match = /^data:([^;]+);base64,(.*)$/.exec(m.attachment!)
@@ -280,25 +282,25 @@ export function ChatWindow() {
                             const blob = new Blob([bytes], { type: mime })
                             if ((window as any).ClipboardItem) {
                               await navigator.clipboard.write([new (window as any).ClipboardItem({ [mime]: blob })])
-                              show('File copied', 'success')
+                              show(t('chat.linkCopied')!, 'success')
                               try { log(`ChatWindow.copy.file mime=${mime} size=${blob.size}B`) } catch {}
                             } else {
-                              show('ClipboardItem unsupported', 'error')
+                              show(t('chat.clipboardUnsupported')!, 'error')
                             }
                           } catch (e) {
-                            show('Copy failed', 'error')
+                            show(t('chat.copyFailed')!, 'error')
                             try { log('ChatWindow.copy.file.error') } catch {}
                           }
-                        }}>Copy as file</button>
+                        }}>{t('chat.copyAsFile')}</button>
                       </div>
                     )}
                     {m.attachments?.map((a, i) => (
                       a.startsWith('data:image/') ? (
-                        <div key={i} title="Open image" onClick={() => setLightbox({ type: 'image', src: a })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: 'var(--border)', cursor: 'pointer', justifySelf: 'start' }}>
+                        <div key={i} title={t('chat.openImage')!} onClick={() => setLightbox({ type: 'image', src: a })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: 'var(--border)', cursor: 'pointer', justifySelf: 'start' }}>
                           <img src={a} alt="image" loading="lazy" decoding="async" onLoad={() => rowVirtualizer.measure()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                         </div>
                       ) : a.startsWith('data:video/') ? (
-                        <div key={i} title="Play video" onClick={() => setLightbox({ type: 'video', src: a })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: '#000', position: 'relative', cursor: 'pointer', justifySelf: 'start' }}>
+                        <div key={i} title={t('chat.playVideo')!} onClick={() => setLightbox({ type: 'video', src: a })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: '#000', position: 'relative', cursor: 'pointer', justifySelf: 'start' }}>
                           <video src={a} muted preload="metadata" onLoadedMetadata={() => rowVirtualizer.measure()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
                           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 28, textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>▶</div>
                         </div>
@@ -306,17 +308,17 @@ export function ChatWindow() {
                         <>
                           <div style={{ height: 2 }} />
                           <div style={{ width: THUMB_SIZE, justifySelf: 'start' }}>
-                            <button key={i} title="Play audio" onClick={() => setLightbox({ type: 'audio', src: a })} className="msg-audio" style={{ width: '100%', padding: '6px 10px', borderRadius: 16, background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--fg)', cursor: 'pointer' }}>♫ Audio</button>
+                            <button key={i} title={t('chat.playAudio')!} onClick={() => setLightbox({ type: 'audio', src: a })} className="msg-audio" style={{ width: '100%', padding: '6px 10px', borderRadius: 16, background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--fg)', cursor: 'pointer' }}>{t('chat.audio')}</button>
                           </div>
                         </>
                       ) : a.startsWith('data:') ? (
                         <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                           <a href={a} download={filenameForDataUrl(a)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--accent)' }} onClick={() => { try { log(`ChatWindow.download.file size=${dataURLSize(a)}B`) } catch {} }}>
-                            📎 Download file ({readableSize(dataURLSize(a))})
+                            {t('chat.downloadFile', { size: readableSize(dataURLSize(a)) })}
                           </a>
                           <button style={{ fontSize: 12 }} onClick={async () => {
-                            try { await navigator.clipboard.writeText(a); show('Link copied', 'success'); try { log(`ChatWindow.copy.link size=${dataURLSize(a)}B`) } catch {} } catch { show('Copy failed', 'error'); try { log('ChatWindow.copy.link.error') } catch {} }
-                          }}>Copy link</button>
+                            try { await navigator.clipboard.writeText(a); show(t('chat.linkCopied')!, 'success'); try { log(`ChatWindow.copy.link size=${dataURLSize(a)}B`) } catch {} } catch { show(t('chat.copyFailed')!, 'error'); try { log('ChatWindow.copy.link.error') } catch {} }
+                          }}>{t('chat.copyLink')}</button>
                           <button style={{ fontSize: 12 }} onClick={async () => {
                             try {
                               const match = /^data:([^;]+);base64,(.*)$/.exec(a)
@@ -329,16 +331,16 @@ export function ChatWindow() {
                               const blob = new Blob([bytes], { type: mime })
                               if ((window as any).ClipboardItem) {
                                 await navigator.clipboard.write([new (window as any).ClipboardItem({ [mime]: blob })])
-                                show('File copied', 'success')
+                                show(t('chat.linkCopied')!, 'success')
                                 try { log(`ChatWindow.copy.file mime=${mime} size=${blob.size}B`) } catch {}
                               } else {
-                                show('ClipboardItem unsupported', 'error')
+                                show(t('chat.clipboardUnsupported')!, 'error')
                               }
                             } catch (e) {
-                              show('Copy failed', 'error')
+                              show(t('chat.copyFailed')!, 'error')
                               try { log('ChatWindow.copy.file.error') } catch {}
                             }
-                          }}>Copy as file</button>
+                          }}>{t('chat.copyAsFile')}</button>
                         </div>
                       ) : null
                     ))}
@@ -346,11 +348,11 @@ export function ChatWindow() {
                       <div style={{ fontSize: 10, color: 'var(--muted)' }}>{new Date(m.ts * 1000).toLocaleTimeString()}</div>
             {m.status && (
                         <span style={{ fontSize: 10, color: m.status==='failed'? '#d32f2f':'var(--muted)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                          {m.status === 'pending' && <span title="Sending">⏳</span>}
-              {m.status === 'sent' && <span title="Sent">✓</span>}
-              {m.status === 'delivered' && <span title="Delivered">✓✓</span>}
-              {m.status === 'failed' && <span title="Failed">⚠</span>}
-              <span>{m.status === 'pending' ? 'Sending…' : m.status === 'sent' ? 'Sent' : m.status === 'delivered' ? 'Delivered' : 'Failed'}</span>
+                          {m.status === 'pending' && <span title={t('status.sending')!}>⏳</span>}
+              {m.status === 'sent' && <span title={t('status.sent')!}>✓</span>}
+              {m.status === 'delivered' && <span title={t('status.delivered')!}>✓✓</span>}
+              {m.status === 'failed' && <span title={t('status.failed')!}>⚠</span>}
+              <span>{m.status === 'pending' ? t('status.sending') : m.status === 'sent' ? t('status.sent') : m.status === 'delivered' ? t('status.delivered') : t('status.failed')}</span>
                           {m.status === 'failed' && m.error && (
                             <span style={{ color: '#d32f2f' }}>({m.error})</span>
                           )}
@@ -362,20 +364,20 @@ export function ChatWindow() {
                           onClick={async () => {
                             const sk = localStorage.getItem('nostr_sk')
                             if (!sk) return
-                            if (blocked[selectedPeer]) { show('This contact is blocked', 'error'); return }
+                            if (blocked[selectedPeer]) { show(t('errors.contactBlocked')!, 'error'); return }
                             const hasMedia = !!m.attachment || (m.attachments && m.attachments.length > 0)
                             const p = (encOn && hasMedia) ? encPass : undefined
-                            if (encOn && hasMedia && !p) { show('Enter a media passphrase', 'error'); return }
+                            if (encOn && hasMedia && !p) { show(t('errors.enterMediaPassphrase')!, 'error'); return }
                             // Replace the failed message with a fresh send
                             removeMessage(selectedPeer, m.id)
                             await sendDM(sk, selectedPeer, { t: m.text || undefined, a: m.attachment || undefined, as: (m.attachments && m.attachments.length ? m.attachments : undefined), p })
                           }}
-                          title={m.error ? `Retry sending (reason: ${m.error})` : 'Retry sending'}
-                        >Retry</button>
+                          title={m.error ? t('chat.retryWithReason', { reason: m.error }) : t('chat.retry')}
+                        >{t('chat.retry')}</button>
                       )}
                       <button style={{ fontSize: 10 }} onClick={() => {
-                        if (confirm('Delete this message locally?')) removeMessage(selectedPeer, m.id)
-                      }}>Delete</button>
+                        if (confirm(t('chat.deleteConfirm')!)) removeMessage(selectedPeer, m.id)
+                      }}>{t('chat.delete')}</button>
                     </div>
                   </div>
                 </div>
@@ -385,11 +387,11 @@ export function ChatWindow() {
         </div>
     {/* Spacer to ensure last message (e.g., images) isn't hidden behind footer on desktop */}
     {!isMobile && <div aria-hidden style={{ height: footerH }} />}
-        {isPreloading && <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', padding: 6 }}>Loading…</div>}
+  {isPreloading && <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', padding: 6 }}>{t('loading.more')}</div>}
       </div>
   <footer ref={footerRef as any} className="sticky-footer">
         <div style={{ width: '100%' }}>
-          <textarea rows={5} placeholder="Type a message" value={text} onChange={async (e) => {
+          <textarea rows={5} placeholder={t('input.placeholder')!} value={text} onChange={async (e) => {
             setText(e.target.value)
             const sk = localStorage.getItem('nostr_sk')
             if (sk && e.target.value.trim()) {
@@ -400,10 +402,10 @@ export function ChatWindow() {
               e.preventDefault()
               const sk = localStorage.getItem('nostr_sk')
               if (!sk) return
-              if (blocked[selectedPeer]) { show('This contact is blocked', 'error'); return }
+              if (blocked[selectedPeer]) { show(t('errors.contactBlocked')!, 'error'); return }
               const hasMedia = !!attachment || attachments.length > 0
               const p = (encOn && hasMedia) ? encPass : undefined
-              if (encOn && hasMedia && !p) { show('Enter a media passphrase', 'error'); return }
+              if (encOn && hasMedia && !p) { show(t('errors.enterMediaPassphrase')!, 'error'); return }
               if (!text && !attachment && attachments.length === 0) return
               if (navigator.vibrate) try { navigator.vibrate(15) } catch {}
               await sendDM(sk, selectedPeer, { t: text || undefined, a: attachment || undefined, as: attachments.length ? attachments : undefined, p })
@@ -418,10 +420,10 @@ export function ChatWindow() {
             const files = Array.from(e.target.files || [])
             const urls: string[] = []
             for (const file of files) {
-              if (file.size > MAX_ATTACHMENT_BYTES) { show('File too large (>10MB)', 'error'); continue }
+              if (file.size > MAX_ATTACHMENT_BYTES) { show(t('errors.fileTooLarge')!, 'error'); continue }
               setPreparing(true); setPrepProgress(0)
               const url = await prepareBlobForSend(file, { onProgress: (p) => setPrepProgress(p) })
-              if (dataURLSize(url) > MAX_ATTACHMENT_BYTES) { show('Encoded file too large', 'error'); continue }
+              if (dataURLSize(url) > MAX_ATTACHMENT_BYTES) { show(t('errors.encodedFileTooLarge')!, 'error'); continue }
               urls.push(url)
             }
             if (urls.length === 1) { setAttachment(urls[0]); try { log('ChatWindow.attach.single') } catch {} }
@@ -430,11 +432,11 @@ export function ChatWindow() {
             // clear for same-file reselect
             try { (e.target as HTMLInputElement).value = '' } catch {}
           }} />
-          <button title="Attach files" onClick={() => (document.getElementById('cw-file') as HTMLInputElement)?.click()} style={{ padding: '6px 10px' }}>📎</button>
+          <button title={t('chat.attachFiles')!} onClick={() => (document.getElementById('cw-file') as HTMLInputElement)?.click()} style={{ padding: '6px 10px' }}>📎</button>
           {/* camera photo capture */}
           {!cameraOn ? (
-            <button title="Take photo" onClick={async () => {
-              if (!navigator.mediaDevices) { show('Camera unsupported', 'error'); return }
+            <button title={t('chat.takePhoto')!} onClick={async () => {
+              if (!navigator.mediaDevices) { show(t('errors.cameraUnsupported')!, 'error'); return }
               try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
                 cameraStreamRef.current = stream
@@ -444,14 +446,14 @@ export function ChatWindow() {
                 }, 0)
                 try { log('ChatWindow.camera.start') } catch {}
               } catch (e: any) {
-                show('Failed to access camera', 'error')
+                show(t('errors.failedCamera')!, 'error')
                 try { log(`ChatWindow.camera.error: ${e?.message||e}`) } catch {}
               }
             }}>📷</button>
           ) : (
             <>
               <video ref={cameraVideoRef} autoPlay muted style={{ width: 120, height: 72, background: '#000', borderRadius: 6 }} />
-              <button title="Capture" onClick={async () => {
+              <button title={t('chat.capture')!} onClick={async () => {
                 const video = cameraVideoRef.current
                 const stream = cameraStreamRef.current
                 if (!video || !stream) return
@@ -464,7 +466,7 @@ export function ChatWindow() {
                 if (ctx) {
                   ctx.drawImage(video, 0, 0, w, h)
                   const url = canvas.toDataURL('image/jpeg', 0.9)
-                  if (dataURLSize(url) > 2 * 1024 * 1024) { show('Photo too large', 'error'); return }
+                  if (dataURLSize(url) > 2 * 1024 * 1024) { show(t('errors.fileTooLarge')!, 'error'); return }
                   setAttachment(url)
                   try { log('ChatWindow.camera.capture') } catch {}
                 }
@@ -472,7 +474,7 @@ export function ChatWindow() {
                 setCameraOn(false)
                 cameraStreamRef.current = null
               }}>📸</button>
-              <button title="Cancel" onClick={() => {
+              <button title={t('chat.cancel')!} onClick={() => {
                 const stream = cameraStreamRef.current
                 if (stream) stream.getTracks().forEach(t => t.stop())
                 setCameraOn(false)
@@ -484,7 +486,7 @@ export function ChatWindow() {
           {/* voice recording */}
           {!recording ? (
             <button onClick={async () => {
-              if (!navigator.mediaDevices || typeof MediaRecorder === 'undefined') { show('Recording unsupported', 'error'); return }
+              if (!navigator.mediaDevices || typeof MediaRecorder === 'undefined') { show(t('errors.recordingUnsupported')!, 'error'); return }
               const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
               const audioMime = (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) ? 'audio/webm;codecs=opus' : undefined
               let mr: MediaRecorder
@@ -498,10 +500,10 @@ export function ChatWindow() {
               mr.ondataavailable = (ev) => { if (ev.data.size) chunksRef.current.push(ev.data) }
               mr.onstop = async () => {
                 const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
-                if (blob.size > MAX_ATTACHMENT_BYTES) { setRecording(false); show('Voice note too large (>10MB)', 'error'); return }
+                if (blob.size > MAX_ATTACHMENT_BYTES) { setRecording(false); show(t('errors.voiceTooLarge')!, 'error'); return }
                 setPreparing(true); setPrepProgress(0)
                 const url = await prepareBlobForSend(blob, { onProgress: (p) => setPrepProgress(p) })
-                if (dataURLSize(url) > MAX_ATTACHMENT_BYTES) { setRecording(false); show('Encoded audio too large', 'error'); return }
+                if (dataURLSize(url) > MAX_ATTACHMENT_BYTES) { setRecording(false); show(t('errors.encodedAudioTooLarge')!, 'error'); return }
                 setAttachment(url)
                 setRecording(false)
                 setPreparing(false); setPrepProgress(1)
@@ -521,8 +523,8 @@ export function ChatWindow() {
           )}
           {/* video recording */}
           {!videoRecording ? (
-            <button title="Record video" onClick={async () => {
-              if (!navigator.mediaDevices || typeof MediaRecorder === 'undefined') { show('Recording unsupported', 'error'); return }
+            <button title={t('chat.recordVideo')!} onClick={async () => {
+              if (!navigator.mediaDevices || typeof MediaRecorder === 'undefined') { show(t('errors.recordingUnsupported')!, 'error'); return }
               try {
                 const stream = await navigator.mediaDevices.getUserMedia({
                   video: { width: { ideal: 640, max: 1280 }, height: { ideal: 360, max: 720 }, frameRate: { ideal: 24, max: 30 } },
@@ -541,10 +543,10 @@ export function ChatWindow() {
                 mr.ondataavailable = (ev) => { if (ev.data.size) videoChunksRef.current.push(ev.data) }
                 mr.onstop = async () => {
                   const blob = new Blob(videoChunksRef.current, { type: 'video/webm' })
-                  if (blob.size > MAX_ATTACHMENT_BYTES) { setVideoRecording(false); stream.getTracks().forEach(t => t.stop()); show('Video too large (>10MB)', 'error'); return }
+                  if (blob.size > MAX_ATTACHMENT_BYTES) { setVideoRecording(false); stream.getTracks().forEach(t => t.stop()); show(t('errors.videoTooLarge')!, 'error'); return }
                   setPreparing(true); setPrepProgress(0)
                   const url = await prepareBlobForSend(blob, { onProgress: (p) => setPrepProgress(p) })
-                  if (dataURLSize(url) > MAX_ATTACHMENT_BYTES) { setVideoRecording(false); stream.getTracks().forEach(t => t.stop()); show('Encoded video too large', 'error'); return }
+                  if (dataURLSize(url) > MAX_ATTACHMENT_BYTES) { setVideoRecording(false); stream.getTracks().forEach(t => t.stop()); show(t('errors.encodedVideoTooLarge')!, 'error'); return }
                   setAttachment(url)
                   setVideoRecording(false)
                   stream.getTracks().forEach(t => t.stop())
@@ -556,11 +558,11 @@ export function ChatWindow() {
                 setVideoRecording(true)
                 try { log('ChatWindow.video.start') } catch {}
               } catch {
-                show('Failed to access camera', 'error')
+                show(t('errors.failedCamera')!, 'error')
               }
             }}>🎥</button>
           ) : (
-            <button title="Stop video" onClick={() => {
+            <button title={t('chat.stopVideo')!} onClick={() => {
               const mr = videoRecorderRef.current
               if (mr && mr.state !== 'inactive') mr.stop()
               const stream = videoStreamRef.current
@@ -573,26 +575,26 @@ export function ChatWindow() {
               <span style={{ width: 120, height: 6, background: 'var(--border)', borderRadius: 4, overflow: 'hidden', display: 'inline-block' }}>
                 <span style={{ display: 'block', height: '100%', width: `${Math.round(prepProgress*100)}%`, background: 'var(--accent)' }} />
               </span>
-              Preparing… {Math.round(prepProgress*100)}%
+              {t('chat.preparing', { pct: Math.round(prepProgress*100) })}
             </span>
           )}
-          {attachment && !preparing && <span style={{ fontSize: 12 }}>attachment ready</span>}
-          {attachments.length > 0 && <span style={{ fontSize: 12 }}>{attachments.length} files ready</span>}
+          {attachment && !preparing && <span style={{ fontSize: 12 }}>{t('chat.attachmentReady')}</span>}
+          {attachments.length > 0 && <span style={{ fontSize: 12 }}>{t('chat.filesReady', { n: attachments.length })}</span>}
           <div style={{ marginLeft: 'auto' }}>
             <button style={{ minWidth: 88 }} onClick={async () => {
               if (navigator.vibrate) try { navigator.vibrate(15) } catch {}
               const sk = localStorage.getItem('nostr_sk')
               if (!sk) return
-              if (blocked[selectedPeer]) { show('This contact is blocked', 'error'); return }
+              if (blocked[selectedPeer]) { show(t('errors.contactBlocked')!, 'error'); return }
               const p = (encOn && (attachment || attachments.length)) ? encPass : undefined
-              if (encOn && (attachment || attachments.length) && !p) { show('Enter a media passphrase', 'error'); return }
+              if (encOn && (attachment || attachments.length) && !p) { show(t('errors.enterMediaPassphrase')!, 'error'); return }
               setSending(true)
               await sendDM(sk, selectedPeer, { t: text || undefined, a: attachment || undefined, as: attachments.length ? attachments : undefined, p })
               setText('')
               setAttachment(null)
               setAttachments([])
               setSending(false)
-            }} disabled={preparing || (!text && !attachment && attachments.length===0)}>Send</button>
+            }} disabled={preparing || (!text && !attachment && attachments.length===0)}>{t('common.send')}</button>
           </div>
         </div>
       </footer>

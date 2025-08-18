@@ -7,8 +7,10 @@ import { bytesToHex } from '../nostr/utils'
 import { QRScan } from './QRScan'
 import { useToast } from './Toast'
 import { log } from './logger'
+import { useI18n } from '../i18n'
 
 export function ChatList({ onCollapse }: { onCollapse?: () => void }) {
+	const { t } = useI18n()
 	const { show } = useToast()
 	const conversations = useChatStore(s => s.conversations)
 	const selected = useChatStore(s => s.selectedPeer)
@@ -49,18 +51,18 @@ export function ChatList({ onCollapse }: { onCollapse?: () => void }) {
 	}
 
 	return (
-		<aside id="chatListNav" role="navigation" aria-label="Chats" style={{ width: 300, borderRight: '1px solid var(--border)', padding: 12, background: 'var(--card)', color: 'var(--fg)' }}>
+		<aside id="chatListNav" role="navigation" aria-label={t('tabs.chats')} style={{ width: 300, borderRight: '1px solid var(--border)', padding: 12, background: 'var(--card)', color: 'var(--fg)' }}>
 			<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-				<h3 style={{ marginTop: 0 }}>Chats</h3>
+				<h3 style={{ marginTop: 0 }}>{t('tabs.chats')}</h3>
 				{onCollapse && (
 					<div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-						<button aria-label="Hide chats list" aria-controls="chatListNav" aria-expanded={true} onClick={onCollapse} title="Hide list (Alt+1)">«</button>
+						<button aria-label={t('tabs.hideChatsList')} aria-controls="chatListNav" aria-expanded={true} onClick={onCollapse} title={`${t('tabs.hideChats')} (Alt+1)`}>«</button>
 						<span style={{ fontSize: 10, color: 'var(--muted)' }}>Alt+1</span>
 					</div>
 				)}
 			</div>
 			<div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-				<input placeholder="start chat: pubkey hex or npub" value={newPeer} onChange={(e) => setNewPeer(e.target.value)} style={{ flex: 1 }} />
+				<input placeholder={t('fab.newChatPrompt')!} value={newPeer} onChange={(e) => setNewPeer(e.target.value)} style={{ flex: 1 }} />
 				<button onClick={() => {
 					let pk = newPeer.trim()
 					if (!pk) return
@@ -70,12 +72,12 @@ export function ChatList({ onCollapse }: { onCollapse?: () => void }) {
 							pk = typeof dec.data === 'string' ? dec.data : bytesToHex(dec.data as Uint8Array)
 						}
 					} catch {}
-					if (!/^[0-9a-fA-F]{64}$/.test(pk)) { show('Invalid pubkey', 'error'); try { log('ChatList.newChat.invalid') } catch {}; return }
+					if (!/^[0-9a-fA-F]{64}$/.test(pk)) { show(t('errors.invalidPubkey')!, 'error'); try { log('ChatList.newChat.invalid') } catch {}; return }
 					selectPeer(pk); try { onCollapse && onCollapse() } catch {}
 					try { log(`ChatList.newChat ${pk.slice(0, 12)}…`) } catch {}
 					setNewPeer('')
-				}}>Start</button>
-				<button title="Scan QR" onClick={() => { try { log('ChatList.qr.open') } catch {}; setQrOpen(true) }}>📷</button>
+				}}>{t('fab.startNewChat')}</button>
+				<button title={t('fab.scanQR')!} aria-label={t('fab.scanQR')!} onClick={() => { try { log('ChatList.qr.open') } catch {}; setQrOpen(true) }}>📷</button>
 			</div>
 			{qrOpen && (
 				<QRScan onResult={(text) => {
@@ -93,7 +95,7 @@ export function ChatList({ onCollapse }: { onCollapse?: () => void }) {
 			<div ref={listRef} style={{ maxHeight: 360, overflowY: 'auto' }}>
 				<ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
 					{peers.length === 0 && (
-						<li style={{ color: 'var(--muted)', fontSize: 12 }}>No chats yet</li>
+						<li style={{ color: 'var(--muted)', fontSize: 12 }}>{t('chat.empty')}</li>
 					)}
 					{peers.map(pk => {
 						const msgs = conversations[pk]
@@ -105,17 +107,17 @@ export function ChatList({ onCollapse }: { onCollapse?: () => void }) {
 								<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
 									<div style={{ fontFamily: name ? 'inherit' : 'monospace', fontSize: 12 }}>{name || `${pk.slice(0, 10)}…`}</div>
 									{unread > 0 && <span style={{ background: 'var(--accent)', color: '#fff', borderRadius: 999, padding: '0 6px', fontSize: 11 }}>{unread}</span>}
-									<button title="edit alias" onClick={(e) => { e.stopPropagation(); const v = prompt('Alias for contact:', name || ''); if (v !== null) setAlias(pk, v) }}>✏️</button>
+									<button title={t('chat.editAlias')!} onClick={(e) => { e.stopPropagation(); const v = prompt(t('chat.aliasForContact')!, name || ''); if (v !== null) setAlias(pk, v) }}>✏️</button>
 								</div>
 								{last && (
 									<div style={{ color: 'var(--muted)', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
 										{last.text ||
 											(last.attachments && last.attachments.length > 0
-												? `[${last.attachments.map(a => a.startsWith('data:image/') ? 'image' : a.startsWith('data:video/') ? 'video' : a.startsWith('data:audio/') ? 'audio' : 'file').join(', ')}]`
-												: (last.attachment?.startsWith('data:image/') ? '[image]'
-													: last.attachment?.startsWith('data:video/') ? '[video]'
-													: last.attachment?.startsWith('data:audio/') ? '[audio]'
-													: last.attachment ? '[file]' : ''))}
+												? `[${last.attachments.map(a => a.startsWith('data:image/') ? t('chat.kind.image') : a.startsWith('data:video/') ? t('chat.kind.video') : a.startsWith('data:audio/') ? t('chat.kind.audio') : t('chat.kind.file')).join(', ')}]`
+												: (last.attachment?.startsWith('data:image/') ? `[${t('chat.kind.image')}]`
+												: last.attachment?.startsWith('data:video/') ? `[${t('chat.kind.video')}]`
+												: last.attachment?.startsWith('data:audio/') ? `[${t('chat.kind.audio')}]`
+												: last.attachment ? `[${t('chat.kind.file')}]` : ''))}
 									</div>
 								)}
 							</li>

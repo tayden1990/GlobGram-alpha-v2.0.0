@@ -20,6 +20,14 @@ html, body, #root { height: 100% }
 	.msg-grid video {
 		display: block !important;
 	}
+	html.rtl {
+		direction: rtl;
+	}
+	html.rtl body, html.rtl input, html.rtl textarea, html.rtl button, html.rtl select {
+		direction: rtl;
+		text-align: right;
+	}
+	/* Note: mirror left/right paddings in sticky headers if needed */
 	.msg-audio {
 		display: inline-flex;
 		align-self: start;
