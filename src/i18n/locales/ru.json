@@ -6,6 +6,11 @@
 
   "modal.invite.title": "Пригласить друга",
   "modal.invite.desc": "Отсканируйте или поделитесь этой ссылкой, чтобы подключиться к вам напрямую:",
+  "modal.invite.qrLabel": "QR-код",
+  "modal.invite.downloadQR": "Скачать QR",
+  "modal.invite.linkLabel": "Ссылка-приглашение",
+  "modal.invite.copyText": "Копировать текст приглашения",
+  "modal.invite.shareAll": "Поделиться текстом + ссылкой (+ QR при поддержке)",
 
   "settings.title": "Настройки",
   "settings.keys": "Ключи",

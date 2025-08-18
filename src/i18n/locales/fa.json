@@ -6,6 +6,11 @@
 
   "modal.invite.title": "دعوت یک دوست",
   "modal.invite.desc": "برای اتصال مستقیم به شما این لینک را اسکن یا به اشتراک بگذارید:",
+  "modal.invite.qrLabel": "کد QR",
+  "modal.invite.downloadQR": "دانلود QR",
+  "modal.invite.linkLabel": "لینک دعوت",
+  "modal.invite.copyText": "کپی متن دعوت",
+  "modal.invite.shareAll": "اشتراک متن + لینک (+ QR در صورت پشتیبانی)",
 
   "settings.title": "تنظیمات",
   "settings.keys": "کلیدها",

@@ -1011,44 +1011,82 @@ export default function App() {
             <button onClick={() => setInviteOpen(false)} aria-label={t('common.close')}>✖</button>
           </div>
           <p style={{ marginTop: 0 }}>{t('modal.invite.desc')}</p>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-            <canvas ref={inviteCanvasRef} width={200} height={200} style={{ borderRadius: 8, background: '#fff' }} />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 240 }}>
-              <input readOnly value={inviteUrl} style={{ width: '100%' }} />
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button onClick={async () => { try { await navigator.clipboard.writeText(inviteUrl); } catch {} }}>{t('common.copyLink')}</button>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label style={{ fontSize: 12, color: 'var(--muted)' }}>{t('modal.invite.qrLabel')}</label>
+              <canvas ref={inviteCanvasRef} width={200} height={200} style={{ borderRadius: 8, background: '#fff' }} />
+              <div style={{ display: 'inline-flex', gap: 8, marginTop: 6 }}>
                 <button onClick={async () => {
                   try {
-                    const message = t('invite.message')
-                    // @ts-ignore
-                    if (navigator.share) {
-                      try { log('InviteModal.share.attempt') } catch {}
-                      const payloads: any[] = [
-                        { title: t('invite.connectTitle'), text: message, url: inviteUrl },
-                        { title: t('invite.connectTitle'), text: `${message}\n${inviteUrl}` },
-                      ]
-                      let shared = false
-                      for (const p of payloads) {
-                        try {
-                          const can = (navigator as any).canShare ? (navigator as any).canShare(p) : true
-                          if (can) { await (navigator as any).share(p); shared = true; break }
-                        } catch {
-                          // try next
-                        }
+                    const canvas = inviteCanvasRef.current
+                    if (!canvas) return
+                    const blob: Blob | null = await new Promise(resolve => {
+                      try { canvas.toBlob(b => resolve(b), 'image/png') } catch { resolve(null) }
+                    })
+                    if (!blob) return
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url
+                    a.download = 'globgram-invite.png'
+                    document.body.appendChild(a)
+                    a.click()
+                    a.remove()
+                    URL.revokeObjectURL(url)
+                  } catch {}
+                }}>{t('modal.invite.downloadQR')}</button>
+              </div>
+            </div>
+            <div style={{ minWidth: 280, flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <label style={{ fontSize: 12, color: 'var(--muted)' }}>{t('modal.invite.linkLabel')}</label>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input type="text" value={inviteUrl} readOnly style={{ flex: 1 }} onFocus={(e) => { try { (e.target as HTMLInputElement).select() } catch {} }} />
+                <button onClick={async () => { try { await navigator.clipboard.writeText(inviteUrl) } catch {} }}>{t('common.copyLink')}</button>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button onClick={async () => {
+                  const msg = t('invite.message') + '\n' + inviteUrl
+                  try { await navigator.clipboard.writeText(msg); alert(t('invite.copied')) } catch { alert(t('invite.copied')) }
+                }}>{t('modal.invite.copyText')}</button>
+                <button onClick={async () => {
+                  const text = t('invite.message') + '\n' + inviteUrl
+                  const shareWithFiles = async () => {
+                    const canvas = inviteCanvasRef.current
+                    if (!canvas || !(navigator as any).canShare) return false
+                    const blob: Blob | null = await new Promise(resolve => { try { canvas.toBlob(b => resolve(b), 'image/png') } catch { resolve(null) } })
+                    if (!blob) return false
+                    const file = new File([blob], 'globgram-invite.png', { type: 'image/png' })
+                    const data = { files: [file], text, title: t('invite.connectTitle') }
+                    try {
+                      // @ts-ignore
+                      if ((navigator as any).canShare(data)) {
+                        // @ts-ignore
+                        await (navigator as any).share(data)
+                        return true
                       }
-                      if (!shared) {
-                        try { await navigator.clipboard.writeText(`${message}\n${inviteUrl}`) } catch {}
-                        alert(t('invite.copied'))
-                      } else {
-                        try { log('InviteModal.share.success') } catch {}
+                    } catch {}
+                    return false
+                  }
+                  try {
+                    if (await shareWithFiles()) return
+                    // Fallback to text + url
+                    // @ts-ignore
+                    if ((navigator as any).share) {
+                      try {
+                        // @ts-ignore
+                        await (navigator as any).share({ title: t('invite.connectTitle'), text, url: inviteUrl })
+                      } catch {
+                        // @ts-ignore
+                        await (navigator as any).share({ title: t('invite.connectTitle'), text })
                       }
                     } else {
-                      try { await navigator.clipboard.writeText(`${message}\n${inviteUrl}`) } catch {}
-                      try { log('InviteModal.share.unsupported') } catch {}
+                      await navigator.clipboard.writeText(text)
                       alert(t('invite.copied'))
                     }
-                  } catch (e: any) { try { log(`InviteModal.share.error: ${e?.message||e}`) } catch {} }
-                }}>{t('common.share')}</button>
+                  } catch {
+                    try { await navigator.clipboard.writeText(text) } catch {}
+                    alert(t('invite.copied'))
+                  }
+                }}>{t('modal.invite.shareAll')}</button>
               </div>
             </div>
           </div>

@@ -6,6 +6,11 @@
 
   "modal.invite.title": "Convidar um amigo",
   "modal.invite.desc": "Escaneie ou compartilhe este link para se conectar diretamente com você:",
+  "modal.invite.qrLabel": "QR code",
+  "modal.invite.downloadQR": "Baixar QR",
+  "modal.invite.linkLabel": "Link de convite",
+  "modal.invite.copyText": "Copiar texto do convite",
+  "modal.invite.shareAll": "Compartilhar texto + link (+ QR se suportado)",
 
   "settings.title": "Configurações",
   "settings.keys": "Chaves",

@@ -6,6 +6,11 @@
 
   "modal.invite.title": "دعوة صديق",
   "modal.invite.desc": "امسح هذا الرابط أو شاركه للاتصال بك مباشرةً:",
+  "modal.invite.qrLabel": "رمز الاستجابة السريعة",
+  "modal.invite.downloadQR": "تنزيل QR",
+  "modal.invite.linkLabel": "رابط الدعوة",
+  "modal.invite.copyText": "نسخ نص الدعوة",
+  "modal.invite.shareAll": "مشاركة النص + الرابط (+ QR إذا كان مدعومًا)",
 
   "settings.title": "الإعدادات",
   "settings.keys": "المفاتيح",
