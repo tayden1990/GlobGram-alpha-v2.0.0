@@ -1247,16 +1247,16 @@ export default function App() {
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <input type="text" value={inviteUrl} readOnly style={{ flex: 1 }} onFocus={(e) => { try { (e.target as HTMLInputElement).select() } catch {} }} />
                 <button onClick={async () => {
-                  // Copy link + QR image to clipboard when possible
+                  // Copy localized invite message + link, and include QR image when possible
+                  const text = formatInviteCaption(getInviteMessage(), inviteUrl)
                   try {
                     const canvas = inviteCanvasRef.current
-                    const text = inviteUrl
                     if (canvas && 'ClipboardItem' in window && (navigator.clipboard as any)?.write) {
                       const blob: Blob | null = await new Promise(resolve => { try { canvas.toBlob(b => resolve(b), 'image/png') } catch { resolve(null) } })
                       if (blob) {
                         const item = new (window as any).ClipboardItem({
                           'image/png': blob,
-                          'text/plain': new Blob([text], { type: 'text/plain' }),
+          'text/plain': new Blob([text], { type: 'text/plain' }),
                         })
                         await (navigator.clipboard as any).write([item])
                         alert(t('invite.copied'))
@@ -1265,7 +1265,7 @@ export default function App() {
                     }
                     await navigator.clipboard.writeText(text)
                     alert(t('invite.copied'))
-                  } catch { try { await navigator.clipboard.writeText(inviteUrl) } catch {}; alert(t('invite.copied')) }
+      } catch { try { await navigator.clipboard.writeText(text) } catch {}; alert(t('invite.copied')) }
                 }}>{t('common.copyLink')}</button>
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
