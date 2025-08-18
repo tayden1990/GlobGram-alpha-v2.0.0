@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "ads": [
+    {
+      "id": "feedback",
+      "text": "Send your feedback to developers",
+      "url": "https://tayden1990.github.io/GlobGram-alpha-v2.0.0/?invite=npub1mvv4q84kd8lhjr8kx97ufg2dar3jfcj7h70njppuj6nwctmqfaust222jy&lang=en",
+      "active": false,
+      "locales": ["en"],
+      "placement": "top"
+    },
+    {
+      "id": "welcome_en",
+      "text": "Discover GlobGram — secure decentralized chats. Learn more: https://example.com/learn",
+      "active": false,
+      "locales": ["en"],
+      "placement": "top"
+    },
+    {
+      "id": "promo_voice",
+      "text": "New: Voice notes beta is live. Try it now!",
+      "url": "https://example.com/voice",
+      "active": false,
+      "placement": "top"
+    },
+    {
+      "id": "follow_x",
+      "text": "Follow us on X for updates https://x.com/globgramapp",
+      "active": false,
+      "placement": "top"
+    },
+    {
+      "id": "survey_aug_2025",
+      "text": "2‑min user survey (Aug 2025). Help us improve GlobGram.",
+      "url": "https://example.com/survey",
+      "startsAt": "2025-08-01T00:00:00Z",
+      "endsAt": "2025-09-01T00:00:00Z",
+      "active": false,
+      "placement": "top"
+    },
+    {
+      "id": "translate_call",
+      "text": "Help translate GlobGram to your language.",
+      "url": "https://example.com/translate",
+      "locales": ["es", "fr", "de", "pt", "ru", "ar", "fa"],
+      "active": false,
+      "placement": "top"
+    },
+    {
+      "id": "welcome_en",
+      "text": "Discover GlobGram — secure decentralized chats. Learn more: Click Here",
+      "url": "https://github.com/tayden1990/GlobGram-alpha-v2.0.0/blob/main/README.md",
+  "active": true,
+      "locales": ["en"],
+      "placement": "top"
+    },
+    {
+      "id": "promo_voice",
+      "text": "New: Voice notes beta is live. Try it now!",
+      "url": "https://example.com/voice",
+      "active": false,
+      "placement": "top"
+    },
+    {
+      "id": "follow_x",
+      "text": "Follow us on X for updates https://x.com/globgramapp",
+      "active": false,
+      "placement": "top"
+    },
+    {
+      "id": "survey_aug_2025",
+      "text": "2‑min user survey (Aug 2025). Help us improve GlobGram.",
+      "url": "https://example.com/survey",
+      "startsAt": "2025-08-01T00:00:00Z",
+      "endsAt": "2025-09-01T00:00:00Z",
+      "active": false,
+      "placement": "top"
+    },
+    {
+      "id": "translate_call",
+      "text": "Help translate GlobGram to your language.",
+      "url": "https://example.com/translate",
+      "locales": ["es", "fr", "de", "pt", "ru", "ar", "fa"],
+      "active": false,
+      "placement": "top"
+    }
+  ,
+  { "id": "feedback_es", "text": "Envía tus comentarios a los desarrolladores", "url": "https://tayden1990.github.io/GlobGram-alpha-v2.0.0/?invite=npub1mvv4q84kd8lhjr8kx97ufg2dar3jfcj7h70njppuj6nwctmqfaust222jy&lang=es", "active": true, "locales": ["es"], "placement": "top" },
+  { "id": "feedback_fr", "text": "Envoyez vos retours aux développeurs", "url": "https://tayden1990.github.io/GlobGram-alpha-v2.0.0/?invite=npub1mvv4q84kd8lhjr8kx97ufg2dar3jfcj7h70njppuj6nwctmqfaust222jy&lang=fr", "active": true, "locales": ["fr"], "placement": "top" },
+  { "id": "feedback_de", "text": "Senden Sie Ihr Feedback an die Entwickler", "url": "https://tayden1990.github.io/GlobGram-alpha-v2.0.0/?invite=npub1mvv4q84kd8lhjr8kx97ufg2dar3jfcj7h70njppuj6nwctmqfaust222jy&lang=de", "active": true, "locales": ["de"], "placement": "top" },
+  { "id": "feedback_pt", "text": "Envie seu feedback aos desenvolvedores", "url": "https://tayden1990.github.io/GlobGram-alpha-v2.0.0/?invite=npub1mvv4q84kd8lhjr8kx97ufg2dar3jfcj7h70njppuj6nwctmqfaust222jy&lang=pt", "active": true, "locales": ["pt"], "placement": "top" },
+  { "id": "feedback_ru", "text": "Отправьте отзыв разработчикам", "url": "https://tayden1990.github.io/GlobGram-alpha-v2.0.0/?invite=npub1mvv4q84kd8lhjr8kx97ufg2dar3jfcj7h70njppuj6nwctmqfaust222jy&lang=ru", "active": true, "locales": ["ru"], "placement": "top" },
+  { "id": "feedback_ar", "text": "أرسل ملاحظاتك إلى المطوّرين", "url": "https://tayden1990.github.io/GlobGram-alpha-v2.0.0/?invite=npub1mvv4q84kd8lhjr8kx97ufg2dar3jfcj7h70njppuj6nwctmqfaust222jy&lang=ar", "active": true, "locales": ["ar"], "placement": "top" },
+  { "id": "feedback_fa", "text": "بازخورد خود را برای توسعه‌دهندگان ارسال کنید", "url": "https://tayden1990.github.io/GlobGram-alpha-v2.0.0/?invite=npub1mvv4q84kd8lhjr8kx97ufg2dar3jfcj7h70njppuj6nwctmqfaust222jy&lang=fa", "active": true, "locales": ["fa"], "placement": "top" },
+  { "id": "welcome_es", "text": "Descubre GlobGram — chats descentralizados y seguros. Más información: Haz clic aquí", "url": "https://github.com/tayden1990/GlobGram-alpha-v2.0.0/blob/main/README.md", "active": true, "locales": ["es"], "placement": "top" },
+  { "id": "welcome_fr", "text": "Découvrez GlobGram — des discussions décentralisées et sécurisées. En savoir plus : Cliquez ici", "url": "https://github.com/tayden1990/GlobGram-alpha-v2.0.0/blob/main/README.md", "active": true, "locales": ["fr"], "placement": "top" },
+  { "id": "welcome_de", "text": "Entdecke GlobGram — sichere, dezentrale Chats. Mehr erfahren: Hier klicken", "url": "https://github.com/tayden1990/GlobGram-alpha-v2.0.0/blob/main/README.md", "active": true, "locales": ["de"], "placement": "top" },
+  { "id": "welcome_pt", "text": "Descubra o GlobGram — bate‑papos descentralizados e seguros. Saiba mais: Clique aqui", "url": "https://github.com/tayden1990/GlobGram-alpha-v2.0.0/blob/main/README.md", "active": true, "locales": ["pt"], "placement": "top" },
+  { "id": "welcome_ru", "text": "Откройте для себя GlobGram — безопасные децентрализованные чаты. Узнать больше: Нажмите здесь", "url": "https://github.com/tayden1990/GlobGram-alpha-v2.0.0/blob/main/README.md", "active": true, "locales": ["ru"], "placement": "top" },
+  { "id": "welcome_ar", "text": "اكتشف GlobGram — محادثات لا مركزية وآمنة. لمعرفة المزيد: اضغط هنا", "url": "https://github.com/tayden1990/GlobGram-alpha-v2.0.0/blob/main/README.md", "active": true, "locales": ["ar"], "placement": "top" },
+  { "id": "welcome_fa", "text": "گلوب‌گرام را کشف کنید — چت‌های غیرمتمرکز و امن. برای اطلاعات بیشتر: اینجا کلیک کنید", "url": "https://github.com/tayden1990/GlobGram-alpha-v2.0.0/blob/main/README.md", "active": true, "locales": ["fa"], "placement": "top" }
+  ]
+}

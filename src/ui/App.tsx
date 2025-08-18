@@ -6,7 +6,8 @@ import { RoomList } from './RoomList'
 import { ToastProvider } from './Toast'
 import Logo from './Logo'
 import Splash from './Splash'
-import { useState, useEffect, useRef, lazy, Suspense } from 'react'
+import { useState, useEffect, useRef, lazy, Suspense, useMemo } from 'react'
+import { loadPreparedAds, extractFirstUrl as extractAdUrl, stripUrls as stripAdUrls, PreparedAd } from './ads'
 import { useIsMobile } from './useIsMobile'
 import { useChatStore } from '../state/chatStore'
 import { useRoomStore } from '../state/roomStore'
@@ -104,23 +105,27 @@ export default function App() {
   const [updateAvailable, setUpdateAvailable] = useState(false)
   const [swVersion, setSwVersion] = useState<string | null>(null)
   const [updateCountdown, setUpdateCountdown] = useState<number | null>(null)
-  // Simple server-controlled ad banner text (from public/ad.txt)
-  const [adText, setAdText] = useState<string | null>(null)
-  const extractFirstUrl = (s: string | null | undefined): string | null => {
-    if (!s) return null
+  // Ads state (JSON-driven, with ad.txt fallback)
+  const [ads, setAds] = useState<PreparedAd[]>([])
+  const [adIndex, setAdIndex] = useState(0)
+  const [adsDisabled, setAdsDisabled] = useState<boolean>(() => {
+    try { return localStorage.getItem('ads_disabled') === '1' } catch { return false }
+  })
+  // Per-ad visibility overrides (persisted)
+  const [adDisabledIds, setAdDisabledIds] = useState<Set<string>>(() => {
     try {
-      const m = s.match(/https?:\/\/[^\s]+/)
-      return m ? m[0] : null
-    } catch { return null }
+      const raw = localStorage.getItem('ads_disabled_ids')
+      if (raw) {
+        const arr = JSON.parse(raw)
+        if (Array.isArray(arr)) return new Set(arr as string[])
+      }
+    } catch {}
+    return new Set()
+  })
+  const persistAdDisabledIds = (s: Set<string>) => {
+    try { localStorage.setItem('ads_disabled_ids', JSON.stringify(Array.from(s))) } catch {}
   }
-  const stripUrls = (s: string | null | undefined): string => {
-    if (!s) return ''
-    try {
-      // Remove all http/https URLs
-      const cleaned = s.replace(/https?:\/\/[^\s]+/g, ' ').replace(/\s{2,}/g, ' ').trim()
-      return cleaned
-    } catch { return String(s) }
-  }
+  const visibleAds = useMemo(() => ads.filter(a => !adDisabledIds.has(a.id)), [ads, adDisabledIds])
 
   // apply theme
   const applyTheme = (t: 'system'|'light'|'dark') => {
@@ -179,22 +184,30 @@ export default function App() {
     }
   }, [])
 
-  // Load advertisement text from public/ad.txt; show banner if non-empty
+  // Load ads.json (with fallback to ad.txt); auto-refresh on locale change
   useEffect(() => {
-    try {
-      const base = (import.meta as any)?.env?.BASE_URL || '/'
-      const url = `${base}ad.txt`
-      let aborted = false
-      fetch(url, { cache: 'no-store' })
-        .then(async (r) => {
-          if (!r.ok) return
-          const txt = (await r.text()).trim()
-          if (!aborted) setAdText(txt.length ? txt : null)
-        })
-        .catch(() => {})
-      return () => { aborted = true }
-    } catch {}
-  }, [])
+    let cancelled = false
+    ;(async () => {
+      try {
+        const items = await loadPreparedAds(locale, 'top')
+        if (!cancelled) setAds(items)
+      } catch {}
+    })()
+    return () => { cancelled = true }
+  }, [locale])
+
+  // Rotate visible ad every 20s when multiple are active
+  useEffect(() => {
+    if (!visibleAds.length) return
+    let i = 0
+    const id = setInterval(() => { i = (i + 1) % visibleAds.length; setAdIndex(i) }, 20000)
+    return () => clearInterval(id)
+  }, [visibleAds])
+
+  // Persist ads disabled preference
+  useEffect(() => {
+    try { localStorage.setItem('ads_disabled', adsDisabled ? '1' : '0') } catch {}
+  }, [adsDisabled])
 
   // Check for PWA updates on initial open and show Update button
   useEffect(() => {
@@ -810,30 +823,51 @@ export default function App() {
       )}
     <div style={{ fontFamily: 'system-ui, sans-serif', height: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--fg)', overflow: 'hidden' }}>
       <div className="sticky-top" style={{ display: 'flex', flexDirection: 'column', gap: 0, borderBottom: '1px solid var(--border)', background: 'var(--card)' }}>
-        {adText && (() => {
-          const url = extractFirstUrl(adText)
-          const displayText = stripUrls(adText)
+        {!adsDisabled && visibleAds.length > 0 && (() => {
+          const ad = visibleAds[adIndex] || visibleAds[0]
+          const url = ad.url
+          const displayText = ad.displayText
           return (
             <div role="note" aria-live="polite" style={{ padding: '6px 12px', borderBottom: '1px solid var(--border)' }}>
-              <button
-                type="button"
-                title={displayText}
-                onClick={() => { if (url) try { window.open(url, '_blank', 'noopener,noreferrer') } catch {} }}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 10, width: '100%',
-                  padding: '10px 14px', background: 'var(--accent)', color: '#fff',
-                  border: 'none', borderRadius: 10, cursor: url ? 'pointer' : 'default',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.18)', transition: 'transform 120ms ease, opacity 120ms ease'
-                }}
-                onMouseDown={(e) => { const t = e.currentTarget; t.style.transform = 'translateY(1px)' }}
-                onMouseUp={(e) => { const t = e.currentTarget; t.style.transform = '' }}
-                onMouseLeave={(e) => { const t = e.currentTarget; t.style.transform = '' }}
-                aria-label={url ? `${displayText} — open link` : displayText}
-              >
-                <span aria-hidden>📣</span>
-                <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayText}</span>
-                {url && <span aria-hidden style={{ opacity: 0.9 }}>↗</span>}
-              </button>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button
+                  type="button"
+                  title={displayText}
+                  onClick={() => { if (url) try { window.open(url, '_blank', 'noopener,noreferrer') } catch {} }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                    padding: '10px 14px', background: 'var(--accent)', color: '#fff',
+                    border: 'none', borderRadius: 10, cursor: url ? 'pointer' : 'default',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.18)', transition: 'transform 120ms ease, opacity 120ms ease'
+                  }}
+                  onMouseDown={(e) => { const t = e.currentTarget; t.style.transform = 'translateY(1px)' }}
+                  onMouseUp={(e) => { const t = e.currentTarget; t.style.transform = '' }}
+                  onMouseLeave={(e) => { const t = e.currentTarget; t.style.transform = '' }}
+                  aria-label={url ? `${displayText} — open link` : displayText}
+                >
+                  <span aria-hidden>📣</span>
+                  <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayText}</span>
+                  {url && <span aria-hidden style={{ opacity: 0.9 }}>↗</span>}
+                </button>
+                <button
+                  type="button"
+                  title={t('common.dismiss') || 'Dismiss'}
+                  aria-label={t('common.dismiss') || 'Dismiss'}
+                  onClick={() => {
+                    setAdDisabledIds(prev => {
+                      const next = new Set(prev)
+                      next.add(ad.id)
+                      persistAdDisabledIds(next)
+                      return next
+                    })
+                    setAdIndex(0)
+                  }}
+                  style={{
+                    flex: 'none', padding: '8px 10px', background: 'transparent', color: 'var(--muted)',
+                    border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer'
+                  }}
+                >✖</button>
+              </div>
             </div>
           )
         })()}
@@ -975,6 +1009,41 @@ export default function App() {
                   <input type="checkbox" checked={powMining} onChange={(e) => { setPowMining(e.target.checked); try { log(`Settings: powMining=${e.target.checked}`) } catch {} }} />
                   {t('settings.powMining')}
                 </label>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <input type="checkbox" checked={!adsDisabled} onChange={(e) => setAdsDisabled(!e.target.checked)} />
+                  {t('settings.showAds') || 'Show top banner' }
+                </label>
+                {!adsDisabled && ads.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingLeft: 2 }}>
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>{t('settings.manageAds') || 'Manage ads'}</div>
+                    {ads.map(a => (
+                      <label key={a.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                        <input
+                          type="checkbox"
+                          checked={!adDisabledIds.has(a.id)}
+                          onChange={(e) => {
+                            setAdDisabledIds(prev => {
+                              const next = new Set(prev)
+                              if (e.target.checked) next.delete(a.id); else next.add(a.id)
+                              persistAdDisabledIds(next)
+                              return next
+                            })
+                            setAdIndex(0)
+                          }}
+                        />
+                        <span style={{ maxWidth: 420, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.displayText}</span>
+                      </label>
+                    ))}
+                    <div style={{ display: 'inline-flex', gap: 8 }}>
+                      <button onClick={() => { setAdDisabledIds(new Set()); try { localStorage.removeItem('ads_disabled_ids') } catch {}; setAdIndex(0) }}>
+                        {t('common.reset') || 'Reset'}
+                      </button>
+                      <button onClick={async () => { try { const items = await loadPreparedAds(locale, 'top'); setAds(items); setAdIndex(0) } catch {} }}>
+                        {t('common.reload')}
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <button onClick={() => { try { localStorage.removeItem('onboarding_done') } catch {}; try { log('Onboarding: reset requested') } catch {}; window.location.reload() }}>{t('settings.onboardingAgain')}</button>
                 <button onClick={() => { setLogAuth('required'); setLogModalOpen(true) }}>{t('settings.viewLog')}</button>
                 <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
