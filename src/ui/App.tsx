@@ -326,6 +326,11 @@ export default function App() {
     const params = new URLSearchParams(window.location.search)
     // Accept alternate param names just in case
     const invite = params.get('invite') || params.get('inviter') || ''
+    // If language override present, apply it immediately so translations load before sending first message
+    const urlLang = params.get('lang')
+    if (urlLang) {
+      try { setLocale(urlLang) } catch {}
+    }
     const parsedHex = parseInviteInput(invite)
     if (!parsedHex) return
     try { log(`Invite.detect ${invite.slice(0, 64)}`) } catch {}
@@ -352,18 +357,21 @@ export default function App() {
         // slight delay to allow engine to start
         setTimeout(async () => {
           try { log(`Invite.helloDM -> ${inviterHex.slice(0, 12)}…`) } catch {}
-          // Localized auto-start message based on current language/locale.
-          // Avoid sending raw keys if translations aren't loaded yet.
+          // Wait a brief moment for translations if we just switched locale via ?lang
+          await new Promise(res => setTimeout(res, 150))
           const pref = t('invite.autoStartMessage') as string
           const alt1 = t('chat.autoStartMessage') as string
           const alt2 = t('invite.message') as string
           const pick = (val: string, key: string) => (val && val !== key ? val : '')
-          const autoStartMsg =
-            pick(pref, 'invite.autoStartMessage') ||
-            pick(alt1, 'chat.autoStartMessage') ||
-            pick(alt2, 'invite.message') ||
-            "Hi! I accepted your invite. Let's chat."
-          await sendDM(sk!, inviterHex, { t: autoStartMsg })
+          let autoStartMsg = pick(pref, 'invite.autoStartMessage') || pick(alt1, 'chat.autoStartMessage') || pick(alt2, 'invite.message') || "Hi! I accepted your invite. Let's chat."
+          try {
+            await sendDM(sk!, inviterHex, { t: autoStartMsg })
+          } catch (err) {
+            // One retry on failure with a safe default
+            try { log(`Invite.helloDM.retry: ${String(err)}`) } catch {}
+            autoStartMsg = "Hi! I accepted your invite. Let's chat."
+            try { await sendDM(sk!, inviterHex, { t: autoStartMsg }) } catch {}
+          }
           selectPeer(inviterHex)
           localStorage.setItem(ackKey, '1')
         }, 800)

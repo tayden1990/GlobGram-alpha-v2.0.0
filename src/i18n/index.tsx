@@ -14,17 +14,24 @@ const I18nContext = createContext<I18nContextType | null>(null)
 
 const LOCALE_STORAGE_KEY = 'app_locale'
 
-// Statically declare supported locales and dynamic imports so bundlers include json
-const loaders: Record<string, () => Promise<{ default: Messages }>> = {
-  en: () => import('./locales/en.json'),
-  fa: () => import('./locales/fa.json'),
-  es: () => import('./locales/es.json'),
-  fr: () => import('./locales/fr.json'),
-  de: () => import('./locales/de.json'),
-  pt: () => import('./locales/pt.json'),
-  ru: () => import('./locales/ru.json'),
-  ar: () => import('./locales/ar.json'),
+// Supported locales and a stable loader that fetches from public/locales for offline caching
+const SUPPORTED_LOCALES = ['en','fa','es','fr','de','pt','ru','ar'] as const
+type LocaleCode = typeof SUPPORTED_LOCALES[number]
+const basePath = (import.meta as any)?.env?.BASE_URL || '/'
+const fetchLocale = async (code: LocaleCode): Promise<{ default: Messages }> => {
+  const url = `${basePath}locales/${code}.json`
+  try {
+    const r = await fetch(url)
+    if (!r.ok) throw new Error(`Failed to load locale ${code}`)
+    const j = (await r.json()) as Messages
+    return { default: j || {} }
+  } catch {
+    return { default: {} }
+  }
 }
+const loaders: Record<string, () => Promise<{ default: Messages }>> = Object.fromEntries(
+  (SUPPORTED_LOCALES as readonly string[]).map(code => [code, () => fetchLocale(code as LocaleCode)])
+) as Record<string, () => Promise<{ default: Messages }>>
 
 const localeNames: Record<string, string> = {
   en: 'English',
@@ -50,7 +57,7 @@ const localeFlags: Record<string, string> = {
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState<string>(() => {
-    const supported = Object.keys(loaders)
+  const supported = SUPPORTED_LOCALES as unknown as string[]
     // URL override: ?lang=xx
     try {
       const urlLang = new URLSearchParams(window.location.search).get('lang')
@@ -71,7 +78,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     let active = true
     const load = async () => {
       try {
-        const loadFn = loaders[locale] || loaders['en']
+  const loadFn = loaders[locale] || loaders['en']
         const mod = await loadFn()
         if (!active) return
         setMessages(mod.default || {})
@@ -120,7 +127,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     setLocale,
     t,
     messages,
-    availableLocales: Object.keys(loaders).map(code => ({
+  availableLocales: (SUPPORTED_LOCALES as unknown as string[]).map(code => ({
       code,
       name: `${localeFlags[code] ? localeFlags[code] + ' ' : ''}${localeNames[code] || code}`.trim(),
     })),

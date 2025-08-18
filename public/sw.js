@@ -14,7 +14,9 @@ function scopeUrl(path) {
 self.addEventListener('install', (e) => {
   if (DEBUG) console.log('[SW] install')
   self.skipWaiting()
-  const core = [ './', './index.html', './offline.html', './branding/logo.png' ].map(scopeUrl)
+  const core = [ './', './index.html', './offline.html', './branding/logo.png',
+    './locales/en.json','./locales/fa.json','./locales/es.json','./locales/fr.json','./locales/de.json','./locales/pt.json','./locales/ru.json','./locales/ar.json',
+  ].map(scopeUrl)
   e.waitUntil(
     caches.open(CACHE_NAME).then(cache => cache.addAll(core)).catch(()=>{})
   )
