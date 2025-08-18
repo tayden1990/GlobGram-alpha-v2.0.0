@@ -16,7 +16,6 @@ type Actions = {
 
 const defaults: Relay[] = [
   { url: 'wss://relay1.matrus.org', enabled: true },
-  { url: 'wss://relay2.matrus.org', enabled: true },
 ]
 
 export const useRelayStore = create<State & Actions>()(
