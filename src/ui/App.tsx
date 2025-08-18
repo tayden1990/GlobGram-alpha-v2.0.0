@@ -104,6 +104,15 @@ export default function App() {
   const [updateAvailable, setUpdateAvailable] = useState(false)
   const [swVersion, setSwVersion] = useState<string | null>(null)
   const [updateCountdown, setUpdateCountdown] = useState<number | null>(null)
+  // Simple server-controlled ad banner text (from public/ad.txt)
+  const [adText, setAdText] = useState<string | null>(null)
+  const extractFirstUrl = (s: string | null | undefined): string | null => {
+    if (!s) return null
+    try {
+      const m = s.match(/https?:\/\/[^\s]+/)
+      return m ? m[0] : null
+    } catch { return null }
+  }
 
   // apply theme
   const applyTheme = (t: 'system'|'light'|'dark') => {
@@ -160,6 +169,23 @@ export default function App() {
       window.removeEventListener('beforeinstallprompt', onBip as any)
       window.removeEventListener('appinstalled', onInstalled as any)
     }
+  }, [])
+
+  // Load advertisement text from public/ad.txt; show banner if non-empty
+  useEffect(() => {
+    try {
+      const base = (import.meta as any)?.env?.BASE_URL || '/'
+      const url = `${base}ad.txt`
+      let aborted = false
+      fetch(url, { cache: 'no-store' })
+        .then(async (r) => {
+          if (!r.ok) return
+          const txt = (await r.text()).trim()
+          if (!aborted) setAdText(txt.length ? txt : null)
+        })
+        .catch(() => {})
+      return () => { aborted = true }
+    } catch {}
   }, [])
 
   // Check for PWA updates on initial open and show Update button
@@ -776,6 +802,32 @@ export default function App() {
       )}
     <div style={{ fontFamily: 'system-ui, sans-serif', height: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--fg)', overflow: 'hidden' }}>
       <div className="sticky-top" style={{ display: 'flex', flexDirection: 'column', gap: 0, borderBottom: '1px solid var(--border)', background: 'var(--card)' }}>
+        {adText && (() => {
+          const url = extractFirstUrl(adText)
+          return (
+            <div role="note" aria-live="polite" style={{ padding: '6px 12px', borderBottom: '1px solid var(--border)' }}>
+              <button
+                type="button"
+                title={adText}
+                onClick={() => { if (url) try { window.open(url, '_blank', 'noopener,noreferrer') } catch {} }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                  padding: '10px 14px', background: 'var(--accent)', color: '#fff',
+                  border: 'none', borderRadius: 10, cursor: url ? 'pointer' : 'default',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.18)', transition: 'transform 120ms ease, opacity 120ms ease'
+                }}
+                onMouseDown={(e) => { const t = e.currentTarget; t.style.transform = 'translateY(1px)' }}
+                onMouseUp={(e) => { const t = e.currentTarget; t.style.transform = '' }}
+                onMouseLeave={(e) => { const t = e.currentTarget; t.style.transform = '' }}
+                aria-label={url ? `${adText} — open link` : adText}
+              >
+                <span aria-hidden>📣</span>
+                <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{adText}</span>
+                {url && <span aria-hidden style={{ opacity: 0.9 }}>↗</span>}
+              </button>
+            </div>
+          )
+        })()}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px' }}>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
           <Logo size={28} animated title="GlobGram" />
@@ -816,8 +868,7 @@ export default function App() {
                   const blob: Blob | null = await new Promise(res => { try { off.toBlob(b => res(b), 'image/png') } catch { res(null) } })
                   if (!blob) return false
           const file = new File([blob], 'globgram-invite.png', { type: 'image/png' })
-          const txt = new File([`${message}\n${link}`], 'globgram-invite.txt', { type: 'text/plain' })
-          const data: any = { files: [file, txt], text: `${message}\n${link}`, title: t('invite.connectTitle'), url: link }
+          const data: any = { files: [file], text: `${message}\n${link}`, title: t('invite.connectTitle') }
                   // @ts-ignore
                   if ((navigator as any).canShare && (navigator as any).canShare(data)) {
                     // @ts-ignore
@@ -1118,8 +1169,7 @@ export default function App() {
                     const blob: Blob | null = await new Promise(resolve => { try { canvas.toBlob(b => resolve(b), 'image/png') } catch { resolve(null) } })
                     if (!blob) return false
                     const file = new File([blob], 'globgram-invite.png', { type: 'image/png' })
-                    const txt = new File([text], 'globgram-invite.txt', { type: 'text/plain' })
-                    const data: any = { files: [file, txt], text, title: t('invite.connectTitle'), url: inviteUrl }
+                    const data: any = { files: [file], text, title: t('invite.connectTitle') }
                     try {
                       // @ts-ignore
                       if ((navigator as any).canShare(data)) {
