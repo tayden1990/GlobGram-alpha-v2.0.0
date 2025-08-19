@@ -8,9 +8,20 @@ import { finalizeEvent, type EventTemplate } from 'nostr-tools'
 import { hexToBytes } from '../nostr/utils'
 
 const store = new Map<string, { mime: string; data: string }>() // fallback store (dev/demo)
-const BASE_URL = (import.meta as any).env?.VITE_UPLOAD_BASE_URL as string | undefined
+let BASE_URL = (import.meta as any).env?.VITE_UPLOAD_BASE_URL as string | undefined
 const AUTH_TOKEN = (import.meta as any).env?.VITE_UPLOAD_AUTH_TOKEN as string | undefined
 const PUBLIC_BASE_URL = (import.meta as any).env?.VITE_UPLOAD_PUBLIC_BASE_URL as string | undefined
+
+// Guard: if running on a non-localhost origin (e.g., GitHub Pages) and BASE_URL points to localhost,
+// disable backend usage to avoid connection refused in production and fall back to mem://.
+try {
+  const isPageLocal = typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(location.hostname)
+  if (!isPageLocal && BASE_URL && /^https?:\/\/localhost(?::\d+)?/i.test(BASE_URL)) {
+    log(`Upload backend disabled: app origin=${location.origin}, BASE_URL=${BASE_URL}. Falling back to mem:// in production.`, 'warn')
+    emitToast('Uploads disabled on this host (localhost backend). Configure a public upload server.', 'error')
+    BASE_URL = undefined
+  }
+} catch {}
 
 type Nip96Config = { api_url: string; download_url?: string }
 let nip96Cache: Nip96Config | null = null
@@ -183,6 +194,18 @@ export async function getObject(keyOrUrl: string, opts?: { verbose?: boolean }):
   if (/^https?:\/\//i.test(keyOrUrl)) {
     try {
       log(`Download <- ${keyOrUrl} (absolute)`)
+      // Prevent futile attempts to fetch localhost resources when the page isn't running on localhost
+      try {
+        const urlObj = new URL(keyOrUrl)
+        const isTargetLocal = /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(urlObj.hostname)
+        const isPageLocal = typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(location.hostname)
+        if (isTargetLocal && !isPageLocal) {
+          const msg = `Blocked fetch to ${keyOrUrl} from non-local origin. Configure a public upload server.`
+          log(msg, 'warn')
+          if (opts?.verbose) emitToast(msg, 'error')
+          return null
+        }
+      } catch {}
         // Try unauthenticated first, then NIP-98, then Bearer
         const attempts: Array<{ init: RequestInit; label: string }> = []
         attempts.push({ init: {}, label: 'no-auth' }) // unauthenticated
