@@ -115,6 +115,28 @@ export function ChatWindow() {
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
   }
+  // Render URLs inside plain text as clickable links
+  function renderTextWithLinks(text: string) {
+    const parts: Array<{ t: string; href?: string }> = []
+    const urlRe = /(https?:\/\/[^\s]+)/ig
+    let lastIndex = 0
+    let m: RegExpExecArray | null
+    while ((m = urlRe.exec(text)) !== null) {
+      if (m.index > lastIndex) parts.push({ t: text.slice(lastIndex, m.index) })
+      const href = m[1]
+      parts.push({ t: href, href })
+      lastIndex = m.index + href.length
+    }
+    if (lastIndex < text.length) parts.push({ t: text.slice(lastIndex) })
+    return (
+      <>
+        {parts.map((p, i) => p.href
+          ? <a key={i} href={p.href} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>{p.t}</a>
+          : <span key={i}>{p.t}</span>
+        )}
+      </>
+    )
+  }
   // helper to detect whether a value is an unresolved pointer (mem/http)
   function isPointer(u?: string | null) {
     if (!u) return false
@@ -325,7 +347,9 @@ export function ChatWindow() {
                 <div style={{ display: 'flex', justifyContent: m.from === myPubkey ? 'flex-end' : 'flex-start' }}>
                   <div className="msg-grid" style={{ maxWidth: 520, display: 'grid', gridTemplateColumns: '1fr', gridAutoFlow: 'row', gridAutoRows: 'max-content', rowGap: 12, alignItems: 'start' }}>
                     {m.text && (
-                      <div style={{ background: 'var(--bubble)', color: 'var(--bubble-fg)', borderRadius: 12, padding: '8px 10px' }}>{m.text}</div>
+                      <div style={{ background: 'var(--bubble)', color: 'var(--bubble-fg)', borderRadius: 12, padding: '8px 10px' }}>
+                        {renderTextWithLinks(m.text)}
+                      </div>
                     )}
                     {/* Render single legacy attachment */}
                     {m.attachment?.startsWith('data:image/') && (

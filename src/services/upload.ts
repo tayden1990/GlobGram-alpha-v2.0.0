@@ -151,20 +151,20 @@ export async function getObject(keyOrUrl: string): Promise<{ mime: string; base6
   if (/^https?:\/\//i.test(keyOrUrl)) {
     try {
       log(`Download <- ${keyOrUrl} (absolute)`)
-          // Try unauthenticated first, then NIP-98, then Bearer (some servers require no auth for GET)
-      const attempts: RequestInit[] = []
-      attempts.push({}) // unauthenticated try
-      if (AUTH_MODE === 'nip98' && BASE_URL) {
-        const init98: RequestInit = {}
-        const auth = await makeNip98Header(keyOrUrl, 'GET')
-        if (auth) {
-          const h = new Headers()
-          h.set('Authorization', auth)
-          init98.headers = h
-          attempts.push(init98)
+        // Try unauthenticated first, then NIP-98, then Bearer
+        const attempts: RequestInit[] = []
+        attempts.push({}) // unauthenticated
+        if (AUTH_MODE === 'nip98') {
+          const init98: RequestInit = {}
+          const auth = await makeNip98Header(keyOrUrl, 'GET')
+          if (auth) {
+            const h = new Headers()
+            h.set('Authorization', auth)
+            init98.headers = h
+            attempts.push(init98)
+          }
         }
-      }
-      if (AUTH_TOKEN) attempts.push(withAuth({}, keyOrUrl))
+        if (AUTH_TOKEN) attempts.push(withAuth({}, keyOrUrl))
 
       let res: Response | null = null
       let lastErr: any = null
@@ -275,9 +275,10 @@ function arrayBufferToBase64(buf: ArrayBuffer): string {
 
 function guessExtFromMime(m: string): string {
   const map: Record<string, string> = {
-    'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif',
-    'video/webm': 'webm', 'video/mp4': 'mp4', 'audio/webm': 'webm', 'audio/mpeg': 'mp3',
-    'application/pdf': 'pdf'
+  'image/png': 'png', 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif', 'image/svg+xml': 'svg',
+  'video/webm': 'webm', 'video/mp4': 'mp4',
+  'audio/webm': 'webm', 'audio/mpeg': 'mp3', 'audio/ogg': 'ogg',
+  'application/pdf': 'pdf'
   }
   return map[m] || ''
 }
