@@ -123,6 +123,13 @@
 	"invite.autoStartMessage": "سلام! دعوت‌نامه‌ات را پذیرفتم. شروع کنیم به گفتگو.",
 	"invite.connectTitle": "اتصال در GlobGram",
 	"invite.copied": "متن دعوت‌نامه در کلیپ‌بورد کپی شد.",
+	"invite.captionCopied": "عنوان نیز در کلیپ‌بورد کپی شد.",
+	"invite.caption": "با من در GlobGram به‌صورت امن وصل شوید:",
+	"invite.sendingGreeting": "در حال ارسال پیام خوش‌آمد…",
+	"invite.retryingGreeting": "هنوز در حال ارسال… تلاش دوباره",
+	"invite.greetingSent": "پیام خوش‌آمد ارسال شد",
+
+	"errors.powRequiredEnable": "رله نیاز به PoW دارد. برای ارسال، استخراج PoW را در تنظیمات فعال کنید.",
 
 	"tabs.main": "بخش‌های اصلی",
 	"tabs.chats": "گفتگوها",

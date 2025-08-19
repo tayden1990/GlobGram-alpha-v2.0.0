@@ -123,6 +123,13 @@
 	"invite.autoStartMessage": "Привет! Я принял(а) твоё приглашение. Давай общаться.",
 	"invite.connectTitle": "Подключиться в GlobGram",
 	"invite.copied": "Текст приглашения скопирован в буфер обмена.",
+	"invite.captionCopied": "Подпись также скопирована в буфер.",
+	"invite.caption": "Безопасно свяжись со мной в GlobGram:",
+	"invite.sendingGreeting": "Отправка приветствия…",
+	"invite.retryingGreeting": "Всё ещё отправляем… повторная попытка",
+	"invite.greetingSent": "Приветствие отправлено",
+
+	"errors.powRequiredEnable": "Реле требует PoW. Включите майнинг PoW в настройках для отправки.",
 
 	"tabs.main": "Основные разделы",
 	"tabs.chats": "Чаты",

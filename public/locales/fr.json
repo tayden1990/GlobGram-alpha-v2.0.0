@@ -123,6 +123,13 @@
 	"invite.autoStartMessage": "Salut ! J’ai accepté ton invitation. Discutons.",
 	"invite.connectTitle": "Se connecter sur GlobGram",
 	"invite.copied": "Texte d’invitation copié dans la presse-papiers.",
+	"invite.captionCopied": "Légende également copiée dans le presse-papiers.",
+	"invite.caption": "Se connecter en toute sécurité avec moi sur GlobGram :",
+	"invite.sendingGreeting": "Envoi du message de bienvenue…",
+	"invite.retryingGreeting": "Toujours en cours… nouvel essai",
+	"invite.greetingSent": "Message de bienvenue envoyé",
+
+	"errors.powRequiredEnable": "Preuve de travail requise par le relais. Activez le minage PoW dans les paramètres pour envoyer.",
 
 	"tabs.main": "Sections principales",
 	"tabs.chats": "Discussions",

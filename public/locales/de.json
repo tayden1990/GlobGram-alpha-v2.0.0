@@ -123,6 +123,13 @@
 	"invite.autoStartMessage": "Hi! Ich habe deine Einladung angenommen. Lass uns chatten.",
 	"invite.connectTitle": "Auf GlobGram verbinden",
 	"invite.copied": "Einladungstext in die Zwischenablage kopiert.",
+	"invite.captionCopied": "Beschriftung ebenfalls in die Zwischenablage kopiert.",
+	"invite.caption": "Sicher mit mir auf GlobGram verbinden:",
+	"invite.sendingGreeting": "Begrüßung wird gesendet…",
+	"invite.retryingGreeting": "Noch am Senden… erneuter Versuch",
+	"invite.greetingSent": "Begrüßung gesendet",
+
+	"errors.powRequiredEnable": "PoW vom Relais erforderlich. Aktivieren Sie PoW-Mining in den Einstellungen zum Senden.",
 
 	"tabs.main": "Hauptbereiche",
 	"tabs.chats": "Chats",

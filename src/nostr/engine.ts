@@ -9,6 +9,7 @@ import { useRoomStore } from '../state/roomStore'
 import { useSettingsStore } from '../ui/settingsStore'
 import { log } from '../ui/logger'
 import { emitToast } from '../ui/Toast'
+import { tGlobal } from '../i18n'
 
 // Stable per-session room subscription id and per-relay active state to prevent duplicate REQs
 let ROOM_SUB_ID: string | null = null
@@ -542,8 +543,8 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
     if (!miningEnabled) {
       const reason = `PoW required (${powBitsRequired} bits) but disabled in Settings`
       try { useChatStore.getState().updateMessageStatus(to, evt.id, 'failed', reason) } catch {}
-      // Surface a toast with an action hint
-      emitToast('PoW required by relay. Enable PoW mining in Settings to send.', 'error')
+  // Surface a toast with an action hint (localized)
+  emitToast(tGlobal('errors.powRequiredEnable'), 'error')
       // prevent further retries/timeouts and cleanup listeners
       acked = true
       try { for (const h of handlers) h.ws.removeEventListener('message', h.fn as any) } catch {}

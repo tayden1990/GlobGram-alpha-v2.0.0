@@ -14,6 +14,19 @@ const I18nContext = createContext<I18nContextType | null>(null)
 
 const LOCALE_STORAGE_KEY = 'app_locale'
 
+// Expose a global translator for non-React modules (engine, utils) to use safely
+let currentT: (key: string, vars?: Record<string, string | number>) => string = (k, vars) => {
+  if (!vars) return k
+  return Object.keys(vars).reduce((out, v) => out.replace(new RegExp(`{${v}}`, 'g'), String(vars[v]!)), k)
+}
+export function tGlobal(key: string, vars?: Record<string, string | number>) {
+  try {
+    return currentT(key, vars)
+  } catch {
+    return key
+  }
+}
+
 // Supported locales and a stable loader that fetches from public/locales for offline caching
 const SUPPORTED_LOCALES = ['en','fa','es','fr','de','pt','ru','ar'] as const
 type LocaleCode = typeof SUPPORTED_LOCALES[number]
@@ -139,5 +152,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 export function useI18n() {
   const ctx = useContext(I18nContext)
   if (!ctx) throw new Error('useI18n must be used within I18nProvider')
+  // Update global translator whenever hook consumers render under provider
+  try { currentT = ctx.t } catch {}
   return ctx
 }

@@ -3,7 +3,7 @@ import { ChatList } from './ChatList'
 import { NostrEngine } from './NostrEngine'
 import { RelayManager } from './RelayManager'
 import { RoomList } from './RoomList'
-import { ToastProvider } from './Toast'
+import { ToastProvider, emitToast } from './Toast'
 import Logo from './Logo'
 import Splash from './Splash'
 import { useState, useEffect, useRef, lazy, Suspense, useMemo } from 'react'
@@ -481,6 +481,8 @@ export default function App() {
             }
           }
 
+          // Announce sending start
+          try { emitToast(t('invite.sendingGreeting'), 'info') } catch {}
           // Primary attempt
           acked = await sendAndWait(autoStartMsg)
           if (!acked) {
@@ -492,6 +494,7 @@ export default function App() {
           // Last-chance delayed retry (non-blocking) if still not acked
           if (!acked) {
             try { log(`Invite.helloDM.scheduleLastChance`) } catch {}
+            try { emitToast(t('invite.retryingGreeting'), 'info') } catch {}
             setTimeout(() => { sendDM(sk!, inviterHex, { t: "Hi! 👋" }).catch(()=>{}) }, 2500)
           }
           
@@ -506,9 +509,11 @@ export default function App() {
           }
 
           if (acked) {
+            try { emitToast(t('invite.greetingSent'), 'success') } catch {}
             finalizeSuccess()
           } else {
             try { log('Invite.pendingAck - will retry before finishing') } catch {}
+            try { emitToast(t('invite.sendingGreeting'), 'info') } catch {}
             // Background retry loop; only finish when acked
             const plan = [3000, 6000, 12000, 24000, 48000]
             let idx = 0
@@ -521,8 +526,10 @@ export default function App() {
               setTimeout(async () => {
                 const ok = await sendAndWait("Hi! I accepted your invite. Let's chat.")
                 if (ok) {
+                  try { emitToast(t('invite.greetingSent'), 'success') } catch {}
                   finalizeSuccess()
                 } else {
+                  try { emitToast(t('invite.retryingGreeting'), 'info') } catch {}
                   tryAgain()
                 }
               }, delay)

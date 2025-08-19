@@ -123,6 +123,13 @@
 	"invite.autoStartMessage": "مرحبًا! قبلت دعوتك. لنتحدث.",
 	"invite.connectTitle": "الاتصال عبر GlobGram",
 	"invite.copied": "نص الدعوة نُسخ إلى الحافظة.",
+	"invite.captionCopied": "تم نسخ التسمية أيضًا إلى الحافظة.",
+	"invite.caption": "اتصل بي بأمان على GlobGram:",
+	"invite.sendingGreeting": "جارٍ إرسال التحية…",
+	"invite.retryingGreeting": "ما زال الإرسال… إعادة المحاولة",
+	"invite.greetingSent": "تم إرسال التحية",
+
+	"errors.powRequiredEnable": "المُرحِّل يتطلب PoW. فعّل تعدين PoW من الإعدادات للإرسال.",
 
 	"tabs.main": "الأقسام الرئيسية",
 	"tabs.chats": "الدردشات",

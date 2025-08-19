@@ -123,6 +123,13 @@
 	"invite.autoStartMessage": "Oi! Aceitei seu convite. Vamos conversar.",
 	"invite.connectTitle": "Conectar no GlobGram",
 	"invite.copied": "Texto do convite copiado para a área de transferência.",
+	"invite.captionCopied": "Legenda também copiada para a área de transferência.",
+	"invite.caption": "Conecte-se com segurança comigo no GlobGram:",
+	"invite.sendingGreeting": "Enviando saudação…",
+	"invite.retryingGreeting": "Ainda enviando… tentando novamente",
+	"invite.greetingSent": "Saudação enviada",
+
+	"errors.powRequiredEnable": "O relé exige PoW. Ative a mineração PoW nas Configurações para enviar.",
 
 	"tabs.main": "Seções principais",
 	"tabs.chats": "Chats",

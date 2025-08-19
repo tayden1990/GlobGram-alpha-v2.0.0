@@ -123,6 +123,13 @@
 	"invite.autoStartMessage": "¡Hola! Acepté tu invitación. Hablemos.",
 	"invite.connectTitle": "Conéctate en GlobGram",
 	"invite.copied": "Texto de invitación copiado al portapapeles.",
+	"invite.captionCopied": "La leyenda también se copió al portapapeles.",
+	"invite.caption": "Conéctate de forma segura conmigo en GlobGram:",
+	"invite.sendingGreeting": "Enviando saludo…",
+	"invite.retryingGreeting": "Aún enviando… reintentando",
+	"invite.greetingSent": "Saludo enviado",
+
+	"errors.powRequiredEnable": "El relé requiere PoW. Activa la minería PoW en Configuración para enviar.",
 
 	"tabs.main": "Secciones principales",
 	"tabs.chats": "Chats",

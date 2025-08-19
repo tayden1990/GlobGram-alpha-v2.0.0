@@ -126,6 +126,11 @@
 	"invite.copied": "Invite text copied to clipboard.",
 	"invite.captionCopied": "Caption also copied to clipboard.",
 	"invite.caption": "Connect safely with me on GlobGram:",
+	"invite.sendingGreeting": "Sending greeting…",
+	"invite.retryingGreeting": "Still sending… retrying",
+	"invite.greetingSent": "Greeting sent",
+
+	"errors.powRequiredEnable": "PoW required by relay. Enable PoW mining in Settings to send.",
 
 	"tabs.main": "Main sections",
 	"tabs.chats": "Chats",
