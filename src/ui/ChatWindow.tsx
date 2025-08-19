@@ -362,7 +362,16 @@ export function ChatWindow() {
                         <div style={{ fontSize: 12, color: 'var(--muted)' }}>{t('chat.resolvingMedia') || 'Resolving media…'}</div>
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                           <button style={{ fontSize: 12 }} onClick={async () => {
-                            const d = await resolvePointerToDataURL(m.attachment!)
+                            // Use verbose fetch to surface detailed error diagnostics
+                            async function resolveVerbose(u: string) {
+                              try {
+                                const key = parseMemUrl(u) ?? u
+                                const obj = await getObject(key, { verbose: true })
+                                if (obj) return `data:${obj.mime};base64,${obj.base64Data}`
+                              } catch {}
+                              return null
+                            }
+                            const d = await resolveVerbose(m.attachment!)
                             if (d) updateMessage(selectedPeer, m.id, { attachment: d })
                             else {
                               show(t('chat.mediaUnavailable')!, 'error')
@@ -475,7 +484,15 @@ export function ChatWindow() {
                           <div style={{ fontSize: 12, color: 'var(--muted)' }}>{t('chat.resolvingMedia') || 'Resolving media…'}</div>
                           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                             <button style={{ fontSize: 12 }} onClick={async () => {
-                              const d = await resolvePointerToDataURL(a)
+                              async function resolveVerbose(u: string) {
+                                try {
+                                  const key = parseMemUrl(u) ?? u
+                                  const obj = await getObject(key, { verbose: true })
+                                  if (obj) return `data:${obj.mime};base64,${obj.base64Data}`
+                                } catch {}
+                                return null
+                              }
+                              const d = await resolveVerbose(a)
                               if (d) {
                                 const next = [...(m.attachments || [])]
                                 next[i] = d

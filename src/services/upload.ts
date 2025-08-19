@@ -68,7 +68,7 @@ export async function putObject(key: string, mime: string, base64Data: string): 
     // - nip96:  POST multipart/form-data to BASE_URL with NIP-98 auth
     try {
       log(`Upload -> ${key} (${mime}), backend=${BASE_URL} mode=${MODE} auth=${AUTH_MODE}`)
-      if (MODE === 'nip96') {
+  if (MODE === 'nip96') {
         // NIP-96 upload expects multipart/form-data at the API URL (BASE_URL)
         const endpoints = await getNip96Endpoints()
         const apiUrl = (endpoints?.apiUrl || BASE_URL).replace(/\/$/, '')
@@ -84,40 +84,53 @@ export async function putObject(key: string, mime: string, base64Data: string): 
         form.set('content_type', mime)
         // Optional extras (caption/alt) could be set by callers later
         const uploadUrl = apiUrl
-        // Build attempt list: NIP-98, Bearer, no-auth
-        const attempts: RequestInit[] = []
-        // NIP-98 attempt
+        // Build attempt list: no-auth → NIP-98 (no payload tag) → Bearer
+        const attempts: Array<{ init: RequestInit; label: string }> = []
+        // No-auth first (bypasses CORS preflight on some servers)
+        attempts.push({ init: { method: 'POST', body: form }, label: 'no-auth' })
+        // NIP-98 attempt (omit payload tag for multipart to avoid hash mismatch)
         if (AUTH_MODE === 'nip98') {
-          const payloadHex = await sha256Hex(bytes)
-          const auth = await makeNip98Header(uploadUrl, 'POST', payloadHex)
+          const auth = await makeNip98Header(uploadUrl, 'POST')
           if (auth) {
             const h = new Headers()
             h.set('Authorization', auth)
-            attempts.push({ method: 'POST', body: form, headers: h })
+            attempts.push({ init: { method: 'POST', body: form, headers: h }, label: 'nip-98' })
           } else {
             emitToast('Cannot sign NIP-98 auth. Import a key or enable a NIP-07 extension.', 'error')
           }
         }
-        // Bearer token attempt
+        // Bearer token attempt last
         if (AUTH_TOKEN) {
           const h = new Headers()
           h.set('Authorization', `Bearer ${AUTH_TOKEN}`)
-          attempts.push({ method: 'POST', body: form, headers: h })
+          attempts.push({ init: { method: 'POST', body: form, headers: h }, label: 'token' })
         }
-        // No-auth attempt last
-        attempts.push({ method: 'POST', body: form })
 
         let res: Response | null = null
         let lastErr: any = null
-        for (const init of attempts) {
+        const attemptLogs: string[] = []
+        for (const { init, label } of attempts) {
           try {
             res = await fetch(uploadUrl, init)
-            if (res.ok) break
+            if (res.ok) { attemptLogs.push(`[${label}] OK ${res.status}`); break }
+            const text = await res.text().catch(() => '')
+            attemptLogs.push(`[${label}] HTTP ${res.status} ${res.statusText}${text ? ` - ${truncate(text)}` : ''}`)
             lastErr = new Error(`HTTP ${res.status}`)
-          } catch (e) { lastErr = e }
+          } catch (e: any) {
+            attemptLogs.push(`[${label}] ${e?.name || 'Error'}: ${e?.message || e}`)
+            lastErr = e
+          }
         }
         if (!res || !res.ok) {
-          emitToast(`Upload failed. ${lastErr?.message || ''} Check server, auth (NIP-98), and CORS.`, 'error')
+          const endpointsInfo = (() => {
+            try { return `api=${apiUrl}, downloadBase=${downloadBase}` } catch { return '' }
+          })()
+          const modeInfo = `mode=${MODE}, auth=${AUTH_MODE}${AUTH_TOKEN ? '+token' : ''}`
+          const baseInfo = `BASE_URL=${BASE_URL || 'unset'}, PUBLIC_BASE_URL=${PUBLIC_BASE_URL || 'unset'}`
+          emitToast(
+            `Upload failed; falling back to mem://. ${lastErr?.message || ''}\n${modeInfo}\n${endpointsInfo}\n${baseInfo}\nAttempts:\n- ${attemptLogs.join('\n- ')}`,
+            'error'
+          )
           throw (lastErr || new Error('Upload failed'))
         }
         const out = await res.json().catch(() => ({})) as any
@@ -161,14 +174,14 @@ export async function putObject(key: string, mime: string, base64Data: string): 
   return `mem://${key}`
 }
 
-export async function getObject(keyOrUrl: string): Promise<{ mime: string; base64Data: string } | null> {
+export async function getObject(keyOrUrl: string, opts?: { verbose?: boolean }): Promise<{ mime: string; base64Data: string } | null> {
   // If we received a full HTTP(S) URL, fetch it directly regardless of BASE_URL
   if (/^https?:\/\//i.test(keyOrUrl)) {
     try {
       log(`Download <- ${keyOrUrl} (absolute)`)
         // Try unauthenticated first, then NIP-98, then Bearer
-        const attempts: RequestInit[] = []
-        attempts.push({}) // unauthenticated
+        const attempts: Array<{ init: RequestInit; label: string }> = []
+        attempts.push({ init: {}, label: 'no-auth' }) // unauthenticated
         if (AUTH_MODE === 'nip98') {
           const init98: RequestInit = {}
           const auth = await makeNip98Header(keyOrUrl, 'GET')
@@ -176,21 +189,27 @@ export async function getObject(keyOrUrl: string): Promise<{ mime: string; base6
             const h = new Headers()
             h.set('Authorization', auth)
             init98.headers = h
-            attempts.push(init98)
+            attempts.push({ init: init98, label: 'nip-98' })
           }
         }
-        if (AUTH_TOKEN) attempts.push(withAuth({}, keyOrUrl))
+        if (AUTH_TOKEN) attempts.push({ init: withAuth({}, keyOrUrl), label: 'token' })
 
       let res: Response | null = null
       let lastErr: any = null
-      for (const init of attempts) {
+      const attemptLogs: string[] = []
+      for (const { init, label } of attempts) {
         try {
           res = await fetch(keyOrUrl, init)
-          if (res.ok) break
+          if (res.ok) { attemptLogs.push(`[${label}] OK ${res.status}`); break }
+          const text = await res.text().catch(() => '')
+          attemptLogs.push(`[${label}] HTTP ${res.status} ${res.statusText}${text ? ` - ${truncate(text)}` : ''}`)
           lastErr = new Error(`HTTP ${res.status}`)
-        } catch (e) { lastErr = e }
+        } catch (e) { lastErr = e; attemptLogs.push(`[${label}] ${(e as any)?.message || e}`) }
       }
-      if (!res || !res.ok) throw lastErr || new Error('Get failed')
+      if (!res || !res.ok) {
+        if (opts?.verbose) emitToast(`Download failed for ${keyOrUrl}. Attempts:\n- ${attemptLogs.join('\n- ')}`, 'error')
+        throw lastErr || new Error('Get failed')
+      }
       const ct = res.headers.get('content-type') || ''
       if (ct.includes('application/json')) {
         const out = await res.json().catch(() => ({})) as any
@@ -242,17 +261,23 @@ export async function getObject(keyOrUrl: string): Promise<{ mime: string; base6
       if (!endpoints) throw new Error('NIP-96 discovery failed')
       const url = `${endpoints.downloadBase.replace(/\/$/, '')}/${encodeURIComponent(keyOrUrl)}`
       log(`Download <- ${keyOrUrl} (nip96 ${url})`)
-      const attempts: RequestInit[] = [{},]
+      const attempts: Array<{ init: RequestInit; label: string }> = [{ init: {}, label: 'no-auth' }]
       if (AUTH_MODE === 'nip98') {
         const auth = await makeNip98Header(url, 'GET')
-        if (auth) attempts.push({ headers: { Authorization: auth } })
+        if (auth) attempts.push({ init: { headers: { Authorization: auth } }, label: 'nip-98' })
       }
-      if (AUTH_TOKEN) attempts.push({ headers: { Authorization: `Bearer ${AUTH_TOKEN}` } })
+      if (AUTH_TOKEN) attempts.push({ init: { headers: { Authorization: `Bearer ${AUTH_TOKEN}` } }, label: 'token' })
       let lastErr: any
-      for (const init of attempts) {
+      const attemptLogs: string[] = []
+      for (const { init, label } of attempts) {
         try {
           const res = await fetch(url, init)
-          if (!res.ok) { lastErr = new Error(`HTTP ${res.status}`); continue }
+          if (!res.ok) {
+            const text = await res.text().catch(() => '')
+            attemptLogs.push(`[${label}] HTTP ${res.status} ${res.statusText}${text ? ` - ${truncate(text)}` : ''}`)
+            lastErr = new Error(`HTTP ${res.status}`); continue
+          }
+          attemptLogs.push(`[${label}] OK 200`)
           const ct = res.headers.get('content-type') || ''
           if (ct.includes('application/json')) {
             const out = await res.json().catch(() => ({})) as any
@@ -262,8 +287,9 @@ export async function getObject(keyOrUrl: string): Promise<{ mime: string; base6
           const b64 = arrayBufferToBase64(buf)
           const mime = ct || 'application/octet-stream'
           return { mime, base64Data: b64 }
-        } catch (e) { lastErr = e }
+        } catch (e) { lastErr = e; attemptLogs.push(`[${label}] ${(e as any)?.message || e}`) }
       }
+      if (opts?.verbose) emitToast(`Download failed for key ${keyOrUrl} via ${url}. Attempts:\n- ${attemptLogs.join('\n- ')}`, 'error')
       throw lastErr || new Error('Fetch failed')
     } catch (e) {
       log(`NIP-96 key download failed: ${(e as any)?.message || e}`, 'warn')
@@ -286,6 +312,11 @@ function arrayBufferToBase64(buf: ArrayBuffer): string {
   let binary = ''
   for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
   return btoa(binary)
+}
+
+function truncate(s: string, n = 240): string {
+  if (!s) return ''
+  return s.length > n ? s.slice(0, n) + '…' : s
 }
 
 function guessExtFromMime(m: string): string {
