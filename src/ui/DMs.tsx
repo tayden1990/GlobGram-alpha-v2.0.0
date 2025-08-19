@@ -234,7 +234,13 @@ export function DMs() {
             return null
           }
           let a = obj.a
-          if (a && typeof a === 'object') {
+          if (a && typeof a === 'string' && (a.startsWith('mem://') || a.startsWith('http'))) {
+            try {
+              const key = parseMemUrl(a) ?? a
+              const o = await getObject(key)
+              if (o) a = `data:${o.mime};base64,${o.base64Data}`
+            } catch {}
+          } else if (a && typeof a === 'object') {
             const r = await resolve(a)
             a = r || undefined
           }
@@ -242,8 +248,18 @@ export function DMs() {
           if (Array.isArray(obj.as)) {
             const out: string[] = []
             for (const it of obj.as) {
-              if (typeof it === 'string') out.push(it)
-              else {
+              if (typeof it === 'string') {
+                if (it.startsWith('mem://') || it.startsWith('http')) {
+                  try {
+                    const key = parseMemUrl(it) ?? it
+                    const o = await getObject(key)
+                    if (o) out.push(`data:${o.mime};base64,${o.base64Data}`)
+                    else out.push(it)
+                  } catch { out.push(it) }
+                } else {
+                  out.push(it)
+                }
+              } else {
                 const r = await resolve(it)
                 if (r) out.push(r)
               }

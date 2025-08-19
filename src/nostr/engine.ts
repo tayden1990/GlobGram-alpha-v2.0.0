@@ -564,9 +564,40 @@ export async function sendDM(
     return d
   }
 
-  // Build attachments
+  // Build attachments (network payload)
   const outA = payload.a ? await processOne(payload.a) : undefined
   const outAs = payload.as ? await Promise.all(payload.as.map(processOne)) : undefined
+
+  // Derive local display attachments: prefer original data URLs for instant preview;
+  // if we only have mem/http pointers, resolve from store/backend to data URLs.
+  const resolvePlainToDataUrl = async (u: string): Promise<string | undefined> => {
+    try {
+      const key = parseMemUrl(u) ?? u
+      const obj = await getObject(key)
+      if (obj) return `data:${obj.mime};base64,${obj.base64Data}`
+    } catch {}
+    return undefined
+  }
+  const displayA = (typeof payload.a === 'string' && payload.a.startsWith('data:'))
+    ? payload.a
+    : (typeof outA === 'string' && (outA.startsWith('mem://') || outA.startsWith('http')))
+      ? await resolvePlainToDataUrl(outA)
+      : undefined
+  const displayAs = Array.isArray(payload.as)
+    ? await (async () => {
+        const result: string[] = []
+        for (let i = 0; i < payload.as!.length; i++) {
+          const orig = payload.as![i]
+          if (typeof orig === 'string' && orig.startsWith('data:')) { result.push(orig); continue }
+          const net = outAs ? outAs[i] : undefined
+          if (typeof net === 'string' && (net.startsWith('mem://') || net.startsWith('http'))) {
+            const r = await resolvePlainToDataUrl(net)
+            if (r) result.push(r)
+          }
+        }
+        return result.length ? result : undefined
+      })()
+    : undefined
   const body = JSON.stringify({ t: payload.t, a: outA, as: outAs, p: payload.p })
   const ciphertext = await nip04.encrypt(sk, toHex, body)
 
@@ -587,7 +618,7 @@ export async function sendDM(
   } else {
     useChatStore.getState().addMessage(toHex, {
       id: evt.id, from: me, to: toHex, ts: now,
-      text: payload.t, attachment: outA, attachments: outAs, status: 'pending'
+      text: payload.t, attachment: displayA || undefined, attachments: displayAs || undefined, status: 'pending'
     })
   }
 
