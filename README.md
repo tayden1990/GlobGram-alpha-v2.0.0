@@ -207,3 +207,36 @@ git push --follow-tags
 ## License
 
 MIT — see `LICENSE`.
+
+## Production media (NIP-96/NIP-98) setup
+
+When the app is hosted on GitHub Pages (or any non-localhost origin), it cannot reach `http://localhost:*`. To make large media work in production, point the app to a public upload server and enable CORS.
+
+1) Choose an upload backend
+- Dev/simple (JSON): the included server at `server/upload-server.mjs` exposes:
+	- POST /upload → { url }
+	- GET  /o/:key → { mime, data }
+	Deploy it behind HTTPS with CORS for your Pages origin.
+- NIP-96: a Nostr media server supporting NIP-96 uploads and optional NIP-98 auth.
+
+2) Enable CORS on your server
+- Allow Origin: your GitHub Pages origin, e.g. `https://<user>.github.io`
+- Methods: GET, POST, OPTIONS
+- Headers: Authorization, Content-Type
+- Return 200 to preflight OPTIONS
+
+3) Configure production env via GitHub Secrets
+Add these repository Secrets, then redeploy:
+- VITE_UPLOAD_BASE_URL → e.g. `https://media.example.com/upload` (NIP-96) or `https://media.example.com` (simple)
+- VITE_UPLOAD_MODE → `nip96` or `simple`
+- VITE_UPLOAD_AUTH_MODE → `none` | `token` | `nip98`
+- VITE_UPLOAD_AUTH_TOKEN → only if using `token`
+- VITE_UPLOAD_PUBLIC_BASE_URL → e.g. `https://media.example.com` (helps download URL inference)
+
+The workflow `.github/workflows/deploy.yml` forwards these to the build step.
+
+4) Verify
+- On Pages, attach a large image. The UI should no longer show “Unavailable on this host (localhost upload)” and receivers should be able to Load/preview successfully.
+- If a fetch fails, the app shows verbose diagnostics with the attempted URLs and auth mode to help you pinpoint CORS or path issues.
+
+Note: In production, the app intentionally blocks attempts to fetch `localhost` URLs from a non-localhost origin to avoid ERR_CONNECTION_REFUSED loops.

@@ -362,7 +362,22 @@ export function ChatWindow() {
                       <div style={{ width: THUMB_SIZE, justifySelf: 'start', display: 'grid', gap: 6 }}>
                         <div style={{ fontSize: 12, color: 'var(--muted)' }}>{t('chat.resolvingMedia') || 'Resolving media…'}</div>
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                          <button style={{ fontSize: 12 }} onClick={async () => {
+                          {/* If hosted non-locally and pointer targets localhost, avoid futile loads */}
+                          {(() => {
+                            try {
+                              const isPageLocal = /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(location.hostname)
+                              const u = String(m.attachment || '')
+                              const isLocalPtr = typeof u === 'string' && /^https?:\/\/localhost(?::\d+)?/i.test(u)
+                              if (!isPageLocal && isLocalPtr) {
+                                return (
+                                  <span style={{ fontSize: 12, color: 'var(--muted)' }} title={t('chat.mediaUnavailable') || 'Media unavailable'}>
+                                    Unavailable on this host (localhost upload)
+                                  </span>
+                                )
+                              }
+                            } catch {}
+                            return (
+                              <button style={{ fontSize: 12 }} onClick={async () => {
                             // Use verbose fetch to surface detailed error diagnostics
                             async function resolveVerbose(u: string) {
                               try {
@@ -378,6 +393,8 @@ export function ChatWindow() {
                               show(t('chat.mediaUnavailable')!, 'error')
                             }
                           }}>{t('chat.load') || 'Load'}</button>
+                            )
+                          })()}
                           {typeof m.attachment === 'string' && m.attachment.startsWith('http') && (
                             <a href={m.attachment} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12 }} title={t('chat.openInNewTab') || 'Open in new tab'}>
                               {t('chat.open') || 'Open'}
