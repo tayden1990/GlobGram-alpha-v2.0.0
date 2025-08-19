@@ -55,6 +55,18 @@ export function ChatWindow() {
   const [preparing, setPreparing] = useState(false)
   const [prepProgress, setPrepProgress] = useState(0)
   const [sending, setSending] = useState(false)
+  // Upload backend hint banner
+  const hasBackend = (() => { try { return Boolean((import.meta as any).env?.VITE_UPLOAD_BASE_URL) } catch { return false } })()
+  const uploadBannerMsg = (() => {
+    try {
+      const cfg = (import.meta as any).env?.VITE_UPLOAD_BASE_URL as string | undefined
+      const isPageLocal = typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(location.hostname)
+      const cfgIsLocal = !!cfg && /^https?:\/\/localhost(?::\d+)?/i.test(cfg)
+      if (!hasBackend) return 'Uploads not configured. Large media won’t be visible to others. Configure VITE_UPLOAD_BASE_URL.'
+      if (!isPageLocal && cfgIsLocal) return 'Upload server points to localhost and won’t work from this host. Configure a public upload server.'
+    } catch {}
+    return null as string | null
+  })()
   
   // Grid layout ensures footer has its own row and never overlaps the scroller
   
@@ -772,6 +784,21 @@ export function ChatWindow() {
               if (blocked[selectedPeer]) { show(t('errors.contactBlocked')!, 'error'); return }
               const p = (encOn && (attachment || attachments.length)) ? encPass : undefined
               if (encOn && (attachment || attachments.length) && !p) { show(t('errors.enterMediaPassphrase')!, 'error'); return }
+              // Prevent sending large media without a configured upload backend to avoid mem:// pointers
+              try {
+                const hasBackend = Boolean((import.meta as any).env?.VITE_UPLOAD_BASE_URL)
+                if (!hasBackend) {
+                  const inlineLimit = 128 * 1024
+                  const sizes: number[] = []
+                  if (attachment?.startsWith('data:')) sizes.push(dataURLSize(attachment))
+                  for (const a of attachments) if (a.startsWith('data:')) sizes.push(dataURLSize(a))
+                  const anyTooLarge = sizes.some(s => s > inlineLimit)
+                  if (anyTooLarge) {
+                    show('Cannot send large media without an upload server. Configure VITE_UPLOAD_BASE_URL or send a smaller file.', 'error')
+                    return
+                  }
+                }
+              } catch {}
               setSending(true)
               await sendDM(sk, selectedPeer, { t: text || undefined, a: attachment || undefined, as: attachments.length ? attachments : undefined, p })
               setText('')
@@ -782,6 +809,12 @@ export function ChatWindow() {
           </div>
         </div>
       </footer>
+      {/* Upload configuration banner */}
+      {uploadBannerMsg && (
+        <div role="status" aria-live="polite" style={{ position: 'sticky', bottom: 0, padding: '6px 10px', fontSize: 12, color: 'var(--muted)', background: 'var(--bg)', borderTop: '1px dashed var(--border)' }}>
+          {uploadBannerMsg}
+        </div>
+      )}
       {/* virtualized list with intersection preloading */}
       {lightbox && (
         <div onClick={() => setLightbox(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

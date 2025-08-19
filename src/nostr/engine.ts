@@ -618,6 +618,29 @@ export async function sendDM(
         return result.length ? result : undefined
       })()
     : undefined
+
+  // Hard guard: if a large attachment fell back to mem:// (no upload backend), block sending to avoid
+  // emitting unresolvable pointers that receivers can never fetch. Ask user to configure an upload server.
+  if (requiresBackendForReceiver) {
+    try {
+      const limitBytes = 128 * 1024
+      const readable = (bytes: number) => {
+        if (bytes < 1024) return `${bytes} B`
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+        return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+      }
+      const sz = requiresBackendBytes != null ? readable(requiresBackendBytes) : 'unknown'
+      const limit = readable(limitBytes)
+      emitToast(`Cannot send large media without an upload server (size ${sz} > inline limit ${limit}). Configure VITE_UPLOAD_BASE_URL or send a smaller file.`, 'error')
+      log('Blocked sending: upload backend missing and media exceeds inline limit', 'warn')
+      // If this was a resend, mark the existing bubble failed
+      if (opts?.reuseId) {
+        try { useChatStore.getState().updateMessageStatus(toHex, opts.reuseId, 'failed', 'Upload server required for large media') } catch {}
+      }
+    } catch {}
+    const acked = Promise.resolve(false)
+    return { id: 'blocked', acked }
+  }
   const body = JSON.stringify({ t: payload.t, a: outA, as: outAs, p: payload.p })
   const ciphertext = await nip04.encrypt(sk, toHex, body)
 
