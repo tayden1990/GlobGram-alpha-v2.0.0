@@ -10,7 +10,7 @@ Run
 ```powershell
 # from repo root
 npm i express cors body-parser --prefix server
-node server/upload-server.js
+node server/upload-server.mjs
 ```
 
 Cross‑device (receiver fetch) notes
@@ -22,7 +22,7 @@ Example on Windows PowerShell
 ```powershell
 # 1) Start the upload server
 npm i express cors body-parser --prefix server
-node server/upload-server.js
+node server/upload-server.mjs
 
 # 2) Create a .env in project root with your LAN IP (replace with your own):
 "VITE_UPLOAD_BASE_URL=http://192.168.1.50:8787" | Out-File -Encoding utf8 .env
@@ -42,7 +42,7 @@ Secure it (optional, recommended if exposed beyond localhost)
 - Start server with a token:
 ```
 # PowerShell
-$env:UPLOAD_AUTH_TOKEN="yourStrongToken"; node server/upload-server.js
+$env:UPLOAD_AUTH_TOKEN="yourStrongToken"; node server/upload-server.mjs
 ```
 - Add this to your app `.env` so the client includes Authorization automatically:
 ```
