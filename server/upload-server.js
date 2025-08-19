@@ -9,7 +9,18 @@ const bodyParser = require('body-parser')
 
 const app = express()
 app.use(cors())
-app.use(bodyParser.json({ limit: '10mb' }))
+// Raise limit for larger files; align with client MAX_ATTACHMENT_BYTES (10MB) or higher if desired
+app.use(bodyParser.json({ limit: '25mb' }))
+
+// Optional bearer auth for simple protection when exposed beyond localhost
+const AUTH_TOKEN = process.env.UPLOAD_AUTH_TOKEN || ''
+app.use((req, res, next) => {
+  if (!AUTH_TOKEN) return next()
+  const h = req.get('authorization') || req.get('Authorization') || ''
+  const ok = h.toLowerCase().startsWith('bearer ') && h.slice(7).trim() === AUTH_TOKEN
+  if (!ok) return res.status(401).json({ error: 'Unauthorized' })
+  next()
+})
 
 const store = new Map() // key -> { mime, data }
 

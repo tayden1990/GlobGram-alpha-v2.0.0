@@ -5,17 +5,35 @@ import { log } from '../ui/logger'
 
 const store = new Map<string, { mime: string; data: string }>() // fallback store (dev/demo)
 const BASE_URL = (import.meta as any).env?.VITE_UPLOAD_BASE_URL as string | undefined
+const AUTH_TOKEN = (import.meta as any).env?.VITE_UPLOAD_AUTH_TOKEN as string | undefined
+
+function withAuth(init: RequestInit = {}, url?: string): RequestInit {
+  const headers = new Headers(init.headers || {})
+  // Only attach Authorization for our configured backend URLs
+  if (AUTH_TOKEN && BASE_URL) {
+    try {
+      const b = new URL(BASE_URL)
+      if (!url || new URL(url).origin === b.origin) {
+        headers.set('Authorization', `Bearer ${AUTH_TOKEN}`)
+      }
+    } catch {
+      // ignore URL parse errors; no auth header
+    }
+  }
+  return { ...init, headers }
+}
 
 export async function putObject(key: string, mime: string, base64Data: string): Promise<string> {
   if (BASE_URL) {
     // POST to backend: { key, mime, data } -> returns { url }
     try {
       log(`Upload -> ${key} (${mime}), backend=${BASE_URL}`)
-      const res = await fetch(`${BASE_URL.replace(/\/$/, '')}/upload`, {
+      const url = `${BASE_URL.replace(/\/$/, '')}/upload`
+      const res = await fetch(url, withAuth({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key, mime, data: base64Data })
-      })
+      }, url))
       if (!res.ok) throw new Error(`Upload failed: ${res.status}`)
       const out = await res.json().catch(() => ({})) as any
       if (typeof out.url === 'string') return out.url
@@ -36,7 +54,7 @@ export async function getObject(keyOrUrl: string): Promise<{ mime: string; base6
   if (/^https?:\/\//i.test(keyOrUrl)) {
     try {
       log(`Download <- ${keyOrUrl} (absolute)`)
-      const res = await fetch(keyOrUrl)
+      const res = await fetch(keyOrUrl, withAuth({}, keyOrUrl))
       if (!res.ok) throw new Error(`Get failed: ${res.status}`)
       const out = await res.json().catch(() => ({})) as any
       if (out && typeof out.data === 'string') return { mime: out.mime || 'application/octet-stream', base64Data: out.data }
@@ -48,7 +66,7 @@ export async function getObject(keyOrUrl: string): Promise<{ mime: string; base6
     try {
       log(`Download <- ${keyOrUrl} (backend)`)
       const url = `${BASE_URL.replace(/\/$/, '')}/o/${encodeURIComponent(keyOrUrl)}`
-      const res = await fetch(url)
+      const res = await fetch(url, withAuth({}, url))
       if (!res.ok) throw new Error(`Get failed: ${res.status}`)
       const out = await res.json().catch(() => ({})) as any
       if (out && typeof out.data === 'string') return { mime: out.mime || 'application/octet-stream', base64Data: out.data }

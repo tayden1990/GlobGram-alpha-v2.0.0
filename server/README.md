@@ -38,6 +38,17 @@ VITE_UPLOAD_BASE_URL=http://localhost:8787
 ```
 - Restart `npm run dev`.
 
+Secure it (optional, recommended if exposed beyond localhost)
+- Start server with a token:
+```
+# PowerShell
+$env:UPLOAD_AUTH_TOKEN="yourStrongToken"; node server/upload-server.js
+```
+- Add this to your app `.env` so the client includes Authorization automatically:
+```
+VITE_UPLOAD_AUTH_TOKEN=yourStrongToken
+```
+
 Notes
 - Data is in-memory only; restarting clears it.
 - Encryption remains end-to-end in the client before upload.
