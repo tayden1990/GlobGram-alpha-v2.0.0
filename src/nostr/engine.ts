@@ -164,11 +164,12 @@ export function startNostrEngine(sk: string) {
                         if (key) {
                           const obj = await getObject(key)
                           if (obj) b64 = obj.base64Data
+                        } else {
+                          const obj = await getObject(ref.url)
+                          if (obj) b64 = obj.base64Data
                         }
                       }
-                      if (!b64 && typeof ref.ctInline === 'string') {
-                        b64 = ref.ctInline
-                      }
+                      // No inline fallback; require fetch
                       if (!b64) return null
                       const bin = atob(b64)
                       const bytes = new Uint8Array(bin.length)
@@ -333,7 +334,7 @@ export function startNostrEngine(sk: string) {
                             if (obj) b64 = obj.base64Data
                           }
                         }
-                        if (!b64 && typeof ref.ctInline === 'string') b64 = ref.ctInline
+                        // No inline fallback; require fetch
                         if (!b64) return null
                         const bin = atob(b64)
                         const bytes = new Uint8Array(bin.length)
@@ -550,8 +551,8 @@ export async function sendDM(
         const enc = await encryptDataURL(d, payload.p)
         const key = `${toHex}:${evtIdSeed}:${Math.random().toString(36).slice(2)}`
         const url = await putObject(key, enc.mime, enc.ct)
-        // Keep the existing encrypted shape for receivers
-        return { url, enc: { iv: Array.from(atob(enc.iv).split('').map(c=>c.charCodeAt(0))), keySalt: Array.from(atob(enc.keySalt).split('').map(c=>c.charCodeAt(0))), mime: enc.mime, sha256: enc.sha256 }, ctInline: enc.ct }
+        // Send small pointer only; do not inline ciphertext to keep DM small
+        return { url, enc: { iv: Array.from(atob(enc.iv).split('').map(c=>c.charCodeAt(0))), keySalt: Array.from(atob(enc.keySalt).split('').map(c=>c.charCodeAt(0))), mime: enc.mime, sha256: enc.sha256 } }
       } else {
         // NEW: plain upload (no encryption), return a small mem: url
         const { mime, bytes } = dataURLToBytes(d)
@@ -842,7 +843,7 @@ export async function sendRoom(sk: string, roomId: string, text?: string, opts?:
         const enc = await encryptDataURL(d, opts.p)
         const key = `${roomId}:${evtIdSeed}:${Math.random().toString(36).slice(2)}`
         const url = await putObject(key, enc.mime, enc.ct)
-        return { url, enc: { iv: Array.from(atob(enc.iv).split('').map(c=>c.charCodeAt(0))), keySalt: Array.from(atob(enc.keySalt).split('').map(c=>c.charCodeAt(0))), mime: enc.mime, sha256: enc.sha256 }, ctInline: enc.ct }
+        return { url, enc: { iv: Array.from(atob(enc.iv).split('').map(c=>c.charCodeAt(0))), keySalt: Array.from(atob(enc.keySalt).split('').map(c=>c.charCodeAt(0))), mime: enc.mime, sha256: enc.sha256 } }
       } else {
         const { mime, bytes } = dataURLToBytes(d)
         const key = `${roomId}:${evtIdSeed}:${Math.random().toString(36).slice(2)}`

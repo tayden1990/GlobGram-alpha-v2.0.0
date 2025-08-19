@@ -215,7 +215,7 @@ export function DMs() {
                     if (o) b64 = o.base64Data
                   }
                 }
-                if (!b64 && typeof ref.ctInline === 'string') b64 = ref.ctInline
+                // No inline fallback; require fetch
                 if (!b64) return null
                 const bin = atob(b64)
                 const bytes = new Uint8Array(bin.length)
