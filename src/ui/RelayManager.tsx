@@ -1,6 +1,30 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRelayStore } from '../state/relayStore'
-import { fetchRelayInfo, getCachedRelayInfo, type RelayInfo } from '../nostr/nip11'
+import { getCachedRelayInfo, type RelayInfo } from '../nostr/nip11'
+
+function toHttpBase(u: string) {
+  return u.replace(/\/+$/, '').replace(/^wss:/i, 'https:').replace(/^ws:/i, 'http:')
+}
+async function fetchNip11Info(wsUrl: string, force = false) {
+  const base = toHttpBase(wsUrl)
+  const urls = [`${base}/.well-known/nostr.json`, `${base}/nip11`]
+  let lastErr: any
+  for (const url of urls) {
+    try {
+      const r = await fetch(url, {
+        headers: { Accept: 'application/nostr+json' },
+        mode: 'cors',
+        cache: force ? 'reload' : 'default',
+      })
+      const text = await r.text()
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      return JSON.parse(text)
+    } catch (e) {
+      lastErr = e
+    }
+  }
+  throw new Error(`NIP-11 fetch failed: ${lastErr?.message || 'unknown'}`)
+}
 
 export function RelayManager() {
   const relays = useRelayStore(s => s.relays)
@@ -49,10 +73,11 @@ export function RelayManager() {
   const loadInfo = async (u: string, force = false) => {
     try {
       setInfos(prev => ({ ...prev, [u]: prev[u] }))
-      const info = await fetchRelayInfo(u, { force })
-      setInfos(prev => ({ ...prev, [u]: info }))
+      const info = await fetchNip11Info(u, force)
+      setInfos(prev => ({ ...prev, [u]: info as RelayInfo }))
     } catch (e) {
-      setInfos(prev => ({ ...prev, [u]: { error: (e as Error)?.message || 'Failed' } }))
+      const msg = (e as Error)?.message || 'Failed'
+      setInfos(prev => ({ ...prev, [u]: { error: msg } }))
     }
   }
 
@@ -68,7 +93,7 @@ export function RelayManager() {
           const info = infos[r.url]
           const isOpen = !!expanded[r.url]
           return (
-            <li key={r.url} style={{ padding: '8px 0', borderTop: '1px solid var(--border)' }}>
+            <li key={r.url} style={{ padding: '8px 0', borderTop: '1px solid var(--border' }}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
                   <input type="checkbox" checked={r.enabled} onChange={(e) => toggleRelay(r.url, e.target.checked)} />

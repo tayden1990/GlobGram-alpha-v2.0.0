@@ -11,6 +11,37 @@ const store = new Map<string, { mime: string; data: string }>() // fallback stor
 const BASE_URL = (import.meta as any).env?.VITE_UPLOAD_BASE_URL as string | undefined
 const AUTH_TOKEN = (import.meta as any).env?.VITE_UPLOAD_AUTH_TOKEN as string | undefined
 const PUBLIC_BASE_URL = (import.meta as any).env?.VITE_UPLOAD_PUBLIC_BASE_URL as string | undefined
+
+type Nip96Config = { api_url: string; download_url?: string }
+let nip96Cache: Nip96Config | null = null
+
+async function discoverNip96(): Promise<Nip96Config | null> {
+  try {
+    // If explicit public base is provided, prefer it for download_url inference later
+    const base = BASE_URL ? new URL(BASE_URL) : null
+    const origin = base ? `${base.protocol}//${base.host}` : null
+    if (!origin) return null
+    const res = await fetch(`${origin}/.well-known/nostr/nip96.json`, { method: 'GET', cache: 'no-cache' })
+    if (!res.ok) return null
+    const json = await res.json().catch(() => null) as any
+    if (!json || typeof json.api_url !== 'string') return null
+    const cfg: Nip96Config = { api_url: json.api_url, download_url: json.download_url }
+    nip96Cache = cfg
+    return cfg
+  } catch {
+    return null
+  }
+}
+
+async function getNip96Endpoints(): Promise<{ apiUrl: string; downloadBase: string } | null> {
+  if (MODE !== 'nip96') return null
+  if (!BASE_URL) return null
+  // Try cache, then discovery, fallback to provided BASE_URL
+  const cfg = nip96Cache || await discoverNip96()
+  const apiUrl = (cfg?.api_url || BASE_URL).replace(/\/$/, '')
+  const downloadBase = (PUBLIC_BASE_URL || cfg?.download_url || cfg?.api_url || BASE_URL).replace(/\/$/, '')
+  return { apiUrl, downloadBase }
+}
 const MODE = ((import.meta as any).env?.VITE_UPLOAD_MODE as string | undefined)?.toLowerCase() || 'simple' // 'simple' | 'nip96'
 const AUTH_MODE = ((import.meta as any).env?.VITE_UPLOAD_AUTH_MODE as string | undefined)?.toLowerCase() || (AUTH_TOKEN ? 'token' : 'none') // 'none' | 'token' | 'nip98'
 
@@ -39,7 +70,10 @@ export async function putObject(key: string, mime: string, base64Data: string): 
       log(`Upload -> ${key} (${mime}), backend=${BASE_URL} mode=${MODE} auth=${AUTH_MODE}`)
       if (MODE === 'nip96') {
         // NIP-96 upload expects multipart/form-data at the API URL (BASE_URL)
-  const bytes = base64ToBytes(base64Data)
+        const endpoints = await getNip96Endpoints()
+        const apiUrl = (endpoints?.apiUrl || BASE_URL).replace(/\/$/, '')
+        const downloadBase = (endpoints?.downloadBase || BASE_URL).replace(/\/$/, '')
+        const bytes = base64ToBytes(base64Data)
   // Copy into a plain ArrayBuffer to avoid SharedArrayBuffer typing issues
   const ab = new ArrayBuffer(bytes.byteLength)
   new Uint8Array(ab).set(bytes)
@@ -49,7 +83,7 @@ export async function putObject(key: string, mime: string, base64Data: string): 
         form.set('size', String(bytes.length))
         form.set('content_type', mime)
         // Optional extras (caption/alt) could be set by callers later
-        const uploadUrl = BASE_URL.replace(/\/$/, '')
+        const uploadUrl = apiUrl
   const init: RequestInit = { method: 'POST', body: form }
         // Add NIP-98 Authorization when enabled
         if (AUTH_MODE === 'nip98') {
@@ -84,11 +118,9 @@ export async function putObject(key: string, mime: string, base64Data: string): 
         const mTag = nip94?.tags?.find((t: any) => Array.isArray(t) && t[0] === 'm')
         if (oxTag && typeof oxTag[1] === 'string') {
           const ext = guessExtFromMime(mTag?.[1] || mime)
-          let base = PUBLIC_BASE_URL || ''
-          if (!base) {
-            try { base = new URL(uploadUrl).origin } catch { base = uploadUrl.replace(/\/$/, '') }
-          }
-          return `${base.replace(/\/$/, '')}/${oxTag[1]}${ext ? '.'+ext : ''}`
+          // Per NIP-96, standard download path is $api_url/<hash>(.ext) unless download_url is provided
+          const base = downloadBase
+          return `${base}/${oxTag[1]}${ext ? '.'+ext : ''}`
         }
         throw new Error('Upload response missing url')
       } else {
@@ -119,19 +151,19 @@ export async function getObject(keyOrUrl: string): Promise<{ mime: string; base6
   if (/^https?:\/\//i.test(keyOrUrl)) {
     try {
       log(`Download <- ${keyOrUrl} (absolute)`)
-      // Try with NIP-98 if enabled, then fall back to no auth, then bearer (if provided)
+          // Try unauthenticated first, then NIP-98, then Bearer (some servers require no auth for GET)
       const attempts: RequestInit[] = []
-      const init98: RequestInit = {}
+      attempts.push({}) // unauthenticated try
       if (AUTH_MODE === 'nip98' && BASE_URL) {
+        const init98: RequestInit = {}
         const auth = await makeNip98Header(keyOrUrl, 'GET')
         if (auth) {
           const h = new Headers()
           h.set('Authorization', auth)
           init98.headers = h
+          attempts.push(init98)
         }
-        attempts.push(init98)
       }
-      attempts.push({}) // unauthenticated try
       if (AUTH_TOKEN) attempts.push(withAuth({}, keyOrUrl))
 
       let res: Response | null = null
@@ -187,6 +219,39 @@ export async function getObject(keyOrUrl: string): Promise<{ mime: string; base6
     } catch (e) {
       log(`Download backend failed, trying memory: ${(e as any)?.message || e}`, 'warn')
       // soft-fail to mem
+    }
+  } else if (MODE === 'nip96' && BASE_URL && !parseMemUrl(keyOrUrl)) {
+    // In NIP-96 mode, if we received a key (hash) instead of absolute URL, build the download URL from endpoints
+    try {
+      const endpoints = await getNip96Endpoints()
+      if (!endpoints) throw new Error('NIP-96 discovery failed')
+      const url = `${endpoints.downloadBase.replace(/\/$/, '')}/${encodeURIComponent(keyOrUrl)}`
+      log(`Download <- ${keyOrUrl} (nip96 ${url})`)
+      const attempts: RequestInit[] = [{},]
+      if (AUTH_MODE === 'nip98') {
+        const auth = await makeNip98Header(url, 'GET')
+        if (auth) attempts.push({ headers: { Authorization: auth } })
+      }
+      if (AUTH_TOKEN) attempts.push({ headers: { Authorization: `Bearer ${AUTH_TOKEN}` } })
+      let lastErr: any
+      for (const init of attempts) {
+        try {
+          const res = await fetch(url, init)
+          if (!res.ok) { lastErr = new Error(`HTTP ${res.status}`); continue }
+          const ct = res.headers.get('content-type') || ''
+          if (ct.includes('application/json')) {
+            const out = await res.json().catch(() => ({})) as any
+            if (out && typeof out.data === 'string') return { mime: out.mime || 'application/octet-stream', base64Data: out.data }
+          }
+          const buf = await res.arrayBuffer()
+          const b64 = arrayBufferToBase64(buf)
+          const mime = ct || 'application/octet-stream'
+          return { mime, base64Data: b64 }
+        } catch (e) { lastErr = e }
+      }
+      throw lastErr || new Error('Fetch failed')
+    } catch (e) {
+      log(`NIP-96 key download failed: ${(e as any)?.message || e}`, 'warn')
     }
   }
   const key = parseMemUrl(keyOrUrl) ?? keyOrUrl
