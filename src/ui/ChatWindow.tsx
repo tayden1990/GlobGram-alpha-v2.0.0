@@ -336,11 +336,20 @@ export function ChatWindow() {
                     {isPointer(m.attachment) && (
                       <div style={{ width: THUMB_SIZE, justifySelf: 'start', display: 'grid', gap: 6 }}>
                         <div style={{ fontSize: 12, color: 'var(--muted)' }}>{t('chat.resolvingMedia') || 'Resolving media…'}</div>
-                        <button style={{ fontSize: 12 }} onClick={async () => {
-                          const d = await resolvePointerToDataURL(m.attachment!)
-                          if (d) updateMessage(selectedPeer, m.id, { attachment: d })
-                          else show(t('chat.mediaUnavailable')!, 'error')
-                        }}>{t('chat.load') || 'Load'}</button>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <button style={{ fontSize: 12 }} onClick={async () => {
+                            const d = await resolvePointerToDataURL(m.attachment!)
+                            if (d) updateMessage(selectedPeer, m.id, { attachment: d })
+                            else {
+                              show(t('chat.mediaUnavailable')!, 'error')
+                            }
+                          }}>{t('chat.load') || 'Load'}</button>
+                          {typeof m.attachment === 'string' && m.attachment.startsWith('http') && (
+                            <a href={m.attachment} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12 }} title={t('chat.openInNewTab') || 'Open in new tab'}>
+                              {t('chat.open') || 'Open'}
+                            </a>
+                          )}
+                        </div>
                       </div>
                     )}
           {m.attachment?.startsWith('data:video/') && (
@@ -440,16 +449,23 @@ export function ChatWindow() {
                       ) : isPointer(a) ? (
                         <div key={i} style={{ width: THUMB_SIZE, justifySelf: 'start', display: 'grid', gap: 6 }}>
                           <div style={{ fontSize: 12, color: 'var(--muted)' }}>{t('chat.resolvingMedia') || 'Resolving media…'}</div>
-                          <button style={{ fontSize: 12 }} onClick={async () => {
-                            const d = await resolvePointerToDataURL(a)
-                            if (d) {
-                              const next = [...(m.attachments || [])]
-                              next[i] = d
-                              updateMessage(selectedPeer, m.id, { attachments: next })
-                            } else {
-                              show(t('chat.mediaUnavailable')!, 'error')
-                            }
-                          }}>{t('chat.load') || 'Load'}</button>
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                            <button style={{ fontSize: 12 }} onClick={async () => {
+                              const d = await resolvePointerToDataURL(a)
+                              if (d) {
+                                const next = [...(m.attachments || [])]
+                                next[i] = d
+                                updateMessage(selectedPeer, m.id, { attachments: next })
+                              } else {
+                                show(t('chat.mediaUnavailable')!, 'error')
+                              }
+                            }}>{t('chat.load') || 'Load'}</button>
+                            {typeof a === 'string' && a.startsWith('http') && (
+                              <a href={a} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12 }} title={t('chat.openInNewTab') || 'Open in new tab'}>
+                                {t('chat.open') || 'Open'}
+                              </a>
+                            )}
+                          </div>
                         </div>
                       ) : null
                     ))}
