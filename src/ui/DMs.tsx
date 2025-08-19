@@ -203,7 +203,7 @@ export function DMs() {
           const resolve = async (ref: any): Promise<string | null> => {
             try {
               if (typeof ref === 'string' && ref.startsWith('data:')) return ref
-              if (ref && ref.enc && (ref.url || ref.ctInline)) {
+                if (ref && ref.enc && (ref.url || ref.ctInline)) {
                 let b64: string | null = null
                 if (typeof ref.url === 'string') {
                   const memKey = parseMemUrl(ref.url)
@@ -215,7 +215,8 @@ export function DMs() {
                     if (o) b64 = o.base64Data
                   }
                 }
-                // No inline fallback; require fetch
+                // Inline fallback if provided
+                if (!b64 && typeof ref.ctInline === 'string') b64 = ref.ctInline
                 if (!b64) return null
                 const bin = atob(b64)
                 const bytes = new Uint8Array(bin.length)

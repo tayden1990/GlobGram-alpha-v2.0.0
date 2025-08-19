@@ -154,7 +154,7 @@ export function startNostrEngine(sk: string) {
                 attachments = Array.isArray(obj.as) ? obj.as : undefined
         const pass: string = typeof obj.p === 'string' ? obj.p : ''
                 // lazy decode if entries are encrypted references
-                const resolve = async (ref: any): Promise<string | null> => {
+        const resolve = async (ref: any): Promise<string | null> => {
                   try {
                     if (typeof ref === 'string' && ref.startsWith('data:')) return ref
                     if (ref && ref.url && ref.enc) {
@@ -169,8 +169,9 @@ export function startNostrEngine(sk: string) {
                           if (obj) b64 = obj.base64Data
                         }
                       }
-                      // No inline fallback; require fetch
-                      if (!b64) return null
+          // Inline ciphertext fallback
+          if (!b64 && typeof ref.ctInline === 'string') b64 = ref.ctInline
+          if (!b64) return null
                       const bin = atob(b64)
                       const bytes = new Uint8Array(bin.length)
                       for (let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i)
@@ -319,7 +320,7 @@ export function startNostrEngine(sk: string) {
                   attachments = Array.isArray(obj.as) ? obj.as : undefined
                   pass = typeof obj.p === 'string' ? obj.p : ''
                   // attempt lazy decrypt for attachment refs
-                  const resolve = async (ref: any): Promise<string | null> => {
+      const resolve = async (ref: any): Promise<string | null> => {
                     try {
                       if (typeof ref === 'string' && ref.startsWith('data:')) return ref
                       if (ref && ref.enc && (ref.url || ref.ctInline)) {
@@ -334,8 +335,8 @@ export function startNostrEngine(sk: string) {
                             if (obj) b64 = obj.base64Data
                           }
                         }
-                        // No inline fallback; require fetch
-                        if (!b64) return null
+        if (!b64 && typeof ref.ctInline === 'string') b64 = ref.ctInline
+        if (!b64) return null
                         const bin = atob(b64)
                         const bytes = new Uint8Array(bin.length)
                         for (let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i)
@@ -552,8 +553,13 @@ export async function sendDM(
         const enc = await encryptDataURL(d, payload.p)
         const key = `${toHex}:${evtIdSeed}:${Math.random().toString(36).slice(2)}`
         const url = await putObject(key, enc.mime, enc.ct)
-        // Send small pointer only; do not inline ciphertext to keep DM small
-        return { url, enc: { iv: Array.from(atob(enc.iv).split('').map(c=>c.charCodeAt(0))), keySalt: Array.from(atob(enc.keySalt).split('').map(c=>c.charCodeAt(0))), mime: enc.mime, sha256: enc.sha256 } }
+        // Prefer pointer, but if no backend (mem://) and ciphertext is small, include ctInline for immediate cross-device receive
+        const out: any = { url, enc: { iv: Array.from(atob(enc.iv).split('').map(c=>c.charCodeAt(0))), keySalt: Array.from(atob(enc.keySalt).split('').map(c=>c.charCodeAt(0))), mime: enc.mime, sha256: enc.sha256 } }
+        if (url.startsWith('mem://')) {
+          const bytes = base64ByteLength(enc.ct)
+          if (bytes <= SMALL_INLINE_LIMIT) out.ctInline = enc.ct
+        }
+        return out
       } else {
         // NEW: plain upload (no encryption), return a small mem: url
         const { mime, bytes } = dataURLToBytes(d)
@@ -967,4 +973,9 @@ function dataURLToBytes(u: string): { mime: string, bytes: Uint8Array } {
   const txt = decodeURIComponent(payload)
   const enc = new TextEncoder()
   return { mime, bytes: enc.encode(txt) }
+}
+
+function base64ByteLength(b64: string): number {
+  const padding = (b64.endsWith('==') ? 2 : b64.endsWith('=') ? 1 : 0)
+  return Math.floor((b64.length * 3) / 4) - padding
 }

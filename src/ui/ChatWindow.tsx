@@ -149,6 +149,60 @@ export function ChatWindow() {
     if (scrollerRef.current) scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight
   }, [msgs.length])
 
+  // Auto-resolve pointer attachments for visible items (best-effort, background)
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      const maxConcurrent = 3
+      const tasks: Array<() => Promise<void>> = []
+      const seen = new Set<string>()
+      for (const m of items) {
+        if (!m) continue
+        if (typeof m.attachment === 'string' && isPointer(m.attachment) && !seen.has(m.id+':a')) {
+          seen.add(m.id+':a')
+          const ptr = m.attachment
+          tasks.push(async () => {
+            const d = await resolvePointerToDataURL(ptr)
+            if (!cancelled && d && selectedPeer) updateMessage(selectedPeer, m.id, { attachment: d })
+          })
+        }
+        if (Array.isArray(m.attachments)) {
+          m.attachments.forEach((a: string, i: number) => {
+            if (typeof a === 'string' && isPointer(a) && !seen.has(m.id+':as:'+i)) {
+              seen.add(m.id+':as:'+i)
+              const ptr = a
+              tasks.push(async () => {
+                const d = await resolvePointerToDataURL(ptr)
+                if (!cancelled && d && selectedPeer) {
+                  const conv = useChatStore.getState().conversations[selectedPeer] || []
+                  const found = conv.find((x: any) => x.id === m.id)
+                  const base = (found?.attachments || m.attachments || []) as string[]
+                  const next = [...base]
+                  next[i] = d
+                  updateMessage(selectedPeer, m.id, { attachments: next })
+                }
+              })
+            }
+          })
+        }
+      }
+      // run with limited concurrency
+      const queue = tasks.slice()
+      const workers: Promise<void>[] = []
+      for (let i=0; i<Math.min(maxConcurrent, queue.length); i++) {
+        workers.push((async function worker(){
+          while (queue.length && !cancelled) {
+            const job = queue.shift()!
+            try { await job() } catch {}
+          }
+        })())
+      }
+      await Promise.all(workers)
+    }
+    run()
+    return () => { cancelled = true }
+  }, [items, selectedPeer, updateMessage])
+
   // if user is near bottom when new messages arrive, keep pinned to bottom
   useEffect(() => {
     const scroller = scrollerRef.current
