@@ -45,7 +45,11 @@ app.post('/upload', (req, res) => {
   const { key, mime, data } = req.body || {}
   if (!key || !mime || !data) return res.status(400).json({ error: 'Missing fields' })
   console.log(`[POST] /upload key=${key} mime=${mime} bytes=${(data?.length||0)} store.size(before)=${store.size}`)
-  store.set(key, { mime, data })
+  // Store under both raw and encoded variants to be robust to client encoding
+  const rawKey = String(key)
+  const encKey = encodeURIComponent(rawKey)
+  store.set(rawKey, { mime, data })
+  store.set(encKey, { mime, data })
   const url = `${req.protocol}://${req.get('host')}/o/${encodeURIComponent(key)}`
   console.log(`[POST] -> 200 url=${url} store.size(after)=${store.size}`)
   res.json({ url })
@@ -53,13 +57,25 @@ app.post('/upload', (req, res) => {
 
 app.get('/o/:key', (req, res) => {
   const key = req.params.key
-  const v = store.get(key)
+  // Try exact, decoded, and re-encoded variants
+  const dec = decodeURIComponent(key)
+  const v = store.get(key) || store.get(dec) || store.get(encodeURIComponent(dec))
   if (!v) {
     console.log(`[GET] /o key=${key} -> 404 store.size=${store.size}`)
     return res.status(404).json({ error: 'Not found' })
   }
   console.log(`[GET] /o key=${key} -> 200 mime=${v.mime} size=${(v.data?.length||0)} store.size=${store.size}`)
   res.json(v)
+})
+
+// Optional HEAD for existence check
+app.head('/o/:key', (req, res) => {
+  const key = req.params.key
+  const dec = decodeURIComponent(key)
+  const v = store.get(key) || store.get(dec) || store.get(encodeURIComponent(dec))
+  if (!v) return res.sendStatus(404)
+  res.setHeader('Content-Type', v.mime || 'application/octet-stream')
+  return res.sendStatus(200)
 })
 
 const port = process.env.PORT || 8787
