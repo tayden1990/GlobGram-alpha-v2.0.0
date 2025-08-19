@@ -58,6 +58,19 @@ export function ChatWindow() {
   
   // Grid layout ensures footer has its own row and never overlaps the scroller
   
+  // Warn once when no upload backend is configured (mem:// fallback is not cross-device)
+  useEffect(() => {
+    try {
+      const hasBackend = Boolean((import.meta as any).env?.VITE_UPLOAD_BASE_URL)
+      const warnedKey = 'warn_upload_backend_v1'
+      const warned = localStorage.getItem(warnedKey)
+      if (!hasBackend && !warned) {
+  show(t('chat.mediaUnavailable') || 'Media may be unavailable to others. Configure upload backend.', 'info')
+        localStorage.setItem(warnedKey, '1')
+      }
+    } catch {}
+  }, [])
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setLightbox(null) }
     window.addEventListener('keydown', onKey)
@@ -272,6 +285,7 @@ export function ChatWindow() {
                         <button style={{ fontSize: 12 }} onClick={async () => {
                           const d = await resolvePointerToDataURL(m.attachment!)
                           if (d) updateMessage(selectedPeer, m.id, { attachment: d })
+                          else show(t('chat.mediaUnavailable')!, 'error')
                         }}>{t('chat.load') || 'Load'}</button>
                       </div>
                     )}
@@ -378,6 +392,8 @@ export function ChatWindow() {
                               const next = [...(m.attachments || [])]
                               next[i] = d
                               updateMessage(selectedPeer, m.id, { attachments: next })
+                            } else {
+                              show(t('chat.mediaUnavailable')!, 'error')
                             }
                           }}>{t('chat.load') || 'Load'}</button>
                         </div>

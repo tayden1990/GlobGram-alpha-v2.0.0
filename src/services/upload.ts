@@ -32,12 +32,22 @@ export async function putObject(key: string, mime: string, base64Data: string): 
 }
 
 export async function getObject(keyOrUrl: string): Promise<{ mime: string; base64Data: string } | null> {
-  if (BASE_URL && !parseMemUrl(keyOrUrl)) {
-    // GET from backend: /o/:key -> returns { mime, data }
+  // If we received a full HTTP(S) URL, fetch it directly regardless of BASE_URL
+  if (/^https?:\/\//i.test(keyOrUrl)) {
+    try {
+      log(`Download <- ${keyOrUrl} (absolute)`)
+      const res = await fetch(keyOrUrl)
+      if (!res.ok) throw new Error(`Get failed: ${res.status}`)
+      const out = await res.json().catch(() => ({})) as any
+      if (out && typeof out.data === 'string') return { mime: out.mime || 'application/octet-stream', base64Data: out.data }
+    } catch (e) {
+      log(`Absolute download failed: ${(e as any)?.message || e}`, 'warn')
+    }
+  } else if (BASE_URL && !parseMemUrl(keyOrUrl)) {
+    // GET from backend using configured base URL: /o/:key -> { mime, data }
     try {
       log(`Download <- ${keyOrUrl} (backend)`)
-      const key = keyOrUrl
-      const url = key.startsWith('http') ? key : `${BASE_URL.replace(/\/$/, '')}/o/${encodeURIComponent(key)}`
+      const url = `${BASE_URL.replace(/\/$/, '')}/o/${encodeURIComponent(keyOrUrl)}`
       const res = await fetch(url)
       if (!res.ok) throw new Error(`Get failed: ${res.status}`)
       const out = await res.json().catch(() => ({})) as any

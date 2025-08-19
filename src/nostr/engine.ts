@@ -529,6 +529,7 @@ export async function sendDM(
   payload: { t?: string; a?: any; as?: any[]; p?: string },
   opts?: { reuseId?: string }
 ): Promise<{ id: string; acked: Promise<boolean> }> {
+  const SMALL_INLINE_LIMIT = 128 * 1024 // 128 KB inline fallback for non-encrypted media
   // Normalize recipient
   const toHex = normalizeToHexPubkey(to)
   if (!toHex) {
@@ -559,7 +560,10 @@ export async function sendDM(
         const key = `${toHex}:${evtIdSeed}:${Math.random().toString(36).slice(2)}`
         const b64 = bytesToBase64(bytes)
         const url = await putObject(key, mime, b64)
-        return url // string (mem:…), resolve() on the receiver will fetch it
+  // If no backend and storage fell back to mem://, receivers can't fetch it.
+  // For small files, inline the original data URL so it works cross-device.
+  if (url.startsWith('mem://') && bytes.length <= SMALL_INLINE_LIMIT) return d
+  return url // string (mem:// or http…)
       }
     }
     return d

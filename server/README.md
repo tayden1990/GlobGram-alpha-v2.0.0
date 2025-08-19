@@ -13,6 +13,24 @@ npm i express cors body-parser --prefix server
 node server/upload-server.js
 ```
 
+Cross‑device (receiver fetch) notes
+- The in‑app fallback uses mem:// which lives only in the sender's tab. Receivers cannot read it.
+- To allow receivers to fetch media, you must run the upload server and set VITE_UPLOAD_BASE_URL.
+- For two devices on the same Wi‑Fi, use your LAN IP, not localhost.
+
+Example on Windows PowerShell
+```powershell
+# 1) Start the upload server
+npm i express cors body-parser --prefix server
+node server/upload-server.js
+
+# 2) Create a .env in project root with your LAN IP (replace with your own):
+"VITE_UPLOAD_BASE_URL=http://192.168.1.50:8787" | Out-File -Encoding utf8 .env
+
+# 3) Restart the app
+npm run dev
+```
+
 Configure app
 - Create `.env` in project root:
 ```
