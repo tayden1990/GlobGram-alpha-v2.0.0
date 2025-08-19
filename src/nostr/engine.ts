@@ -531,6 +531,11 @@ export async function sendDM(
   opts?: { reuseId?: string }
 ): Promise<{ id: string; acked: Promise<boolean> }> {
   const SMALL_INLINE_LIMIT = 128 * 1024 // 128 KB inline fallback for non-encrypted media
+  const readableSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+  }
   // Normalize recipient
   const toHex = normalizeToHexPubkey(to)
   if (!toHex) {
@@ -547,6 +552,7 @@ export async function sendDM(
   // When payload.p is provided, we encrypt+upload (existing behavior).
   // When payload.p is empty, we still upload the raw bytes and return a small mem: pointer (new).
   let requiresBackendForReceiver = false
+  let requiresBackendBytes: number | null = null
   const processOne = async (d: any): Promise<any> => {
     if (typeof d === 'string' && d.startsWith('data:')) {
       const evtIdSeed = Math.floor(Math.random() * 1e9)
@@ -559,7 +565,7 @@ export async function sendDM(
         if (url.startsWith('mem://')) {
           const bytes = base64ByteLength(enc.ct)
           if (bytes <= SMALL_INLINE_LIMIT) out.ctInline = enc.ct
-    else requiresBackendForReceiver = true
+    else { requiresBackendForReceiver = true; requiresBackendBytes = bytes }
         }
         return out
       } else {
@@ -571,7 +577,7 @@ export async function sendDM(
   // If no backend and storage fell back to mem://, receivers can't fetch it.
   // For small files, inline the original data URL so it works cross-device.
   if (url.startsWith('mem://') && bytes.length <= SMALL_INLINE_LIMIT) return d
-  if (url.startsWith('mem://') && bytes.length > SMALL_INLINE_LIMIT) requiresBackendForReceiver = true
+  if (url.startsWith('mem://') && bytes.length > SMALL_INLINE_LIMIT) { requiresBackendForReceiver = true; requiresBackendBytes = bytes.length }
   return url // string (mem:// or http…)
       }
     }
@@ -636,10 +642,17 @@ export async function sendDM(
     })
   }
 
-  // If we detected that a large attachment fell back to mem:// (no backend), warn the sender.
+  // If we detected that a large attachment fell back to mem:// (no backend), warn the sender with details.
   try {
     if (requiresBackendForReceiver) {
-      emitToast(tGlobal('chat.mediaUnavailable'), 'info')
+      const env = (import.meta as any).env || {}
+      const base = env?.VITE_UPLOAD_BASE_URL || 'unset'
+      const mode = (env?.VITE_UPLOAD_MODE || 'simple')
+      const auth = (env?.VITE_UPLOAD_AUTH_MODE || (env?.VITE_UPLOAD_AUTH_TOKEN ? 'token' : 'none'))
+      const sz = requiresBackendBytes != null ? readableSize(requiresBackendBytes) : 'unknown'
+      const limit = readableSize(SMALL_INLINE_LIMIT)
+      const msg = `Media fell back to mem:// (size ${sz} > inline limit ${limit}). Receiver cannot fetch while you're offline. Configure an upload server.\nBASE_URL=${base}, MODE=${mode}, AUTH=${auth}`
+      emitToast(msg, 'info')
       log('Large media requires upload backend for receiver to view (set VITE_UPLOAD_BASE_URL)', 'warn')
     }
   } catch {}
