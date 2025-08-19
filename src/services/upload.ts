@@ -84,26 +84,41 @@ export async function putObject(key: string, mime: string, base64Data: string): 
         form.set('content_type', mime)
         // Optional extras (caption/alt) could be set by callers later
         const uploadUrl = apiUrl
-  const init: RequestInit = { method: 'POST', body: form }
-        // Add NIP-98 Authorization when enabled
+        // Build attempt list: NIP-98, Bearer, no-auth
+        const attempts: RequestInit[] = []
+        // NIP-98 attempt
         if (AUTH_MODE === 'nip98') {
           const payloadHex = await sha256Hex(bytes)
           const auth = await makeNip98Header(uploadUrl, 'POST', payloadHex)
           if (auth) {
-            const h = init.headers instanceof Headers ? init.headers : new Headers(init.headers as any)
+            const h = new Headers()
             h.set('Authorization', auth)
-            init.headers = h
+            attempts.push({ method: 'POST', body: form, headers: h })
           } else {
             emitToast('Cannot sign NIP-98 auth. Import a key or enable a NIP-07 extension.', 'error')
           }
-        } else {
-          // Fallback to token if provided
-          Object.assign(init, withAuth(init, uploadUrl))
         }
-        const res = await fetch(uploadUrl, init)
-        if (!res.ok) {
-          emitToast(`Upload failed (${res.status}). Check auth (NIP-98) and CORS.`, 'error')
-          throw new Error(`Upload failed: ${res.status}`)
+        // Bearer token attempt
+        if (AUTH_TOKEN) {
+          const h = new Headers()
+          h.set('Authorization', `Bearer ${AUTH_TOKEN}`)
+          attempts.push({ method: 'POST', body: form, headers: h })
+        }
+        // No-auth attempt last
+        attempts.push({ method: 'POST', body: form })
+
+        let res: Response | null = null
+        let lastErr: any = null
+        for (const init of attempts) {
+          try {
+            res = await fetch(uploadUrl, init)
+            if (res.ok) break
+            lastErr = new Error(`HTTP ${res.status}`)
+          } catch (e) { lastErr = e }
+        }
+        if (!res || !res.ok) {
+          emitToast(`Upload failed. ${lastErr?.message || ''} Check server, auth (NIP-98), and CORS.`, 'error')
+          throw (lastErr || new Error('Upload failed'))
         }
         const out = await res.json().catch(() => ({})) as any
         // Prefer nip94_event.tags url if provided, else try generic url
