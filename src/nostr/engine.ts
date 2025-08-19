@@ -1,6 +1,6 @@
 import { getPublicKey, nip04, nip19, finalizeEvent, type Event, type EventTemplate } from 'nostr-tools'
 import { getRelayPool, resetRelayPool, trackListener } from './pool'
-import { hexToBytes, bytesToHex } from './utils'
+import { hexToBytes, bytesToHex, bytesToBase64 } from './utils'
 import { encryptDataURL, type EncryptedMedia } from './media'
 import { putObject, getObject, parseMemUrl } from '../services/upload'
 import { useChatStore, type ChatMessage } from '../state/chatStore'
@@ -186,15 +186,32 @@ export function startNostrEngine(sk: string) {
                   } catch {}
                   return null
                 }
-                if (typeof attachment === 'object' && attachment) {
+                // Resolve encrypted refs or fetch plain mem/http URLs
+                if (typeof attachment === 'string' && (attachment.startsWith('mem://') || attachment.startsWith('http'))) {
+                  try {
+                    const key = parseMemUrl(attachment) ?? attachment
+                    const obj = await getObject(key)
+                    if (obj) attachment = `data:${obj.mime};base64,${obj.base64Data}`
+                  } catch {}
+                } else if (typeof attachment === 'object' && attachment) {
                   const r = await resolve(attachment)
                   attachment = r || undefined
                 }
                 if (attachments) {
                   const out: string[] = []
                   for (const a of attachments) {
-                    if (typeof a === 'string') out.push(a)
-                    else {
+                    if (typeof a === 'string') {
+                      if (a.startsWith('mem://') || a.startsWith('http')) {
+                        try {
+                          const key = parseMemUrl(a) ?? a
+                          const obj = await getObject(key)
+                          if (obj) out.push(`data:${obj.mime};base64,${obj.base64Data}`)
+                          else out.push(a)
+                        } catch { out.push(a) }
+                      } else {
+                        out.push(a)
+                      }
+                    } else {
                       const r = await resolve(a)
                       if (r) out.push(r)
                     }
@@ -334,15 +351,32 @@ export function startNostrEngine(sk: string) {
                     } catch {}
                     return null
                   }
-                  if (typeof attachment === 'object' && attachment) {
+                  // Resolve encrypted refs or fetch plain mem/http URLs
+                  if (typeof attachment === 'string' && (attachment.startsWith('mem://') || attachment.startsWith('http'))) {
+                    try {
+                      const key = parseMemUrl(attachment) ?? attachment
+                      const obj = await getObject(key)
+                      if (obj) attachment = `data:${obj.mime};base64,${obj.base64Data}`
+                    } catch {}
+                  } else if (typeof attachment === 'object' && attachment) {
                     const r = await resolve(attachment)
                     attachment = r || undefined
                   }
                   if (attachments) {
                     const out: string[] = []
                     for (const a of attachments) {
-                      if (typeof a === 'string') out.push(a)
-                      else {
+                      if (typeof a === 'string') {
+                        if (a.startsWith('mem://') || a.startsWith('http')) {
+                          try {
+                            const key = parseMemUrl(a) ?? a
+                            const obj = await getObject(key)
+                            if (obj) out.push(`data:${obj.mime};base64,${obj.base64Data}`)
+                            else out.push(a)
+                          } catch { out.push(a) }
+                        } else {
+                          out.push(a)
+                        }
+                      } else {
                         const r = await resolve(a)
                         if (r) out.push(r)
                       }
@@ -401,6 +435,49 @@ export function startNostrEngine(sk: string) {
     // also seed initial
     updateCurrentRoomSub(useRoomStore.getState().selectedRoom)
   } catch {}
+
+  // After subscriptions are attached, sweep pendings: RESEND instead of fail-only
+  try {
+    const now = Math.floor(Date.now() / 1000)
+    const convs = useChatStore.getState().conversations
+    const pendings: Array<{ peer: string, m: ChatMessage }> = []
+    for (const [peer, msgs] of Object.entries(convs)) {
+      for (const m of msgs) {
+        // resend if pending and older than 20s (avoid racing just-sent)
+        if (m.status === 'pending' && (now - (m.ts || now)) > 20) {
+          pendings.push({ peer, m })
+        }
+      }
+    }
+
+    // Stagger resends to avoid burst
+    pendings.forEach((item, idx) => {
+      setTimeout(async () => {
+        try {
+          log(`Resend.pending -> ${item.peer.slice(0,8)}… id=${item.m.id.slice(0,8)}…`)
+          // Update UI hint
+          try { useChatStore.getState().updateMessageStatus(item.peer, item.m.id, 'pending', 'Resending…') } catch {}
+          // Reuse the same bubble id
+          const { acked } = await sendDM(
+            sk,
+            item.peer,
+            { t: item.m.text, a: item.m.attachment, as: item.m.attachments },
+            { reuseId: item.m.id }
+          )
+          // Optionally observe ack result (no-op here; sendDM updates status on OK)
+          acked.then(ok => {
+            if (!ok) {
+              // If still no OK after our internal timeout, keep pending for later manual retry
+              // or mark failed if you prefer:
+              // useChatStore.getState().updateMessageStatus(item.peer, item.m.id, 'failed', 'No relay acknowledgement')
+            }
+          }).catch(() => {})
+        } catch (e) {
+          try { useChatStore.getState().updateMessageStatus(item.peer, item.m.id, 'failed', (e as Error)?.message || 'Resend failed') } catch {}
+        }
+      }, 200 * idx)
+    })
+  } catch {}
 }
 
 // Lightweight data refresh: re-send subscription REQs to all connected relays
@@ -445,62 +522,86 @@ export function refreshSubscriptions() {
   } catch {}
 }
 
-export async function sendDM(sk: string, to: string, payload: { t?: string; a?: any; as?: any[]; p?: string }): Promise<{ id: string; acked: Promise<boolean> }> {
-  // Normalize 'to' first (accept npub/nprofile/hex/url/scheme), abort on failure
+export async function sendDM(
+  sk: string,
+  to: string,
+  payload: { t?: string; a?: any; as?: any[]; p?: string },
+  opts?: { reuseId?: string }
+): Promise<{ id: string; acked: Promise<boolean> }> {
+  // Normalize recipient
   const toHex = normalizeToHexPubkey(to)
   if (!toHex) {
-    log(`sendDM.invalidPubkey input=${(to||'').slice(0,32)}…`,'error')
     emitToast(tGlobal('errors.invalidPubkey'), 'error')
     const acked = Promise.resolve(false)
     return { id: 'invalid', acked }
   }
 
-  log(`sendDM -> ${toHex.slice(0,8)}… t=${payload.t ? (payload.t.slice(0,24)+(payload.t.length>24?'…':'')) : ''} a=${payload.a?'y':'n'} as=${payload.as?.length||0}`)
   const urls = useRelayStore.getState().relays.filter(r => r.enabled).map(r => r.url)
   const pool = getRelayPool(urls)
   const now = Math.floor(Date.now() / 1000)
-  // If attachments exist and are data URLs, optionally encrypt and upload
+
+  // If attachments exist and are data URLs, ALWAYS upload first.
+  // When payload.p is provided, we encrypt+upload (existing behavior).
+  // When payload.p is empty, we still upload the raw bytes and return a small mem: pointer (new).
   const processOne = async (d: any): Promise<any> => {
-    if (typeof d === 'string' && d.startsWith('data:') && payload.p) {
-      // encrypt and upload
-  const enc = await encryptDataURL(d, payload.p)
-  const key = `${toHex}:${evtIdSeed}:${Math.random().toString(36).slice(2)}`
-      const url = await putObject(key, enc.mime, enc.ct)
-  return { url, enc: { iv: Array.from(atob(enc.iv).split('').map(c=>c.charCodeAt(0))), keySalt: Array.from(atob(enc.keySalt).split('').map(c=>c.charCodeAt(0))), mime: enc.mime, sha256: enc.sha256 }, ctInline: enc.ct }
+    if (typeof d === 'string' && d.startsWith('data:')) {
+      const evtIdSeed = Math.floor(Math.random() * 1e9)
+      if (payload.p) {
+        const enc = await encryptDataURL(d, payload.p)
+        const key = `${toHex}:${evtIdSeed}:${Math.random().toString(36).slice(2)}`
+        const url = await putObject(key, enc.mime, enc.ct)
+        // Keep the existing encrypted shape for receivers
+        return { url, enc: { iv: Array.from(atob(enc.iv).split('').map(c=>c.charCodeAt(0))), keySalt: Array.from(atob(enc.keySalt).split('').map(c=>c.charCodeAt(0))), mime: enc.mime, sha256: enc.sha256 }, ctInline: enc.ct }
+      } else {
+        // NEW: plain upload (no encryption), return a small mem: url
+        const { mime, bytes } = dataURLToBytes(d)
+        const key = `${toHex}:${evtIdSeed}:${Math.random().toString(36).slice(2)}`
+        const b64 = bytesToBase64(bytes)
+        const url = await putObject(key, mime, b64)
+        return url // string (mem:…), resolve() on the receiver will fetch it
+      }
     }
     return d
   }
-  const evtIdSeed = Math.floor(Math.random() * 1e9)
-  let outA = payload.a ? await processOne(payload.a) : undefined
-  let outAs = payload.as ? await Promise.all(payload.as.map(processOne)) : undefined
+
+  // Build attachments
+  const outA = payload.a ? await processOne(payload.a) : undefined
+  const outAs = payload.as ? await Promise.all(payload.as.map(processOne)) : undefined
   const body = JSON.stringify({ t: payload.t, a: outA, as: outAs, p: payload.p })
   const ciphertext = await nip04.encrypt(sk, toHex, body)
+
   const template: EventTemplate = { kind: 4, created_at: now, content: ciphertext, tags: [["p", toHex]] }
   let evt: any = finalizeEvent(template, hexToBytes(sk))
   const pub = JSON.stringify(["EVENT", evt])
-  // add pending message immediately to avoid race with fast OK acks
+
+  // getPublicKey expects a Uint8Array in our nostr-tools version
   const me = getPublicKey(hexToBytes(sk))
-  const addMessage = useChatStore.getState().addMessage
-  addMessage(toHex, { id: evt.id, from: me, to: toHex, ts: now, text: payload.t, attachment: payload.a, attachments: payload.as, status: 'pending' })
+
+  // Reuse existing pending bubble if provided; else add a new message
+  if (opts?.reuseId) {
+    try {
+      // ensure the existing bubble carries the latest text/attachments and id
+      useChatStore.getState().updateMessageId(toHex, opts.reuseId, evt.id)
+      useChatStore.getState().updateMessageStatus(toHex, evt.id, 'pending', 'Resending…')
+    } catch {}
+  } else {
+    useChatStore.getState().addMessage(toHex, {
+      id: evt.id, from: me, to: toHex, ts: now,
+      text: payload.t, attachment: outA, attachments: outAs, status: 'pending'
+    })
+  }
+
   let acked = false
   let ackCount = 0
   let lastReason: string | undefined
   let powBitsRequired: number | null = null
   const handlers: Array<{ ws: WebSocket, fn: (ev: MessageEvent) => void }> = []
-  // Promise that resolves true on first OK ack, or false after timeout
   let resolveAck: (v: boolean) => void = () => {}
   const ackedPromise = new Promise<boolean>(res => (resolveAck = res))
-
-  // Timeout: if no OK after N seconds, clean handlers and resolve false
   const ACK_TIMEOUT_MS = 8000
   const ackTimeout = setTimeout(() => {
-    try {
-      // remove all per-send handlers to avoid leaks
-      for (const h of handlers) {
-        try { h.ws.removeEventListener('message', h.fn as any) } catch {}
-      }
-      handlers.length = 0
-    } catch {}
+    try { for (const h of handlers) h.ws.removeEventListener('message', h.fn as any) } catch {}
+    handlers.length = 0
     try { resolveAck(false) } catch {}
   }, ACK_TIMEOUT_MS)
 
@@ -558,10 +659,8 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
     const miningEnabled = (() => { try { return useSettingsStore.getState().powMining } catch { return true } })()
     if (!miningEnabled) {
       const reason = `PoW required (${powBitsRequired} bits) but disabled in Settings`
-  try { useChatStore.getState().updateMessageStatus(toHex, evt.id, 'failed', reason) } catch {}
-  // Surface a toast with an action hint (localized)
-  emitToast(tGlobal('errors.powRequiredEnable'), 'error')
-      // prevent further retries/timeouts and cleanup listeners
+      try { useChatStore.getState().updateMessageStatus(toHex, evt.id, 'failed', reason) } catch {}
+      emitToast(tGlobal('errors.powRequiredEnable'), 'error')
       acked = true
       try { for (const h of handlers) h.ws.removeEventListener('message', h.fn as any) } catch {}
       try { clearTimeout(ackTimeout) } catch {}
@@ -570,15 +669,14 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
       return { id: evt.id, acked: ackedPromise }
     }
     try {
-      // Update status to show we're working
-      useChatStore.getState().updateMessageStatus(to, evt.id, 'pending', `Mining ${powBitsRequired} bits…`)
-  log(`Mining start: ${powBitsRequired} bits for id=${evt.id.slice(0,8)}…`)
+      // Use toHex for peer key here as well
+      useChatStore.getState().updateMessageStatus(toHex, evt.id, 'pending', `Mining ${powBitsRequired} bits…`)
+      log(`Mining start: ${powBitsRequired} bits for id=${evt.id.slice(0,8)}…`)
       const { newEvt } = await mineEventWithPow(evt, powBitsRequired)
       const oldId = evt.id
       evt = newEvt
-  log(`Mining success: new id=${evt.id.slice(0,8)}… old=${oldId.slice(0,8)}…`)
-      // Update local message id so receipts/acks match
-  try { useChatStore.getState().updateMessageId(toHex, oldId, evt.id) } catch {}
+      log(`Mining success: new id=${evt.id.slice(0,8)}… old=${oldId.slice(0,8)}…`)
+      try { useChatStore.getState().updateMessageId(toHex, oldId, evt.id) } catch {}
       const pub2 = JSON.stringify(["EVENT", evt])
       for (const [url, ws] of pool.entries()) {
         if (ws.readyState === ws.OPEN) {
@@ -614,22 +712,21 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
   }
   // fallback: if no relay OK after 15-20s, mark as failed
   try {
-  const failTimer = setTimeout(() => {
+    const failTimer = setTimeout(() => {
       try {
         if (acked) return
-        const conv = useChatStore.getState().conversations[to] || []
+        // Use toHex conversation key for lookup
+        const conv = useChatStore.getState().conversations[toHex] || []
         const found = conv.find(m => m.id === evt.id)
         if (found && found.status === 'pending') {
           const reason = lastReason || (powBitsRequired ? `PoW required (${powBitsRequired} bits)` : (ackCount > 0 ? `Partial acks: ${ackCount}` : 'No relay acknowledgement'))
-          useChatStore.getState().updateMessageStatus(to, evt.id, 'failed', reason)
+          useChatStore.getState().updateMessageStatus(toHex, evt.id, 'failed', reason)
         }
         try { for (const h of handlers) h.ws.removeEventListener('message', h.fn as any) } catch {}
       } catch {}
-  }, 20000)
-  // if we do get an ack later, clear timer
-  if (acked) try { clearTimeout(failTimer) } catch {}
+    }, 20000)
+    if (acked) try { clearTimeout(failTimer) } catch {}
   } catch {}
-  // Return handle so callers can await acked
   return { id: evt.id, acked: ackedPromise }
 }
 
@@ -709,11 +806,19 @@ export async function sendRoom(sk: string, roomId: string, text?: string, opts?:
   const now = Math.floor(Date.now() / 1000)
   const evtIdSeed = Math.floor(Math.random() * 1e9)
   const processOne = async (d: any): Promise<any> => {
-  if (typeof d === 'string' && d.startsWith('data:') && opts?.p) {
-      const enc = await encryptDataURL(d, opts.p)
-      const key = `${roomId}:${evtIdSeed}:${Math.random().toString(36).slice(2)}`
-      const url = await putObject(key, enc.mime, enc.ct)
-      return { url, enc: { iv: Array.from(atob(enc.iv).split('').map(c=>c.charCodeAt(0))), keySalt: Array.from(atob(enc.keySalt).split('').map(c=>c.charCodeAt(0))), mime: enc.mime, sha256: enc.sha256 }, ctInline: enc.ct }
+    if (typeof d === 'string' && d.startsWith('data:')) {
+      if (opts?.p) {
+        const enc = await encryptDataURL(d, opts.p)
+        const key = `${roomId}:${evtIdSeed}:${Math.random().toString(36).slice(2)}`
+        const url = await putObject(key, enc.mime, enc.ct)
+        return { url, enc: { iv: Array.from(atob(enc.iv).split('').map(c=>c.charCodeAt(0))), keySalt: Array.from(atob(enc.keySalt).split('').map(c=>c.charCodeAt(0))), mime: enc.mime, sha256: enc.sha256 }, ctInline: enc.ct }
+      } else {
+        const { mime, bytes } = dataURLToBytes(d)
+        const key = `${roomId}:${evtIdSeed}:${Math.random().toString(36).slice(2)}`
+        const b64 = bytesToBase64(bytes)
+        const url = await putObject(key, mime, b64)
+        return url
+      }
     }
     return d
   }
@@ -787,49 +892,43 @@ export async function updateRoomMembers(sk: string, roomId: string, members: str
   useRoomStore.getState().setMembers(roomId, members)
 }
 
-// Normalize a recipient pubkey to 64-hex. Accepts:
-// - ?invite=<npub|nprofile|hex> in a URL
-// - nostr:/web+nostr: schemes
-// - raw npub / nprofile
-// - raw 64-hex
+// Normalize a recipient pubkey to 64-hex (accepts url/nostr:/npub/nprofile/hex)
 function normalizeToHexPubkey(input: string): string | null {
   if (!input) return null
   let s = input.trim()
-
-  // If it's a full URL, extract a plausible invite param or embedded token
   try {
     const u = new URL(s)
     const q = u.searchParams
     const cand = q.get('invite') || q.get('npub') || q.get('pubkey') || ''
     if (cand) s = cand
-  } catch {
-    // not a URL; continue
-  }
-
-  // Strip nostr: / web+nostr: schemes
+  } catch {}
   s = s.replace(/^nostr:/i, '').replace(/^web\+nostr:/i, '')
-
-  // Pull out the first token that looks like npub/nprofile/hex
   const m = s.match(/(npub1[02-9ac-hj-np-z]{6,}|nprofile1[02-9ac-hj-np-z]{6,}|[0-9a-fA-F]{64})/)
   if (!m) return null
-  const token = m[1]
-
-  if (/^[0-9a-fA-F]{64}$/.test(token)) {
-    return token.toLowerCase()
-  }
-
+  const tok = m[1]
+  if (/^[0-9a-fA-F]{64}$/.test(tok)) return tok.toLowerCase()
   try {
-    const dec = nip19.decode(token)
-    if (dec.type === 'npub') {
-      // dec.data is already 64-hex; DO NOT bytesToHex it again
-      return String(dec.data)
-    }
-    if (dec.type === 'nprofile') {
-      const d = dec.data as any
-      if (d?.pubkey && /^[0-9a-fA-F]{64}$/.test(d.pubkey)) return String(d.pubkey).toLowerCase()
-    }
-  } catch {
-    // fall-through
-  }
+    const dec = nip19.decode(tok)
+    if (dec.type === 'npub') return String(dec.data)
+    if (dec.type === 'nprofile') return String((dec.data as any)?.pubkey || '')
+  } catch {}
   return null
+}
+
+function dataURLToBytes(u: string): { mime: string, bytes: Uint8Array } {
+  // data:[<mime>][;base64],<data>
+  const m = /^data:([^;,]+)?(;base64)?,(.*)$/i.exec(u)
+  const mime = (m?.[1] || 'application/octet-stream').trim()
+  const b64 = (m?.[2] || '').toLowerCase().includes('base64')
+  const payload = m?.[3] || ''
+  if (b64) {
+    const bin = atob(payload)
+    const out = new Uint8Array(bin.length)
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
+    return { mime, bytes: out }
+  }
+  // URI-encoded
+  const txt = decodeURIComponent(payload)
+  const enc = new TextEncoder()
+  return { mime, bytes: enc.encode(txt) }
 }
