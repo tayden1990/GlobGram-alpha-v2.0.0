@@ -546,6 +546,7 @@ export async function sendDM(
   // If attachments exist and are data URLs, ALWAYS upload first.
   // When payload.p is provided, we encrypt+upload (existing behavior).
   // When payload.p is empty, we still upload the raw bytes and return a small mem: pointer (new).
+  let requiresBackendForReceiver = false
   const processOne = async (d: any): Promise<any> => {
     if (typeof d === 'string' && d.startsWith('data:')) {
       const evtIdSeed = Math.floor(Math.random() * 1e9)
@@ -558,6 +559,7 @@ export async function sendDM(
         if (url.startsWith('mem://')) {
           const bytes = base64ByteLength(enc.ct)
           if (bytes <= SMALL_INLINE_LIMIT) out.ctInline = enc.ct
+    else requiresBackendForReceiver = true
         }
         return out
       } else {
@@ -569,6 +571,7 @@ export async function sendDM(
   // If no backend and storage fell back to mem://, receivers can't fetch it.
   // For small files, inline the original data URL so it works cross-device.
   if (url.startsWith('mem://') && bytes.length <= SMALL_INLINE_LIMIT) return d
+  if (url.startsWith('mem://') && bytes.length > SMALL_INLINE_LIMIT) requiresBackendForReceiver = true
   return url // string (mem:// or http…)
       }
     }
@@ -632,6 +635,14 @@ export async function sendDM(
       text: payload.t, attachment: displayA || undefined, attachments: displayAs || undefined, status: 'pending'
     })
   }
+
+  // If we detected that a large attachment fell back to mem:// (no backend), warn the sender.
+  try {
+    if (requiresBackendForReceiver) {
+      emitToast(tGlobal('chat.mediaUnavailable'), 'info')
+      log('Large media requires upload backend for receiver to view (set VITE_UPLOAD_BASE_URL)', 'warn')
+    }
+  } catch {}
 
   let acked = false
   let ackCount = 0
