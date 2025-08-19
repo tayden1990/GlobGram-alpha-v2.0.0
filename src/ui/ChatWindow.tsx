@@ -342,6 +342,7 @@ export function ChatWindow() {
               <div
                 key={vr.key}
                 ref={rowVirtualizer.measureElement}
+                data-index={vr.index}
                 style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${vr.start}px)`, paddingBottom: 8, boxSizing: 'border-box' }}
               >
                 <div style={{ display: 'flex', justifyContent: m.from === myPubkey ? 'flex-end' : 'flex-start' }}>

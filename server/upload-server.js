@@ -1,14 +1,21 @@
-// Minimal upload server stub (Node + Express)
+// Minimal upload server stub (Node + Express, ESM)
 // API:
 //  POST /upload { key, mime, data(base64) } -> { url }
 //  GET  /o/:key -> { mime, data }
 
-const express = require('express')
-const cors = require('cors')
-const bodyParser = require('body-parser')
+import express from 'express'
+import cors from 'cors'
+import bodyParser from 'body-parser'
 
 const app = express()
-app.use(cors())
+// CORS: allow preflight and Authorization header for both /upload and /o/:key
+const corsConfig = {
+  origin: true,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Authorization', 'Content-Type'],
+}
+app.use(cors(corsConfig))
+app.options('*', cors(corsConfig))
 // Raise limit for larger files; align with client MAX_ATTACHMENT_BYTES (10MB) or higher if desired
 app.use(bodyParser.json({ limit: '25mb' }))
 

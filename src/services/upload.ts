@@ -141,6 +141,10 @@ export async function putObject(key: string, mime: string, base64Data: string): 
           if (urlTag && typeof urlTag[1] === 'string') return urlTag[1]
         }
         if (typeof out.url === 'string') return out.url
+        // Compat: some servers return just a "key"; construct predictable path /o/:key under apiUrl
+        if (typeof out.key === 'string') {
+          return `${apiUrl.replace(/\/$/, '')}/o/${encodeURIComponent(out.key)}`
+        }
         // As a last resort, construct standard NIP-96 download path from hash if present
         const oxTag = nip94?.tags?.find((t: any) => Array.isArray(t) && t[0] === 'ox')
         const mTag = nip94?.tags?.find((t: any) => Array.isArray(t) && t[0] === 'm')
@@ -259,37 +263,59 @@ export async function getObject(keyOrUrl: string, opts?: { verbose?: boolean }):
     try {
       const endpoints = await getNip96Endpoints()
       if (!endpoints) throw new Error('NIP-96 discovery failed')
-      const url = `${endpoints.downloadBase.replace(/\/$/, '')}/${encodeURIComponent(keyOrUrl)}`
-      log(`Download <- ${keyOrUrl} (nip96 ${url})`)
-      const attempts: Array<{ init: RequestInit; label: string }> = [{ init: {}, label: 'no-auth' }]
-      if (AUTH_MODE === 'nip98') {
-        const auth = await makeNip98Header(url, 'GET')
-        if (auth) attempts.push({ init: { headers: { Authorization: auth } }, label: 'nip-98' })
-      }
-      if (AUTH_TOKEN) attempts.push({ init: { headers: { Authorization: `Bearer ${AUTH_TOKEN}` } }, label: 'token' })
-      let lastErr: any
-      const attemptLogs: string[] = []
-      for (const { init, label } of attempts) {
+      // Detect if keyOrUrl is a NIP-96 ox hash (64 hex, optional .ext), else treat as server key requiring /o/:key
+      const isHash = /^[0-9a-f]{64}(?:\.[a-z0-9]+)?$/i.test(keyOrUrl)
+      const candidates: string[] = []
+      if (isHash) {
+        candidates.push(`${endpoints.downloadBase.replace(/\/$/, '')}/${encodeURIComponent(keyOrUrl)}`)
+      } else {
+        // Try /o/:key on multiple bases to handle BASE_URL with subpaths (e.g., /upload)
+        const baseTrimmed = BASE_URL.replace(/\/$/, '')
+        const pubTrimmed = (PUBLIC_BASE_URL || '').replace(/\/$/, '')
+        candidates.push(`${baseTrimmed}/o/${encodeURIComponent(keyOrUrl)}`)
+        if (pubTrimmed) candidates.push(`${pubTrimmed}/o/${encodeURIComponent(keyOrUrl)}`)
         try {
-          const res = await fetch(url, init)
-          if (!res.ok) {
-            const text = await res.text().catch(() => '')
-            attemptLogs.push(`[${label}] HTTP ${res.status} ${res.statusText}${text ? ` - ${truncate(text)}` : ''}`)
-            lastErr = new Error(`HTTP ${res.status}`); continue
-          }
-          attemptLogs.push(`[${label}] OK 200`)
-          const ct = res.headers.get('content-type') || ''
-          if (ct.includes('application/json')) {
-            const out = await res.json().catch(() => ({})) as any
-            if (out && typeof out.data === 'string') return { mime: out.mime || 'application/octet-stream', base64Data: out.data }
-          }
-          const buf = await res.arrayBuffer()
-          const b64 = arrayBufferToBase64(buf)
-          const mime = ct || 'application/octet-stream'
-          return { mime, base64Data: b64 }
-        } catch (e) { lastErr = e; attemptLogs.push(`[${label}] ${(e as any)?.message || e}`) }
+          const origin = new URL(BASE_URL)
+          const root = `${origin.protocol}//${origin.host}`
+          candidates.push(`${root}/o/${encodeURIComponent(keyOrUrl)}`)
+        } catch {}
       }
-      if (opts?.verbose) emitToast(`Download failed for key ${keyOrUrl} via ${url}. Attempts:\n- ${attemptLogs.join('\n- ')}`, 'error')
+      const attemptLogs: string[] = []
+      let lastErr: any
+      for (const url of candidates) {
+        log(`Download <- ${keyOrUrl} (nip96 try ${url})`)
+        const attempts: Array<{ init: RequestInit; label: string }> = [{ init: {}, label: 'no-auth' }]
+        if (AUTH_MODE === 'nip98') {
+          const auth = await makeNip98Header(url, 'GET')
+          if (auth) attempts.push({ init: { headers: { Authorization: auth } }, label: 'nip-98' })
+        }
+        if (AUTH_TOKEN) attempts.push({ init: { headers: { Authorization: `Bearer ${AUTH_TOKEN}` } }, label: 'token' })
+        for (const { init, label } of attempts) {
+          try {
+            const res = await fetch(url, init)
+            if (!res.ok) {
+              const text = await res.text().catch(() => '')
+              attemptLogs.push(`${url} -> [${label}] HTTP ${res.status} ${res.statusText}${text ? ` - ${truncate(text)}` : ''}`)
+              lastErr = new Error(`HTTP ${res.status}`)
+              continue
+            }
+            attemptLogs.push(`${url} -> [${label}] OK 200`)
+            const ct = res.headers.get('content-type') || ''
+            if (ct.includes('application/json')) {
+              const out = await res.json().catch(() => ({})) as any
+              if (out && typeof out.data === 'string') return { mime: out.mime || 'application/octet-stream', base64Data: out.data }
+            }
+            const buf = await res.arrayBuffer()
+            const b64 = arrayBufferToBase64(buf)
+            const mime = ct || 'application/octet-stream'
+            return { mime, base64Data: b64 }
+          } catch (e) {
+            lastErr = e
+            attemptLogs.push(`${url} -> [${label}] ${(e as any)?.message || e}`)
+          }
+        }
+      }
+      if (opts?.verbose) emitToast(`Download failed for key ${keyOrUrl}. Attempts:\n- ${attemptLogs.join('\n- ')}`, 'error')
       throw lastErr || new Error('Fetch failed')
     } catch (e) {
       log(`NIP-96 key download failed: ${(e as any)?.message || e}`, 'warn')
