@@ -1829,3 +1829,29 @@ function Modal({ children, onClose }: { children: any; onClose: () => void }) {
     </div>
   )
 }
+
+// Robust invite parser -> 64-hex pubkey
+function parseInviteToHex(input: string): string | null {
+  if (!input) return null
+  let s = input.trim()
+
+  try {
+    const u = new URL(s)
+    const cand = u.searchParams.get('invite') || u.searchParams.get('npub') || u.searchParams.get('pubkey') || ''
+    if (cand) s = cand
+  } catch {}
+
+  s = s.replace(/^nostr:/i, '').replace(/^web\+nostr:/i, '')
+  const m = s.match(/(npub1[02-9ac-hj-np-z]{6,}|nprofile1[02-9ac-hj-np-z]{6,}|[0-9a-fA-F]{64})/)
+  if (!m) return null
+  const token = m[1]
+
+  if (/^[0-9a-fA-F]{64}$/.test(token)) return token.toLowerCase()
+
+  try {
+    const dec = nip19.decode(token)
+    if (dec.type === 'npub') return String(dec.data)
+    if (dec.type === 'nprofile') return String((dec.data as any)?.pubkey || '')
+  } catch {}
+  return null
+}

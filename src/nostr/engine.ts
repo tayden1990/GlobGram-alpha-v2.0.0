@@ -446,36 +446,15 @@ export function refreshSubscriptions() {
 }
 
 export async function sendDM(sk: string, to: string, payload: { t?: string; a?: any; as?: any[]; p?: string }): Promise<{ id: string; acked: Promise<boolean> }> {
-  // Normalize recipient pubkey to 64-hex (accept hex, npub, nprofile, or inputs containing them)
-  const normalizePubkey = (inp: string): string | null => {
-    try {
-      let s = (inp || '').trim()
-      if (/^[0-9a-fA-F]{64}$/.test(s)) return s.toLowerCase()
-      const m = s.match(/(npub1[02-9ac-hj-np-z]{58,})/i)
-      const mp = s.match(/(nprofile1[02-9ac-hj-np-z]+)/i)
-      const bech = (m?.[1] || mp?.[1] || s).toLowerCase()
-      if (bech.startsWith('npub') || bech.startsWith('nprofile')) {
-        const dec: any = nip19.decode(bech)
-        if (dec?.type === 'npub') {
-          const d: any = dec.data
-          const hex = typeof d === 'string' ? d : (d && 'length' in d ? bytesToHex(d as Uint8Array) : null)
-          return hex && /^[0-9a-fA-F]{64}$/.test(hex) ? hex.toLowerCase() : null
-        }
-        if (dec?.type === 'nprofile' && dec.data?.pubkey) {
-          const hex = String(dec.data.pubkey)
-          return /^[0-9a-fA-F]{64}$/.test(hex) ? hex.toLowerCase() : null
-        }
-      }
-    } catch {}
-    return null
-  }
-  const toHex = normalizePubkey(to)
+  // Normalize 'to' first (accept npub/nprofile/hex/url/scheme), abort on failure
+  const toHex = normalizeToHexPubkey(to)
   if (!toHex) {
     log(`sendDM.invalidPubkey input=${(to||'').slice(0,32)}…`,'error')
     emitToast(tGlobal('errors.invalidPubkey'), 'error')
     const acked = Promise.resolve(false)
     return { id: 'invalid', acked }
   }
+
   log(`sendDM -> ${toHex.slice(0,8)}… t=${payload.t ? (payload.t.slice(0,24)+(payload.t.length>24?'…':'')) : ''} a=${payload.a?'y':'n'} as=${payload.as?.length||0}`)
   const urls = useRelayStore.getState().relays.filter(r => r.enabled).map(r => r.url)
   const pool = getRelayPool(urls)
@@ -510,13 +489,20 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
   const handlers: Array<{ ws: WebSocket, fn: (ev: MessageEvent) => void }> = []
   // Promise that resolves true on first OK ack, or false after timeout
   let resolveAck: (v: boolean) => void = () => {}
-  const ackedPromise = new Promise<boolean>((resolve) => { resolveAck = resolve })
+  const ackedPromise = new Promise<boolean>(res => (resolveAck = res))
 
-  // Timeout: if no ack within 8 seconds, consider failed
+  // Timeout: if no OK after N seconds, clean handlers and resolve false
+  const ACK_TIMEOUT_MS = 8000
   const ackTimeout = setTimeout(() => {
-    try { if (!acked) resolveAck(false) } catch {}
-    try { for (const h of handlers) h.ws.removeEventListener('message', h.fn as any) } catch {}
-  }, 8000)
+    try {
+      // remove all per-send handlers to avoid leaks
+      for (const h of handlers) {
+        try { h.ws.removeEventListener('message', h.fn as any) } catch {}
+      }
+      handlers.length = 0
+    } catch {}
+    try { resolveAck(false) } catch {}
+  }, ACK_TIMEOUT_MS)
 
   for (const [url, ws] of pool.entries()) {
     if (ws.readyState === ws.OPEN) {
@@ -532,14 +518,14 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
             const ok = !!data[2]
             if (ok) {
               ackCount += 1
-              if (acked) return
-              acked = true
-              useChatStore.getState().updateMessageStatus(toHex, evt.id, 'sent')
-              ws.removeEventListener('message', handler as any)
-              try { for (const h of handlers) h.ws.removeEventListener('message', h.fn as any) } catch {}
-              try { clearTimeout(ackTimeout) } catch {}
-              try { resolveAck(true) } catch {}
-              log(`OK @ ${url} (count=${ackCount}) id=${evt.id.slice(0,8)}…`)
+              if (!acked) {
+                acked = true
+                useChatStore.getState().updateMessageStatus(toHex, evt.id, 'sent')
+                ws.removeEventListener('message', handler as any)
+                try { for (const h of handlers) h.ws.removeEventListener('message', h.fn as any) } catch {}
+                try { clearTimeout(ackTimeout) } catch {}
+                try { resolveAck(true) } catch {}
+              }
             } else {
               const reason = typeof data[3] === 'string' ? data[3] : undefined
               if (reason) {
@@ -562,7 +548,7 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
       log(`EVENT queued -> ${url} (CONNECTING) id=${evt.id.slice(0,8)}…`)
     }
   }
-  // If no relays are available, resolve ack as false quickly
+  // If no relays are available, resolve immediately as false
   if (pool.size === 0) {
     try { clearTimeout(ackTimeout) } catch {}
     try { resolveAck(false) } catch {}
@@ -799,4 +785,51 @@ export async function updateRoomMembers(sk: string, roomId: string, members: str
   // local update
   if (meta && (meta.name || meta.about || meta.picture)) useRoomStore.getState().setRoomMeta(roomId, meta)
   useRoomStore.getState().setMembers(roomId, members)
+}
+
+// Normalize a recipient pubkey to 64-hex. Accepts:
+// - ?invite=<npub|nprofile|hex> in a URL
+// - nostr:/web+nostr: schemes
+// - raw npub / nprofile
+// - raw 64-hex
+function normalizeToHexPubkey(input: string): string | null {
+  if (!input) return null
+  let s = input.trim()
+
+  // If it's a full URL, extract a plausible invite param or embedded token
+  try {
+    const u = new URL(s)
+    const q = u.searchParams
+    const cand = q.get('invite') || q.get('npub') || q.get('pubkey') || ''
+    if (cand) s = cand
+  } catch {
+    // not a URL; continue
+  }
+
+  // Strip nostr: / web+nostr: schemes
+  s = s.replace(/^nostr:/i, '').replace(/^web\+nostr:/i, '')
+
+  // Pull out the first token that looks like npub/nprofile/hex
+  const m = s.match(/(npub1[02-9ac-hj-np-z]{6,}|nprofile1[02-9ac-hj-np-z]{6,}|[0-9a-fA-F]{64})/)
+  if (!m) return null
+  const token = m[1]
+
+  if (/^[0-9a-fA-F]{64}$/.test(token)) {
+    return token.toLowerCase()
+  }
+
+  try {
+    const dec = nip19.decode(token)
+    if (dec.type === 'npub') {
+      // dec.data is already 64-hex; DO NOT bytesToHex it again
+      return String(dec.data)
+    }
+    if (dec.type === 'nprofile') {
+      const d = dec.data as any
+      if (d?.pubkey && /^[0-9a-fA-F]{64}$/.test(d.pubkey)) return String(d.pubkey).toLowerCase()
+    }
+  } catch {
+    // fall-through
+  }
+  return null
 }
