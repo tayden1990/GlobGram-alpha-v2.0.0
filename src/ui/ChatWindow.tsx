@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useChatStore } from '../state/chatStore'
 import { sendDM, sendTyping } from '../nostr/engine'
+import { getObject, parseMemUrl } from '../services/upload'
 import { blobToDataURL, dataURLSize, MAX_ATTACHMENT_BYTES, prepareBlobForSend } from '../nostr/utils'
 import { useToast } from './Toast'
 import { THUMB_SIZE, PRELOAD_ROOT_MARGIN } from './constants'
@@ -16,6 +17,7 @@ export function ChatWindow() {
   const conversations = useChatStore(s => s.conversations)
   const myPubkey = useChatStore(s => s.myPubkey)
   const removeMessage = useChatStore(s => s.removeMessage)
+  const updateMessage = useChatStore(s => s.updateMessage)
   const clearConversation = useChatStore(s => s.clearConversation)
   const blocked = useChatStore(s => s.blocked)
   const setBlocked = useChatStore(s => s.setBlocked)
@@ -99,6 +101,20 @@ export function ChatWindow() {
     if (bytes < 1024) return `${bytes} B`
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+  }
+  // helper to detect whether a value is an unresolved pointer (mem/http)
+  function isPointer(u?: string | null) {
+    if (!u) return false
+    return (u.startsWith('mem://') || (u.startsWith('http://') || u.startsWith('https://')))
+  }
+  // Resolve a pointer to a data URL and patch message
+  async function resolvePointerToDataURL(ptr: string): Promise<string | null> {
+    try {
+      const key = parseMemUrl(ptr) ?? ptr
+      const obj = await getObject(key)
+      if (obj) return `data:${obj.mime};base64,${obj.base64Data}`
+    } catch {}
+    return null
   }
   function guessExt(mime: string) {
     const map: Record<string, string> = {
@@ -244,9 +260,19 @@ export function ChatWindow() {
                     {m.text && (
                       <div style={{ background: 'var(--bubble)', color: 'var(--bubble-fg)', borderRadius: 12, padding: '8px 10px' }}>{m.text}</div>
                     )}
+                    {/* Render single legacy attachment */}
                     {m.attachment?.startsWith('data:image/') && (
                       <div title={t('chat.openImage')!} onClick={() => setLightbox({ type: 'image', src: m.attachment! })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: 'var(--border)', cursor: 'pointer', justifySelf: 'start' }}>
             <img src={m.attachment} alt="image" loading="lazy" decoding="async" onLoad={() => rowVirtualizer.measure()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                      </div>
+                    )}
+                    {isPointer(m.attachment) && (
+                      <div style={{ width: THUMB_SIZE, justifySelf: 'start', display: 'grid', gap: 6 }}>
+                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>{t('chat.resolvingMedia') || 'Resolving media…'}</div>
+                        <button style={{ fontSize: 12 }} onClick={async () => {
+                          const d = await resolvePointerToDataURL(m.attachment!)
+                          if (d) updateMessage(selectedPeer, m.id, { attachment: d })
+                        }}>{t('chat.load') || 'Load'}</button>
                       </div>
                     )}
           {m.attachment?.startsWith('data:video/') && (
@@ -294,6 +320,7 @@ export function ChatWindow() {
                         }}>{t('chat.copyAsFile')}</button>
                       </div>
                     )}
+                    {/* Render multi-attachments */}
                     {m.attachments?.map((a, i) => (
                       a.startsWith('data:image/') ? (
                         <div key={i} title={t('chat.openImage')!} onClick={() => setLightbox({ type: 'image', src: a })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: 'var(--border)', cursor: 'pointer', justifySelf: 'start' }}>
@@ -341,6 +368,18 @@ export function ChatWindow() {
                               try { log('ChatWindow.copy.file.error') } catch {}
                             }
                           }}>{t('chat.copyAsFile')}</button>
+                        </div>
+                      ) : isPointer(a) ? (
+                        <div key={i} style={{ width: THUMB_SIZE, justifySelf: 'start', display: 'grid', gap: 6 }}>
+                          <div style={{ fontSize: 12, color: 'var(--muted)' }}>{t('chat.resolvingMedia') || 'Resolving media…'}</div>
+                          <button style={{ fontSize: 12 }} onClick={async () => {
+                            const d = await resolvePointerToDataURL(a)
+                            if (d) {
+                              const next = [...(m.attachments || [])]
+                              next[i] = d
+                              updateMessage(selectedPeer, m.id, { attachments: next })
+                            }
+                          }}>{t('chat.load') || 'Load'}</button>
                         </div>
                       ) : null
                     ))}
