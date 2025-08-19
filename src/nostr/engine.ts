@@ -1,6 +1,6 @@
-import { getPublicKey, nip04, finalizeEvent, type Event, type EventTemplate } from 'nostr-tools'
+import { getPublicKey, nip04, nip19, finalizeEvent, type Event, type EventTemplate } from 'nostr-tools'
 import { getRelayPool, resetRelayPool, trackListener } from './pool'
-import { hexToBytes } from './utils'
+import { hexToBytes, bytesToHex } from './utils'
 import { encryptDataURL, type EncryptedMedia } from './media'
 import { putObject, getObject, parseMemUrl } from '../services/upload'
 import { useChatStore, type ChatMessage } from '../state/chatStore'
@@ -446,7 +446,37 @@ export function refreshSubscriptions() {
 }
 
 export async function sendDM(sk: string, to: string, payload: { t?: string; a?: any; as?: any[]; p?: string }): Promise<{ id: string; acked: Promise<boolean> }> {
-  log(`sendDM -> ${to.slice(0,8)}… t=${payload.t ? (payload.t.slice(0,24)+(payload.t.length>24?'…':'')) : ''} a=${payload.a?'y':'n'} as=${payload.as?.length||0}`)
+  // Normalize recipient pubkey to 64-hex (accept hex, npub, nprofile, or inputs containing them)
+  const normalizePubkey = (inp: string): string | null => {
+    try {
+      let s = (inp || '').trim()
+      if (/^[0-9a-fA-F]{64}$/.test(s)) return s.toLowerCase()
+      const m = s.match(/(npub1[02-9ac-hj-np-z]{58,})/i)
+      const mp = s.match(/(nprofile1[02-9ac-hj-np-z]+)/i)
+      const bech = (m?.[1] || mp?.[1] || s).toLowerCase()
+      if (bech.startsWith('npub') || bech.startsWith('nprofile')) {
+        const dec: any = nip19.decode(bech)
+        if (dec?.type === 'npub') {
+          const d: any = dec.data
+          const hex = typeof d === 'string' ? d : (d && 'length' in d ? bytesToHex(d as Uint8Array) : null)
+          return hex && /^[0-9a-fA-F]{64}$/.test(hex) ? hex.toLowerCase() : null
+        }
+        if (dec?.type === 'nprofile' && dec.data?.pubkey) {
+          const hex = String(dec.data.pubkey)
+          return /^[0-9a-fA-F]{64}$/.test(hex) ? hex.toLowerCase() : null
+        }
+      }
+    } catch {}
+    return null
+  }
+  const toHex = normalizePubkey(to)
+  if (!toHex) {
+    log(`sendDM.invalidPubkey input=${(to||'').slice(0,32)}…`,'error')
+    emitToast(tGlobal('errors.invalidPubkey'), 'error')
+    const acked = Promise.resolve(false)
+    return { id: 'invalid', acked }
+  }
+  log(`sendDM -> ${toHex.slice(0,8)}… t=${payload.t ? (payload.t.slice(0,24)+(payload.t.length>24?'…':'')) : ''} a=${payload.a?'y':'n'} as=${payload.as?.length||0}`)
   const urls = useRelayStore.getState().relays.filter(r => r.enabled).map(r => r.url)
   const pool = getRelayPool(urls)
   const now = Math.floor(Date.now() / 1000)
@@ -454,8 +484,8 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
   const processOne = async (d: any): Promise<any> => {
     if (typeof d === 'string' && d.startsWith('data:') && payload.p) {
       // encrypt and upload
-      const enc = await encryptDataURL(d, payload.p)
-      const key = `${to}:${evtIdSeed}:${Math.random().toString(36).slice(2)}`
+  const enc = await encryptDataURL(d, payload.p)
+  const key = `${toHex}:${evtIdSeed}:${Math.random().toString(36).slice(2)}`
       const url = await putObject(key, enc.mime, enc.ct)
   return { url, enc: { iv: Array.from(atob(enc.iv).split('').map(c=>c.charCodeAt(0))), keySalt: Array.from(atob(enc.keySalt).split('').map(c=>c.charCodeAt(0))), mime: enc.mime, sha256: enc.sha256 }, ctInline: enc.ct }
     }
@@ -465,14 +495,14 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
   let outA = payload.a ? await processOne(payload.a) : undefined
   let outAs = payload.as ? await Promise.all(payload.as.map(processOne)) : undefined
   const body = JSON.stringify({ t: payload.t, a: outA, as: outAs, p: payload.p })
-  const ciphertext = await nip04.encrypt(sk, to, body)
-  const template: EventTemplate = { kind: 4, created_at: now, content: ciphertext, tags: [["p", to]] }
+  const ciphertext = await nip04.encrypt(sk, toHex, body)
+  const template: EventTemplate = { kind: 4, created_at: now, content: ciphertext, tags: [["p", toHex]] }
   let evt: any = finalizeEvent(template, hexToBytes(sk))
   const pub = JSON.stringify(["EVENT", evt])
   // add pending message immediately to avoid race with fast OK acks
   const me = getPublicKey(hexToBytes(sk))
   const addMessage = useChatStore.getState().addMessage
-  addMessage(to, { id: evt.id, from: me, to, ts: now, text: payload.t, attachment: payload.a, attachments: payload.as, status: 'pending' })
+  addMessage(toHex, { id: evt.id, from: me, to: toHex, ts: now, text: payload.t, attachment: payload.a, attachments: payload.as, status: 'pending' })
   let acked = false
   let ackCount = 0
   let lastReason: string | undefined
@@ -504,7 +534,7 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
               ackCount += 1
               if (acked) return
               acked = true
-              useChatStore.getState().updateMessageStatus(to, evt.id, 'sent')
+              useChatStore.getState().updateMessageStatus(toHex, evt.id, 'sent')
               ws.removeEventListener('message', handler as any)
               try { for (const h of handlers) h.ws.removeEventListener('message', h.fn as any) } catch {}
               try { clearTimeout(ackTimeout) } catch {}
@@ -542,7 +572,7 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
     const miningEnabled = (() => { try { return useSettingsStore.getState().powMining } catch { return true } })()
     if (!miningEnabled) {
       const reason = `PoW required (${powBitsRequired} bits) but disabled in Settings`
-      try { useChatStore.getState().updateMessageStatus(to, evt.id, 'failed', reason) } catch {}
+  try { useChatStore.getState().updateMessageStatus(toHex, evt.id, 'failed', reason) } catch {}
   // Surface a toast with an action hint (localized)
   emitToast(tGlobal('errors.powRequiredEnable'), 'error')
       // prevent further retries/timeouts and cleanup listeners
@@ -562,7 +592,7 @@ export async function sendDM(sk: string, to: string, payload: { t?: string; a?: 
       evt = newEvt
   log(`Mining success: new id=${evt.id.slice(0,8)}… old=${oldId.slice(0,8)}…`)
       // Update local message id so receipts/acks match
-      try { useChatStore.getState().updateMessageId(to, oldId, evt.id) } catch {}
+  try { useChatStore.getState().updateMessageId(toHex, oldId, evt.id) } catch {}
       const pub2 = JSON.stringify(["EVENT", evt])
       for (const [url, ws] of pool.entries()) {
         if (ws.readyState === ws.OPEN) {

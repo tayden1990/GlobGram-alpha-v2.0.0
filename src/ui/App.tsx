@@ -46,17 +46,30 @@ export default function App() {
     } catch {}
     return null
   }
-  // Helper: safely decode an npub bech32 string to 64-char hex
+  // Helper: safely decode bech32 (npub/nprofile) to 64-char hex pubkey
   const npubToHex = (n: string): string | null => {
     try {
       const dec: any = nip19.decode(n)
-      if (dec && dec.type === 'npub' && dec.data) {
-        return bytesToHex(dec.data as Uint8Array)
+      if (!dec) return null
+      if (dec.type === 'npub') {
+        const d: any = dec.data
+        let hex: string | null = null
+        if (typeof d === 'string') hex = d
+        else if (d && typeof d === 'object' && 'length' in d) hex = bytesToHex(d as Uint8Array)
+        if (hex && /^[0-9a-fA-F]{64}$/.test(hex)) return hex.toLowerCase()
+        return null
       }
-    } catch {}
+      if (dec.type === 'nprofile' && dec.data && typeof dec.data === 'object' && dec.data.pubkey) {
+        const hex = String(dec.data.pubkey)
+        if (/^[0-9a-fA-F]{64}$/.test(hex)) return hex.toLowerCase()
+        return null
+      }
+    } catch (e) {
+      try { log(`Invite.decodeError: ${String((e as any)?.message || e)}`) } catch {}
+    }
     return null
   }
-  // Parse an invite value from arbitrary input (URL, npub, hex) and return hex pubkey
+  // Parse an invite value from arbitrary input (URL, npub/nprofile, hex) and return hex pubkey
   const parseInviteInput = (raw: string): string | null => {
     try {
       if (!raw) return null
@@ -73,14 +86,17 @@ export default function App() {
       // If string contains an npub anywhere, extract it
       const m = s.match(/(npub1[02-9ac-hj-np-z]{58,})/i)
       if (m && m[1]) s = m[1]
+      // Or nprofile
+      const mp = s.match(/(nprofile1[02-9ac-hj-np-z]+)/i)
+      const candidate = m?.[1] || mp?.[1] || s
       // Normalize bech32 to lowercase
-      if (s.startsWith('NPUB') || s.startsWith('npub')) s = s.toLowerCase()
-      if (s.startsWith('npub')) {
-        const hx = npubToHex(s)
+      const lower = candidate.startsWith('NPUB') || candidate.startsWith('NPROFILE') ? candidate.toLowerCase() : candidate
+      if (lower.startsWith('npub') || lower.startsWith('nprofile')) {
+        const hx = npubToHex(lower)
         if (hx) return hx
       }
       // Direct 64-hex
-      if (/^[0-9a-fA-F]{64}$/.test(s)) return s
+      if (/^[0-9a-fA-F]{64}$/.test(lower)) return lower.toLowerCase()
     } catch {}
     return null
   }
