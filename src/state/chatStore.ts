@@ -132,7 +132,28 @@ export const useChatStore = create<State & Actions>()(
     }),
     {
       name: 'globgram-chat-store',
-      version: 1,
+      version: 2,
+      // Do NOT persist conversations (they can be replayed from relays) or typing state.
+      // Persist only small, useful bits.
+      partialize: (state) => ({
+        myPubkey: state.myPubkey,
+        selectedPeer: state.selectedPeer,
+        lastRead: state.lastRead,
+        blocked: state.blocked,
+      }) as any,
+      migrate: (persisted, version) => {
+        // Drop heavy fields from v1 -> v2; only keep small persisted subset
+        if (version < 2) {
+          const p: any = persisted || {}
+          return {
+            myPubkey: p.myPubkey ?? null,
+            selectedPeer: p.selectedPeer ?? null,
+            lastRead: p.lastRead ?? {},
+            blocked: p.blocked ?? {},
+          }
+        }
+        return persisted as any
+      }
     }
   )
 )
