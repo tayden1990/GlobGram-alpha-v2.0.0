@@ -26,4 +26,8 @@ export const CONFIG = {
 
   // NIP-94: auto-publish a kind 1063 File Metadata event after successful uploads
   AUTO_PUBLISH_NIP94: false,
+
+  // NIP-98 debug verbosity: when true, try many header permutations and log more.
+  // Set to false to keep dev console cleaner (minimal attempts, no second-wave matrix).
+  NIP98_VERBOSE: false,
 }

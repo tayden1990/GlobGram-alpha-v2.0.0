@@ -174,9 +174,11 @@ export async function putObject(key: string, mime: string, base64Data: string): 
             attemptLogs.push(`[probe ${method}] ${e?.name || 'Error'}: ${e?.message || e}`)
           }
         }
-        if (!res) await probeOnce('HEAD')
-        if (!res && !challenge) await probeOnce('GET')
-        if (!res && !challenge) await probeOnce('POST')
+  // Run fewer probes when not verbose to reduce console noise in dev
+  const verbose = !!CONFIG.NIP98_VERBOSE
+  if (!res) await probeOnce('HEAD')
+  if (verbose && !res && !challenge) await probeOnce('GET')
+  if (!res && !challenge) await probeOnce('POST')
 
   if (!res) {
           // Priority attempt: strict/minimal NIP-98 some servers require
@@ -332,20 +334,22 @@ export async function putObject(key: string, mime: string, base64Data: string): 
                 }
               }
             }
-            // Prefer challenge-based attempts first
+            // Minimal set unless verbose
             await addAttempt('nip-98-challenge-no-payload', undefined, true)
-            // Body-hash payload (exact request bytes)
-            await addAttempt('nip-98-challenge-with-body-hash', bodyHashHex, true)
-            if (bodyHashB64) await addAttempt('nip-98-challenge-with-body-hash-b64', bodyHashB64, true)
-            // File-hash payload variants
-            await addAttempt('nip-98-challenge-with-file-hash', fileHashHex, true)
-            if (payloadHashB64) await addAttempt('nip-98-challenge-with-file-hash-b64', payloadHashB64, true)
-            // Legacy attempts without challenge
-            await addAttempt('nip-98-no-payload')
-            await addAttempt('nip-98-with-body-hash', bodyHashHex)
-            if (bodyHashB64) await addAttempt('nip-98-with-body-hash-b64', bodyHashB64)
-            await addAttempt('nip-98-with-file-hash', fileHashHex)
-            if (payloadHashB64) await addAttempt('nip-98-with-file-hash-b64', payloadHashB64)
+            if (verbose) {
+              // Body-hash payload (exact request bytes)
+              await addAttempt('nip-98-challenge-with-body-hash', bodyHashHex, true)
+              if (bodyHashB64) await addAttempt('nip-98-challenge-with-body-hash-b64', bodyHashB64, true)
+              // File-hash payload variants
+              await addAttempt('nip-98-challenge-with-file-hash', fileHashHex, true)
+              if (payloadHashB64) await addAttempt('nip-98-challenge-with-file-hash-b64', payloadHashB64, true)
+              // Legacy attempts without challenge
+              await addAttempt('nip-98-no-payload')
+              await addAttempt('nip-98-with-body-hash', bodyHashHex)
+              if (bodyHashB64) await addAttempt('nip-98-with-body-hash-b64', bodyHashB64)
+              await addAttempt('nip-98-with-file-hash', fileHashHex)
+              if (payloadHashB64) await addAttempt('nip-98-with-file-hash-b64', payloadHashB64)
+            }
             if (attempts.length === 0) emitToast('Cannot sign NIP-98 auth. Import a key or enable a NIP-07 extension.', 'error')
           }
       // Bearer token attempt last
@@ -403,7 +407,7 @@ export async function putObject(key: string, mime: string, base64Data: string): 
             }
           }
           // If still no success and we have NIP-98, try alternative 'u' canonicalizations and header encodings
-          if (!res && AUTH_MODE === 'nip98') {
+          if (!res && AUTH_MODE === 'nip98' && CONFIG.NIP98_VERBOSE) {
             try {
               const urlObj = new URL(canonicalApiUrl)
               const pathOnly = urlObj.pathname.replace(/\/$/, '') || '/'
