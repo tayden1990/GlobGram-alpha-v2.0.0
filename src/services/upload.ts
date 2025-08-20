@@ -179,6 +179,94 @@ export async function putObject(key: string, mime: string, base64Data: string): 
         if (!res && !challenge) await probeOnce('POST')
 
   if (!res) {
+          // Priority attempt: strict/minimal NIP-98 some servers require
+          // Shape: base64url, content holds challenge, tags only [u:pathOnly, method:POST], no payload
+          if (AUTH_MODE === 'nip98') {
+            try {
+              const urlObj = new URL(canonicalApiUrl)
+              const pathOnly = urlObj.pathname.replace(/\/$/, '') || '/'
+              const buildPriorityAuth = async (chal?: string) => await makeNip98HeaderCustom(
+                pathOnly,
+                'POST',
+                undefined,
+                undefined,
+                chal || '',
+                true, // base64url
+                'upper'
+              )
+              const tryPriority = async (label: string, chal?: string) => {
+                const auth = await buildPriorityAuth(chal)
+                if (!auth) return
+                const h = new Headers({ 'Authorization': auth, 'Accept': 'application/json' })
+                // Also set X-Authorization for quirky proxies/servers
+                h.set('X-Authorization', auth)
+                // Debug decode tags
+                try {
+                  const raw = auth.replace(/^Nostr\s+/, '')
+                  let t = raw.replace(/-/g, '+').replace(/_/g, '/')
+                  while (t.length % 4) t += '='
+                  const json = atob(t)
+                  const obj = JSON.parse(json)
+                  console.debug('[DEBUG] NIP-98 priority header tags', obj?.tags)
+                } catch {}
+                const r0 = await fetch(uploadUrl, { method: 'POST', body: makeForm(), headers: h })
+                if (r0.ok) { res = r0; attemptLogs.push(`[${label}] OK ${r0.status}`); return }
+                const www0 = r0.headers.get('www-authenticate') || r0.headers.get('WWW-Authenticate') || ''
+                const text0 = await r0.text().catch(() => '')
+                attemptLogs.push(`[${label}] HTTP ${r0.status} ${r0.statusText}${www0 ? ` - WWW-Authenticate: ${www0}` : ''}${text0 ? ` - ${truncate(text0)}` : ''}`)
+                // Retry once if server supplies a new challenge
+                if (r0.status === 401 && www0) {
+                  const parsed0 = parseWwwAuthenticate(www0)
+                  const newChal0 = parsed0?.scheme?.toLowerCase() === 'nostr' ? parsed0.params['challenge'] : undefined
+                  if (newChal0 && newChal0 !== challenge) {
+                    const auth1 = await buildPriorityAuth(newChal0)
+                    if (auth1) {
+                      const h1 = new Headers({ 'Authorization': auth1, 'Accept': 'application/json' })
+                      const r1 = await fetch(uploadUrl, { method: 'POST', body: makeForm(), headers: h1 })
+                      if (r1.ok) { res = r1; attemptLogs.push(`[${label} RETRY] OK ${r1.status}`) }
+                      else {
+                        const t1 = await r1.text().catch(() => '')
+                        const www1 = r1.headers.get('www-authenticate') || r1.headers.get('WWW-Authenticate') || ''
+                        attemptLogs.push(`[${label} RETRY] HTTP ${r1.status} ${r1.statusText}${www1 ? ` - WWW-Authenticate: ${www1}` : ''}${t1 ? ` - ${truncate(t1)}` : ''}`)
+                      }
+                    }
+                  }
+                }
+              }
+              // Always try once without challenge as well
+              await tryPriority('nip-98-priority-nochal')
+              if (!res && challenge) await tryPriority('nip-98-priority', challenge)
+
+              // Non-conforming servers: try raw JSON (not base64) as Authorization
+              if (!res) {
+                try {
+                  const now = Math.floor(Date.now() / 1000)
+                  const unsigned: EventTemplate = { kind: 27235 as any, created_at: now, content: '', tags: [['u', pathOnly], ['method', 'POST']] }
+                  const sk = getLocalSKBytes()
+                  let signed: any | null = null
+                  if (sk) signed = finalizeEvent(unsigned, sk)
+                  else if ((window as any)?.nostr?.signEvent) { try { signed = await (window as any).nostr.signEvent(unsigned) } catch {} }
+                  if (signed) {
+                    const raw = `Nostr ${JSON.stringify(signed)}`
+                    const h2 = new Headers({ 'Authorization': raw, 'Accept': 'application/json' })
+                    h2.set('X-Authorization', raw)
+                    const r2 = await fetch(uploadUrl, { method: 'POST', body: makeForm(), headers: h2 })
+                    if (r2.ok) { res = r2; attemptLogs.push(`[nip-98-rawjson] OK ${r2.status}`) }
+                    else {
+                      const www2 = r2.headers.get('www-authenticate') || r2.headers.get('WWW-Authenticate') || ''
+                      const text2 = await r2.text().catch(() => '')
+                      attemptLogs.push(`[nip-98-rawjson] HTTP ${r2.status} ${r2.statusText}${www2 ? ` - WWW-Authenticate: ${www2}` : ''}${text2 ? ` - ${truncate(text2)}` : ''}`)
+                    }
+                  }
+                } catch (e: any) {
+                  attemptLogs.push(`[nip-98-rawjson] ${e?.message || e}`)
+                }
+              }
+            } catch (e: any) {
+              attemptLogs.push(`[nip-98-priority] ${e?.message || e}`)
+            }
+          }
+
           const attempts: Array<{ init: RequestInit; label: string }> = []
           // Predeclare variables so we can reuse in retry logic
           let fileHashHex: string | undefined
@@ -330,18 +418,33 @@ export async function putObject(key: string, mime: string, base64Data: string): 
               ]))
               const secondAttempts: Array<{ init: RequestInit; label: string }> = []
               const toB64Url = (b64: string) => b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-              const buildAuth = async (u: string, payload?: string, withChallenge?: boolean, encUrl?: boolean, challengeInContent?: boolean) => {
+              const buildAuth = async (u: string, payload?: string, withChallenge?: boolean, encUrl?: boolean, challengeInContent?: boolean, methodCase: MethodCase = 'both') => {
                 const extraTags: Array<[string, string]> = []
                 const content = withChallenge && challengeInContent && challenge ? challenge : undefined
                 if (withChallenge && challenge && !challengeInContent) extraTags.push(['challenge', challenge])
-                return await makeNip98HeaderCustom(u, 'POST', payload, extraTags, content, !!encUrl)
+                return await makeNip98HeaderCustom(u, 'POST', payload, extraTags, content, !!encUrl, methodCase)
               }
-              const pushAttempt = async (label: string, u: string, useManual: boolean, payload?: string, encUrl?: boolean, challengeInContent?: boolean) => {
-                const auth = await buildAuth(u, payload, true, encUrl, challengeInContent)
+              const pushAttempt = async (label: string, u: string, useManual: boolean, payload?: string, encUrl?: boolean, challengeInContent?: boolean, methodCase: MethodCase = 'both') => {
+                const auth = await buildAuth(u, payload, true, encUrl, challengeInContent, methodCase)
                 if (!auth) return
                 const h = new Headers()
                 h.set('Authorization', auth)
+                // Some servers erroneously look at X-Authorization; set both
+                h.set('X-Authorization', auth)
                 h.set('Accept', 'application/json')
+                // Debug decode of tags
+                try {
+                  const raw = auth.replace(/^Nostr\s+/, '')
+                  const toStd = (s: string) => {
+                    // convert base64url to standard base64 with padding
+                    let t = s.replace(/-/g, '+').replace(/_/g, '/')
+                    while (t.length % 4) t += '='
+                    return t
+                  }
+                  const json = atob(toStd(raw))
+                  const obj = JSON.parse(json)
+                  console.debug('[DEBUG] NIP-98 header tags for', label, obj?.tags)
+                } catch {}
                 if (useManual) {
                   if (multipartCT) h.set('Content-Type', multipartCT)
                   const mb = multipartBytes!
@@ -355,33 +458,35 @@ export async function putObject(key: string, mime: string, base64Data: string): 
               // Limit second wave to a focused matrix: {uVariants} x {std vs url b64} x {challenge-in-content true/false} for key payloads
               for (const u of uVariants) {
                 for (const encUrl of [false, true]) {
+                  for (const mCase of ['upper', 'lower'] as MethodCase[]) {
                   // no-payload variants (challenge in tag and in content)
-                  await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl}-chalTag-noPayload`, u, false, undefined, encUrl, false)
-                  await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl}-chalContent-noPayload`, u, false, undefined, encUrl, true)
+                  await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl} m:${mCase}-chalTag-noPayload`, u, false, undefined, encUrl, false, mCase)
+                  await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl} m:${mCase}-chalContent-noPayload`, u, false, undefined, encUrl, true, mCase)
                   // body-hash variants using manual multipart body
                   if (bodyHashHex) {
-                    await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl}-chalTag-bodyHash`, u, true, bodyHashHex, encUrl, false)
-                    await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl}-chalContent-bodyHash`, u, true, bodyHashHex, encUrl, true)
+                    await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl} m:${mCase}-chalTag-bodyHash`, u, true, bodyHashHex, encUrl, false, mCase)
+                    await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl} m:${mCase}-chalContent-bodyHash`, u, true, bodyHashHex, encUrl, true, mCase)
                     if (bodyHashB64) {
-                      await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl}-chalTag-bodyHashB64`, u, true, bodyHashB64, encUrl, false)
-                      await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl}-chalContent-bodyHashB64`, u, true, bodyHashB64, encUrl, true)
-                      await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl}-chalTag-bodyHashB64url`, u, true, toB64Url(bodyHashB64), encUrl, false)
-                      await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl}-chalContent-bodyHashB64url`, u, true, toB64Url(bodyHashB64), encUrl, true)
+                      await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl} m:${mCase}-chalTag-bodyHashB64`, u, true, bodyHashB64, encUrl, false, mCase)
+                      await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl} m:${mCase}-chalContent-bodyHashB64`, u, true, bodyHashB64, encUrl, true, mCase)
+                      await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl} m:${mCase}-chalTag-bodyHashB64url`, u, true, toB64Url(bodyHashB64), encUrl, false, mCase)
+                      await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl} m:${mCase}-chalContent-bodyHashB64url`, u, true, toB64Url(bodyHashB64), encUrl, true, mCase)
                     }
                     // raw-body payload (b64/b64url) variants
                     if (bodyB64) {
-                      await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl}-chalTag-bodyB64`, u, true, bodyB64, encUrl, false)
-                      await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl}-chalContent-bodyB64`, u, true, bodyB64, encUrl, true)
+                      await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl} m:${mCase}-chalTag-bodyB64`, u, true, bodyB64, encUrl, false, mCase)
+                      await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl} m:${mCase}-chalContent-bodyB64`, u, true, bodyB64, encUrl, true, mCase)
                     }
                     if (bodyB64url) {
-                      await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl}-chalTag-bodyB64url`, u, true, bodyB64url, encUrl, false)
-                      await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl}-chalContent-bodyB64url`, u, true, bodyB64url, encUrl, true)
+                      await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl} m:${mCase}-chalTag-bodyB64url`, u, true, bodyB64url, encUrl, false, mCase)
+                      await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl} m:${mCase}-chalContent-bodyB64url`, u, true, bodyB64url, encUrl, true, mCase)
                     }
                   }
                   // file-hash variant using FormData body
                   if (fileHashHex) {
-                    await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl}-chalTag-fileHash`, u, false, fileHashHex, encUrl, false)
-                    await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl}-chalContent-fileHash`, u, false, fileHashHex, encUrl, true)
+                    await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl} m:${mCase}-chalTag-fileHash`, u, false, fileHashHex, encUrl, false, mCase)
+                    await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl} m:${mCase}-chalContent-fileHash`, u, false, fileHashHex, encUrl, true, mCase)
+                  }
                   }
                 }
               }
