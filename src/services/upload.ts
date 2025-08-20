@@ -587,7 +587,37 @@ export async function putObject(key: string, mime: string, base64Data: string): 
   return `mem://${key}`
 }
 
-export async function getObject(keyOrUrl: string, opts?: { verbose?: boolean }): Promise<{ mime: string; base64Data: string } | null> {
+export async function getObject(keyOrUrl: string, opts?: { verbose?: boolean; onProgress?: (received: number, total?: number) => void }): Promise<{ mime: string; base64Data: string } | null> {
+  function u8ToArrayBuffer(u8: Uint8Array): ArrayBuffer {
+    const ab = new ArrayBuffer(u8.byteLength)
+    new Uint8Array(ab).set(u8)
+    return ab
+  }
+  async function readWithProgress(res: Response, onProgress?: (received: number, total?: number) => void): Promise<{ u8: Uint8Array; ct: string }> {
+    const ct = res.headers.get('content-type') || ''
+    if (!onProgress || !res.body) {
+      const buf = await res.arrayBuffer()
+      return { u8: new Uint8Array(buf), ct }
+    }
+    const total = Number(res.headers.get('content-length') || '') || undefined
+    const reader = res.body.getReader()
+    const chunks: Uint8Array[] = []
+    let received = 0
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (value) {
+        chunks.push(value)
+        received += value.byteLength
+        try { onProgress(received, total) } catch {}
+      }
+    }
+    const allLen = chunks.reduce((n, c) => n + c.byteLength, 0)
+    const out = new Uint8Array(allLen)
+    let offset = 0
+    for (const c of chunks) { out.set(c, offset); offset += c.byteLength }
+    return { u8: out, ct }
+  }
   // If we received a full HTTP(S) URL, fetch it directly regardless of BASE_URL
   if (/^https?:\/\//i.test(keyOrUrl)) {
     try {
@@ -635,16 +665,15 @@ export async function getObject(keyOrUrl: string, opts?: { verbose?: boolean }):
         if (opts?.verbose) emitToast(`Download failed for ${keyOrUrl}. Attempts:\n- ${attemptLogs.join('\n- ')}`, 'error')
         throw lastErr || new Error('Get failed')
       }
-      const ct = res.headers.get('content-type') || ''
-      if (ct.includes('application/json')) {
+  const ct = res.headers.get('content-type') || ''
+  if (ct.includes('application/json')) {
         const out = await res.json().catch(() => ({})) as any
         if (out && typeof out.data === 'string') return { mime: out.mime || 'application/octet-stream', base64Data: out.data }
       }
-      // Fallback: treat as binary and convert to base64; sniff MIME if missing
-      const buf = await res.arrayBuffer()
-      const u8 = new Uint8Array(buf)
-      const b64 = arrayBufferToBase64(buf)
-      const mime = ct || sniffMimeFromBytes(u8, 'application/octet-stream')
+  // Fallback: treat as binary and convert to base64; sniff MIME if missing
+  const { u8 } = await readWithProgress(res, opts?.onProgress)
+  const b64 = arrayBufferToBase64(u8ToArrayBuffer(u8))
+  const mime = ct || sniffMimeFromBytes(u8, 'application/octet-stream')
       // Debug: log what we detected for absolute URLs
       log(`Absolute URL download: content-type="${ct}", sniffed="${ct ? 'n/a' : sniffMimeFromBytes(u8, 'application/octet-stream')}", final="${mime}", size=${u8.length}`)
       return { mime, base64Data: b64 }
@@ -667,16 +696,15 @@ export async function getObject(keyOrUrl: string, opts?: { verbose?: boolean }):
       } else {
         Object.assign(init, withAuth(init, url))
       }
-      const res = await fetch(url, init)
+    const res = await fetch(url, init)
       if (!res.ok) throw new Error(`Get failed: ${res.status}`)
   const ct = res.headers.get('content-type') || ''
       if (ct.includes('application/json')) {
         const out = await res.json().catch(() => ({})) as any
         if (out && typeof out.data === 'string') return { mime: out.mime || 'application/octet-stream', base64Data: out.data }
       }
-  const buf = await res.arrayBuffer()
-  const u8 = new Uint8Array(buf)
-  const b64 = arrayBufferToBase64(buf)
+  const { u8 } = await readWithProgress(res, opts?.onProgress)
+  const b64 = arrayBufferToBase64(u8ToArrayBuffer(u8))
   const mime = ct || sniffMimeFromBytes(u8, 'application/octet-stream')
   // Debug: log what we detected for simple mode
   log(`Simple mode download: content-type="${ct}", sniffed="${ct ? 'n/a' : sniffMimeFromBytes(u8, 'application/octet-stream')}", final="${mime}", size=${u8.length}`)
@@ -755,9 +783,8 @@ export async function getObject(keyOrUrl: string, opts?: { verbose?: boolean }):
               const out = await res.json().catch(() => ({})) as any
               if (out && typeof out.data === 'string') return { mime: out.mime || 'application/octet-stream', base64Data: out.data }
             }
-            const buf = await res.arrayBuffer()
-            const u8 = new Uint8Array(buf)
-            const b64 = arrayBufferToBase64(buf)
+            const { u8 } = await readWithProgress(res, opts?.onProgress)
+            const b64 = arrayBufferToBase64(u8ToArrayBuffer(u8))
             const mime = ct || sniffMimeFromBytes(u8, 'application/octet-stream')
             // Debug: log what we detected
             log(`NIP-96 download: content-type="${ct}", sniffed="${ct ? 'n/a' : sniffMimeFromBytes(u8, 'application/octet-stream')}", final="${mime}", size=${u8.length}`)

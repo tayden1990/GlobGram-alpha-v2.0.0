@@ -56,6 +56,8 @@ export function ChatWindow() {
   const [preparing, setPreparing] = useState(false)
   const [prepProgress, setPrepProgress] = useState(0)
   const [sending, setSending] = useState(false)
+  // Download progress per message/attachment key: `${msgId}:a` for single, `${msgId}:as:${i}` for multi
+  const [dlProgress, setDlProgress] = useState<Record<string, { received: number; total?: number }>>({})
   // User setting: auto-resolve media (default from env, persisted in localStorage)
   const [autoResolveMedia, setAutoResolveMedia] = useState<boolean>(() => {
     try {
@@ -182,15 +184,23 @@ export function ChatWindow() {
       return `download.${ext}`
     } catch { return 'download.bin' }
   }
-  async function resolvePointerToDataURL(ptr: string): Promise<{ durl: string; name: string } | null> {
+  async function resolvePointerToDataURL(ptr: string, progressKey?: string, verbose?: boolean): Promise<{ durl: string; name: string } | null> {
     try {
       const key = parseMemUrl(ptr) ?? ptr
-      const obj = await getObject(key)
+      const obj = await getObject(key, {
+        verbose,
+        onProgress: (received, total) => {
+          if (!progressKey) return
+          setDlProgress(prev => ({ ...prev, [progressKey]: { received, total } }))
+        }
+      })
       if (obj) {
         const d = `data:${obj.mime};base64,${obj.base64Data}`
+        if (progressKey) setDlProgress(prev => { const n = { ...prev }; delete n[progressKey]; return n })
         return { durl: d, name: dataUrlToName(d) }
       }
     } catch {}
+    if (progressKey) setDlProgress(prev => { const n = { ...prev }; delete n[progressKey]; return n })
     return null
   }
   function guessExt(mime: string) {
@@ -246,7 +256,7 @@ export function ChatWindow() {
           seen.add(m.id+':a')
           const ptr = m.attachment
           tasks.push(async () => {
-            const r = await resolvePointerToDataURL(ptr)
+            const r = await resolvePointerToDataURL(ptr, m.id+':a', false)
             if (!cancelled && r && selectedPeer) updateMessage(selectedPeer, m.id, { attachment: r.durl, name: r.name })
           })
         }
@@ -256,7 +266,7 @@ export function ChatWindow() {
               seen.add(m.id+':as:'+i)
               const ptr = a
               tasks.push(async () => {
-                const r = await resolvePointerToDataURL(ptr)
+                const r = await resolvePointerToDataURL(ptr, m.id+':as:'+i, false)
                 if (!cancelled && r && selectedPeer) {
                   const conv = useChatStore.getState().conversations[selectedPeer] || []
                   const found = conv.find((x: any) => x.id === m.id)
@@ -435,6 +445,21 @@ export function ChatWindow() {
                           )
                         })()}
                         <div style={{ fontSize: 12, color: 'var(--muted)' }}>{t('chat.resolvingMedia') || 'Resolving media…'}</div>
+                        {(() => {
+                          const prog = dlProgress[m.id+':a']
+                          if (!prog) return null
+                          const pct = prog.total ? Math.min(100, Math.round((prog.received / prog.total) * 100)) : undefined
+                          return (
+                            <div style={{ display: 'grid', gap: 4 }}>
+                              <div style={{ width: THUMB_SIZE, height: 6, background: 'var(--border)', borderRadius: 4, overflow: 'hidden' }}>
+                                <span style={{ display: 'block', height: '100%', width: `${pct ?? 100}%`, background: 'var(--accent)', transition: 'width 150ms linear' }} />
+                              </div>
+                              <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+                                {pct != null ? `${pct}%` : `Downloading ${readableSize(prog.received)}...`}
+                              </div>
+                            </div>
+                          )
+                        })()}
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                           {/* If hosted non-locally and pointer targets localhost, avoid futile loads */}
                           {(() => {
@@ -452,21 +477,10 @@ export function ChatWindow() {
                             } catch {}
                             return (
                               <button style={{ fontSize: 12 }} onClick={async () => {
-                            // Use verbose fetch to surface detailed error diagnostics
-                            async function resolveVerbose(u: string) {
-                              try {
-                                const key = parseMemUrl(u) ?? u
-                                const obj = await getObject(key, { verbose: true })
-                                if (obj) return `data:${obj.mime};base64,${obj.base64Data}`
-                              } catch {}
-                              return null
-                            }
-                            const d = await resolveVerbose(m.attachment!)
-                            if (d) updateMessage(selectedPeer, m.id, { attachment: d, name: filenameForDataUrl(d) })
-                            else {
-                              show(t('chat.mediaUnavailable')!, 'error')
-                            }
-                          }}>{t('chat.load') || 'Load'}</button>
+                            const r = await resolvePointerToDataURL(m.attachment!, m.id+':a', true)
+                            if (r) updateMessage(selectedPeer, m.id, { attachment: r.durl, name: r.name })
+                            else show(t('chat.mediaUnavailable')!, 'error')
+                          }} disabled={Boolean(dlProgress[m.id+':a'])}>{t('chat.load') || 'Load'}</button>
                             )
                           })()}
                           {typeof m.attachment === 'string' && m.attachment.startsWith('http') && (
@@ -583,6 +597,21 @@ export function ChatWindow() {
                             )
                           })()}
                           <div style={{ fontSize: 12, color: 'var(--muted)' }}>{t('chat.resolvingMedia') || 'Resolving media…'}</div>
+                          {(() => {
+                            const prog = dlProgress[m.id+':as:'+i]
+                            if (!prog) return null
+                            const pct = prog.total ? Math.min(100, Math.round((prog.received / prog.total) * 100)) : undefined
+                            return (
+                              <div style={{ display: 'grid', gap: 4 }}>
+                                <div style={{ width: THUMB_SIZE, height: 6, background: 'var(--border)', borderRadius: 4, overflow: 'hidden' }}>
+                                  <span style={{ display: 'block', height: '100%', width: `${pct ?? 100}%`, background: 'var(--accent)', transition: 'width 150ms linear' }} />
+                                </div>
+                                <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+                                  {pct != null ? `${pct}%` : `Downloading ${readableSize(prog.received)}...`}
+                                </div>
+                              </div>
+                            )
+                          })()}
                           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                             {(() => {
                               try {
@@ -599,25 +628,17 @@ export function ChatWindow() {
                               } catch {}
                               return (
                                 <button style={{ fontSize: 12 }} onClick={async () => {
-                              async function resolveVerbose(u: string) {
-                                try {
-                                  const key = parseMemUrl(u) ?? u
-                                  const obj = await getObject(key, { verbose: true })
-                                  if (obj) return `data:${obj.mime};base64,${obj.base64Data}`
-                                } catch {}
-                                return null
-                              }
-                              const d = await resolveVerbose(a)
-                              if (d) {
+                              const r = await resolvePointerToDataURL(a, m.id+':as:'+i, true)
+                              if (r) {
                                 const next = [...(m.attachments || [])]
-                                next[i] = d
+                                next[i] = r.durl
                                 const names = [...(m.names || [])]
-                                names[i] = filenameForDataUrl(d)
+                                names[i] = r.name
                                 updateMessage(selectedPeer, m.id, { attachments: next, names })
                               } else {
                                 show(t('chat.mediaUnavailable')!, 'error')
                               }
-                            }}>{t('chat.load') || 'Load'}</button>
+                            }} disabled={Boolean(dlProgress[m.id+':as:'+i])}>{t('chat.load') || 'Load'}</button>
                               )
                             })()}
                             {typeof a === 'string' && a.startsWith('http') && (

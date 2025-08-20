@@ -221,6 +221,14 @@ export function startNostrEngine(sk: string) {
             let text: string | undefined
             let attachment: string | undefined
             let attachments: string[] | undefined
+            // Respect user's auto-load setting for plain mem/http pointers
+            const shouldAutoResolveDM = (() => {
+              try {
+                const s = localStorage.getItem('autoResolveMedia')
+                if (s === '0' || s === '1') return s === '1'
+              } catch {}
+              return CONFIG.AUTO_RESOLVE_MEDIA_DEFAULT
+            })()
       try {
               const obj = JSON.parse(txt)
               if (obj && (obj.t || obj.a || obj.as)) {
@@ -263,13 +271,15 @@ export function startNostrEngine(sk: string) {
                   } catch {}
                   return null
                 }
-                // Resolve encrypted refs or fetch plain mem/http URLs
+                // Resolve encrypted refs always (needed to decrypt), but only auto-fetch plain mem/http if enabled
                 if (typeof attachment === 'string' && (attachment.startsWith('mem://') || attachment.startsWith('http'))) {
-                  try {
-                    const key = parseMemUrl(attachment) ?? attachment
-                    const obj = await getObject(key)
-                    if (obj) attachment = normalizeDataUrlMime(`data:${obj.mime};base64,${obj.base64Data}`)
-                  } catch {}
+                  if (shouldAutoResolveDM) {
+                    try {
+                      const key = parseMemUrl(attachment) ?? attachment
+                      const obj = await getObject(key)
+                      if (obj) attachment = normalizeDataUrlMime(`data:${obj.mime};base64,${obj.base64Data}`)
+                    } catch {}
+                  }
                 } else if (typeof attachment === 'object' && attachment) {
                   const r = await resolve(attachment)
                   attachment = r ? normalizeDataUrlMime(r) : undefined
@@ -279,12 +289,16 @@ export function startNostrEngine(sk: string) {
                   for (const a of attachments) {
                     if (typeof a === 'string') {
                       if (a.startsWith('mem://') || a.startsWith('http')) {
-                        try {
-                          const key = parseMemUrl(a) ?? a
-                          const obj = await getObject(key)
-                          if (obj) out.push(normalizeDataUrlMime(`data:${obj.mime};base64,${obj.base64Data}`))
-                          else out.push(a)
-                        } catch { out.push(a) }
+                        if (shouldAutoResolveDM) {
+                          try {
+                            const key = parseMemUrl(a) ?? a
+                            const obj = await getObject(key)
+                            if (obj) out.push(normalizeDataUrlMime(`data:${obj.mime};base64,${obj.base64Data}`))
+                            else out.push(a)
+                          } catch { out.push(a) }
+                        } else {
+                          out.push(a)
+                        }
                       } else {
                         out.push(a)
                       }
@@ -420,6 +434,13 @@ export function startNostrEngine(sk: string) {
               let attachment: string | undefined
               let attachments: string[] | undefined
               let pass = ''
+              const shouldAutoResolveRoom = (() => {
+                try {
+                  const s = localStorage.getItem('autoResolveMedia')
+                  if (s === '0' || s === '1') return s === '1'
+                } catch {}
+                return CONFIG.AUTO_RESOLVE_MEDIA_DEFAULT
+              })()
               try {
                 const obj = JSON.parse(evt.content)
                 if (obj && (obj.t || obj.a || obj.as)) {
@@ -461,13 +482,15 @@ export function startNostrEngine(sk: string) {
                     } catch {}
                     return null
                   }
-                  // Resolve encrypted refs or fetch plain mem/http URLs
+                  // Resolve encrypted refs always (needed to decrypt), but only auto-fetch plain mem/http if enabled
                   if (typeof attachment === 'string' && (attachment.startsWith('mem://') || attachment.startsWith('http'))) {
-                    try {
-                      const key = parseMemUrl(attachment) ?? attachment
-                      const obj = await getObject(key)
-                      if (obj) attachment = normalizeDataUrlMime(`data:${obj.mime};base64,${obj.base64Data}`)
-                    } catch {}
+                    if (shouldAutoResolveRoom) {
+                      try {
+                        const key = parseMemUrl(attachment) ?? attachment
+                        const obj = await getObject(key)
+                        if (obj) attachment = normalizeDataUrlMime(`data:${obj.mime};base64,${obj.base64Data}`)
+                      } catch {}
+                    }
                   } else if (typeof attachment === 'object' && attachment) {
                     const r = await resolve(attachment)
                     attachment = r ? normalizeDataUrlMime(r) : undefined
@@ -477,12 +500,16 @@ export function startNostrEngine(sk: string) {
                     for (const a of attachments) {
                       if (typeof a === 'string') {
                         if (a.startsWith('mem://') || a.startsWith('http')) {
-                          try {
-                            const key = parseMemUrl(a) ?? a
-                            const obj = await getObject(key)
-                            if (obj) out.push(normalizeDataUrlMime(`data:${obj.mime};base64,${obj.base64Data}`))
-                            else out.push(a)
-                          } catch { out.push(a) }
+                          if (shouldAutoResolveRoom) {
+                            try {
+                              const key = parseMemUrl(a) ?? a
+                              const obj = await getObject(key)
+                              if (obj) out.push(normalizeDataUrlMime(`data:${obj.mime};base64,${obj.base64Data}`))
+                              else out.push(a)
+                            } catch { out.push(a) }
+                          } else {
+                            out.push(a)
+                          }
                         } else {
                           out.push(a)
                         }
