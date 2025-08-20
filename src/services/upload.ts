@@ -248,6 +248,8 @@ export async function getObject(keyOrUrl: string, opts?: { verbose?: boolean }):
       const u8 = new Uint8Array(buf)
       const b64 = arrayBufferToBase64(buf)
       const mime = ct || sniffMimeFromBytes(u8, 'application/octet-stream')
+      // Debug: log what we detected for absolute URLs
+      log(`Absolute URL download: content-type="${ct}", sniffed="${ct ? 'n/a' : sniffMimeFromBytes(u8, 'application/octet-stream')}", final="${mime}", size=${u8.length}`)
       return { mime, base64Data: b64 }
     } catch (e) {
       log(`Absolute download failed: ${(e as any)?.message || e}`, 'warn')
@@ -279,6 +281,8 @@ export async function getObject(keyOrUrl: string, opts?: { verbose?: boolean }):
   const u8 = new Uint8Array(buf)
   const b64 = arrayBufferToBase64(buf)
   const mime = ct || sniffMimeFromBytes(u8, 'application/octet-stream')
+  // Debug: log what we detected for simple mode
+  log(`Simple mode download: content-type="${ct}", sniffed="${ct ? 'n/a' : sniffMimeFromBytes(u8, 'application/octet-stream')}", final="${mime}", size=${u8.length}`)
   return { mime, base64Data: b64 }
     } catch (e) {
       log(`Download backend failed, trying memory: ${(e as any)?.message || e}`, 'warn')
@@ -335,6 +339,8 @@ export async function getObject(keyOrUrl: string, opts?: { verbose?: boolean }):
             const u8 = new Uint8Array(buf)
             const b64 = arrayBufferToBase64(buf)
             const mime = ct || sniffMimeFromBytes(u8, 'application/octet-stream')
+            // Debug: log what we detected
+            log(`NIP-96 download: content-type="${ct}", sniffed="${ct ? 'n/a' : sniffMimeFromBytes(u8, 'application/octet-stream')}", final="${mime}", size=${u8.length}`)
             return { mime, base64Data: b64 }
           } catch (e) {
             lastErr = e
@@ -400,8 +406,16 @@ function sniffMimeFromBytes(u8: Uint8Array, fallback = 'application/octet-stream
       const head = asStr(0, Math.min(128, u8.length)).trim().toLowerCase()
       if (head.startsWith('<?xml') || head.includes('<svg')) return 'image/svg+xml'
     }
-    // MP4 (ftyp)
-    if (u8.length > 12 && asStr(4,4) === 'ftyp') return 'video/mp4'
+    // MP4 variants (ftyp at offset 4)
+    if (u8.length > 12 && asStr(4,4) === 'ftyp') {
+      const subtype = asStr(8,4)
+      // Common MP4 subtypes
+      if (['isom', 'mp41', 'mp42', 'avc1', 'iso2', 'iso4', 'iso5', 'iso6', 'dash', 'm4a ', 'm4v ', 'M4A ', 'M4V '].some(s => subtype === s)) {
+        return 'video/mp4'
+      }
+      // Default to MP4 for any ftyp
+      return 'video/mp4'
+    }
     // WebM/Matroska (EBML header)
     if (u8.length > 4 && u8[0] === 0x1A && u8[1] === 0x45 && u8[2] === 0xDF && u8[3] === 0xA3) return 'video/webm'
     // Ogg
