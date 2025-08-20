@@ -48,10 +48,16 @@ async function discoverNip96(): Promise<Nip96Config | null> {
 async function getNip96Endpoints(): Promise<{ apiUrl: string; downloadBase: string } | null> {
   if (MODE !== 'nip96') return null
   if (!BASE_URL) return null
+  // Clear cache to ensure fresh discovery
+  nip96Cache = null
   // Try cache, then discovery, fallback to provided BASE_URL
   const cfg = nip96Cache || await discoverNip96()
+  console.log('[DEBUG] NIP-96 discovery result:', cfg)
+  console.log('[DEBUG] BASE_URL from config:', BASE_URL)
+  console.log('[DEBUG] PUBLIC_BASE_URL from config:', PUBLIC_BASE_URL)
   const apiUrl = (cfg?.api_url || BASE_URL).replace(/\/$/, '')
   const downloadBase = (PUBLIC_BASE_URL || cfg?.download_url || cfg?.api_url || BASE_URL).replace(/\/$/, '')
+  console.log('[DEBUG] NIP-96 endpoints - apiUrl:', apiUrl, 'downloadBase:', downloadBase)
   return { apiUrl, downloadBase }
 }
 const MODE = (CONFIG.USE_HARDCODED ? CONFIG.UPLOAD_MODE : (((import.meta as any).env?.VITE_UPLOAD_MODE as string | undefined)?.toLowerCase() as any)) || 'simple'
@@ -85,6 +91,7 @@ export async function putObject(key: string, mime: string, base64Data: string): 
         const endpoints = await getNip96Endpoints()
         const apiUrl = (endpoints?.apiUrl || BASE_URL).replace(/\/$/, '')
         const downloadBase = (endpoints?.downloadBase || BASE_URL).replace(/\/$/, '')
+        console.log('[DEBUG] Final upload URL will be:', apiUrl)
         const bytes = base64ToBytes(base64Data)
   // Copy into a plain ArrayBuffer to avoid SharedArrayBuffer typing issues
   const ab = new ArrayBuffer(bytes.byteLength)
@@ -100,14 +107,29 @@ export async function putObject(key: string, mime: string, base64Data: string): 
         const attempts: Array<{ init: RequestInit; label: string }> = []
         // No-auth first (bypasses CORS preflight on some servers)
         attempts.push({ init: { method: 'POST', body: form }, label: 'no-auth' })
-        // NIP-98 attempt (omit payload tag for multipart to avoid hash mismatch)
+        // NIP-98 attempt with proper payload hash for multipart
         if (AUTH_MODE === 'nip98') {
-          const auth = await makeNip98Header(uploadUrl, 'POST')
+          // For NIP-98 with multipart, some servers expect the payload hash of the file content
+          console.log('[DEBUG] Attempting NIP-98 auth for URL:', uploadUrl)
+          const fileDataHex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
+          const auth = await makeNip98Header(uploadUrl, 'POST', fileDataHex)
           if (auth) {
+            console.log('[DEBUG] NIP-98 auth header created with payload hash:', auth.substring(0, 50) + '...')
             const h = new Headers()
             h.set('Authorization', auth)
-            attempts.push({ init: { method: 'POST', body: form, headers: h }, label: 'nip-98' })
-          } else {
+            attempts.push({ init: { method: 'POST', body: form, headers: h }, label: 'nip-98-with-payload' })
+          }
+          
+          // Also try without payload hash as fallback
+          const authNoPayload = await makeNip98Header(uploadUrl, 'POST')
+          if (authNoPayload) {
+            console.log('[DEBUG] NIP-98 auth header created without payload:', authNoPayload.substring(0, 50) + '...')
+            const h = new Headers()
+            h.set('Authorization', authNoPayload)
+            attempts.push({ init: { method: 'POST', body: form, headers: h }, label: 'nip-98-no-payload' })
+          }
+          
+          if (!auth && !authNoPayload) {
             emitToast('Cannot sign NIP-98 auth. Import a key or enable a NIP-07 extension.', 'error')
           }
         }
@@ -442,17 +464,29 @@ async function makeNip98Header(url: string, method: string, payloadHex?: string)
 
     // Prefer local secret if present; else try NIP-07 (window.nostr)
     const sk = localStorage.getItem('nostr_sk')
+    console.log('[DEBUG] NIP-98 auth - private key available:', !!sk)
     let signed: any | null = null
     if (sk) {
       signed = finalizeEvent(unsigned, hexToBytes(sk))
+      console.log('[DEBUG] NIP-98 auth - signed with local key, kind:', signed.kind)
     } else if (typeof (globalThis as any).window !== 'undefined' && (window as any).nostr?.signEvent) {
-      try { signed = await (window as any).nostr.signEvent(unsigned) } catch {}
+      try { 
+        signed = await (window as any).nostr.signEvent(unsigned)
+        console.log('[DEBUG] NIP-98 auth - signed with NIP-07, kind:', signed?.kind)
+      } catch (e) {
+        console.log('[DEBUG] NIP-98 auth - NIP-07 signing failed:', e)
+      }
     }
-    if (!signed) return null
+    if (!signed) {
+      console.log('[DEBUG] NIP-98 auth - no signing method available')
+      return null
+    }
     const json = JSON.stringify(signed)
     const b64 = btoa(unescape(encodeURIComponent(json)))
+    console.log('[DEBUG] NIP-98 auth - header created, length:', b64.length)
     return `Nostr ${b64}`
-  } catch {
+  } catch (e) {
+    console.log('[DEBUG] NIP-98 auth - error:', e)
     return null
   }
 }

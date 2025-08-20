@@ -10,8 +10,8 @@ export const CONFIG = {
 
   // Media upload backend
   // For simple dev server (server/upload-server.js), set to your server origin, no trailing slash, e.g. "https://your-upload.example.com"
-  // For NIP-96, set to the API URL you POST multipart to (often the origin root or a specific /upload endpoint)
-  UPLOAD_BASE_URL: 'https://relay1.matrus.org/upload',
+  // For NIP-96, set to the base domain (origin) for discovery, e.g. "https://relay1.matrus.org"
+  UPLOAD_BASE_URL: 'https://relay1.matrus.org',
   // Public base for constructing download URLs when needed (usually the origin of your upload server)
   UPLOAD_PUBLIC_BASE_URL: 'https://relay1.matrus.org',
   // Upload mode: 'simple' (JSON to /upload) or 'nip96' (multipart per NIP-96)
