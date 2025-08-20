@@ -56,7 +56,8 @@ async function getNip96Endpoints(): Promise<{ apiUrl: string; downloadBase: stri
   console.log('[DEBUG] BASE_URL from config:', BASE_URL)
   console.log('[DEBUG] PUBLIC_BASE_URL from config:', PUBLIC_BASE_URL)
   const apiUrl = (cfg?.api_url || BASE_URL).replace(/\/$/, '')
-  const downloadBase = (PUBLIC_BASE_URL || cfg?.download_url || cfg?.api_url || BASE_URL).replace(/\/$/, '')
+  // Prefer server-provided download_url first, then api_url; PUBLIC_BASE_URL only as a fallback
+  const downloadBase = (cfg?.download_url || cfg?.api_url || PUBLIC_BASE_URL || BASE_URL).replace(/\/$/, '')
   console.log('[DEBUG] NIP-96 endpoints - apiUrl:', apiUrl, 'downloadBase:', downloadBase)
   return { apiUrl, downloadBase }
 }
@@ -109,10 +110,10 @@ export async function putObject(key: string, mime: string, base64Data: string): 
         attempts.push({ init: { method: 'POST', body: form }, label: 'no-auth' })
         // NIP-98 attempt with proper payload hash for multipart
         if (AUTH_MODE === 'nip98') {
-          // For NIP-98 with multipart, some servers expect the payload hash of the file content
+          // For NIP-98 with multipart, some servers expect the payload to be the sha256 hex of the body
           console.log('[DEBUG] Attempting NIP-98 auth for URL:', uploadUrl)
-          const fileDataHex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
-          const auth = await makeNip98Header(uploadUrl, 'POST', fileDataHex)
+          const payloadHashHex = await sha256Hex(bytes)
+          const auth = await makeNip98Header(uploadUrl, 'POST', payloadHashHex)
           if (auth) {
             console.log('[DEBUG] NIP-98 auth header created with payload hash:', auth.substring(0, 50) + '...')
             const h = new Headers()
@@ -190,7 +191,10 @@ export async function putObject(key: string, mime: string, base64Data: string): 
         }
         throw new Error('Upload response missing url')
       } else {
-        const url = `${BASE_URL.replace(/\/$/, '')}/upload`
+        // Simple mode: POST JSON to /upload on the configured backend.
+        // Be defensive to avoid double '/upload/upload' if BASE_URL already points to '/upload'.
+        const baseTrimmed = BASE_URL.replace(/\/$/, '')
+        const url = baseTrimmed.endsWith('/upload') ? baseTrimmed : `${baseTrimmed}/upload`
         const res = await fetch(url, withAuth({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -319,22 +323,24 @@ export async function getObject(keyOrUrl: string, opts?: { verbose?: boolean }):
       const isHash = /^[0-9a-f]{64}(?:\.[a-z0-9]+)?$/i.test(keyOrUrl)
       const candidates: string[] = []
       if (isHash) {
+        // Hash style resources live directly under downloadBase (prefer server-provided download_url)
         candidates.push(`${endpoints.downloadBase.replace(/\/$/, '')}/${encodeURIComponent(keyOrUrl)}`)
       } else {
-        // Try /o/:key on multiple bases to handle BASE_URL with subpaths (e.g., /upload)
-        const baseTrimmed = BASE_URL.replace(/\/$/, '')
+        // For server-generated keys, prefer the discovered downloadBase first
+        const baseTrimmed = endpoints.apiUrl.replace(/\/$/, '')
         const pubTrimmed = (PUBLIC_BASE_URL || '').replace(/\/$/, '')
         candidates.push(`${baseTrimmed}/o/${encodeURIComponent(keyOrUrl)}`)
-        if (pubTrimmed) candidates.push(`${pubTrimmed}/o/${encodeURIComponent(keyOrUrl)}`)
+        if (pubTrimmed && pubTrimmed !== baseTrimmed) candidates.push(`${pubTrimmed}/o/${encodeURIComponent(keyOrUrl)}`)
         try {
           const origin = new URL(BASE_URL)
           const root = `${origin.protocol}//${origin.host}`
-          candidates.push(`${root}/o/${encodeURIComponent(keyOrUrl)}`)
+          if (root !== baseTrimmed && root !== pubTrimmed) candidates.push(`${root}/o/${encodeURIComponent(keyOrUrl)}`)
         } catch {}
       }
       const attemptLogs: string[] = []
       let lastErr: any
-      for (const url of candidates) {
+  log(`NIP-96 download candidates for key ${keyOrUrl}:\n- ${candidates.join('\n- ')}`)
+  for (const url of candidates) {
         log(`Download <- ${keyOrUrl} (nip96 try ${url})`)
         const attempts: Array<{ init: RequestInit; label: string }> = [{ init: {}, label: 'no-auth' }]
         if (AUTH_MODE === 'nip98') {
