@@ -242,10 +242,11 @@ export async function getObject(keyOrUrl: string, opts?: { verbose?: boolean }):
         const out = await res.json().catch(() => ({})) as any
         if (out && typeof out.data === 'string') return { mime: out.mime || 'application/octet-stream', base64Data: out.data }
       }
-      // Fallback: treat as binary and convert to base64
+      // Fallback: treat as binary and convert to base64; sniff MIME if missing
       const buf = await res.arrayBuffer()
+      const u8 = new Uint8Array(buf)
       const b64 = arrayBufferToBase64(buf)
-      const mime = ct || 'application/octet-stream'
+      const mime = ct || sniffMimeFromBytes(u8, 'application/octet-stream')
       return { mime, base64Data: b64 }
     } catch (e) {
       log(`Absolute download failed: ${(e as any)?.message || e}`, 'warn')
@@ -268,15 +269,16 @@ export async function getObject(keyOrUrl: string, opts?: { verbose?: boolean }):
       }
       const res = await fetch(url, init)
       if (!res.ok) throw new Error(`Get failed: ${res.status}`)
-      const ct = res.headers.get('content-type') || ''
+  const ct = res.headers.get('content-type') || ''
       if (ct.includes('application/json')) {
         const out = await res.json().catch(() => ({})) as any
         if (out && typeof out.data === 'string') return { mime: out.mime || 'application/octet-stream', base64Data: out.data }
       }
-      const buf = await res.arrayBuffer()
-      const b64 = arrayBufferToBase64(buf)
-      const mime = ct || 'application/octet-stream'
-      return { mime, base64Data: b64 }
+  const buf = await res.arrayBuffer()
+  const u8 = new Uint8Array(buf)
+  const b64 = arrayBufferToBase64(buf)
+  const mime = ct || sniffMimeFromBytes(u8, 'application/octet-stream')
+  return { mime, base64Data: b64 }
     } catch (e) {
       log(`Download backend failed, trying memory: ${(e as any)?.message || e}`, 'warn')
       // soft-fail to mem
@@ -329,8 +331,9 @@ export async function getObject(keyOrUrl: string, opts?: { verbose?: boolean }):
               if (out && typeof out.data === 'string') return { mime: out.mime || 'application/octet-stream', base64Data: out.data }
             }
             const buf = await res.arrayBuffer()
+            const u8 = new Uint8Array(buf)
             const b64 = arrayBufferToBase64(buf)
-            const mime = ct || 'application/octet-stream'
+            const mime = ct || sniffMimeFromBytes(u8, 'application/octet-stream')
             return { mime, base64Data: b64 }
           } catch (e) {
             lastErr = e
@@ -376,6 +379,39 @@ function guessExtFromMime(m: string): string {
   'application/pdf': 'pdf'
   }
   return map[m] || ''
+}
+
+function sniffMimeFromBytes(u8: Uint8Array, fallback = 'application/octet-stream'): string {
+  try {
+    const asStr = (start: number, len: number) => Array.from(u8.slice(start, start + len)).map(c => String.fromCharCode(c)).join('')
+    // JPEG
+    if (u8.length > 3 && u8[0] === 0xFF && u8[1] === 0xD8 && u8[2] === 0xFF) return 'image/jpeg'
+    // PNG
+    if (u8.length > 8 && u8[0] === 0x89 && asStr(1,3) === 'PNG') return 'image/png'
+    // GIF87a / GIF89a
+    if (u8.length > 6 && (asStr(0,6) === 'GIF87a' || asStr(0,6) === 'GIF89a')) return 'image/gif'
+    // WEBP (RIFF....WEBP)
+    if (u8.length > 12 && asStr(0,4) === 'RIFF' && asStr(8,4) === 'WEBP') return 'image/webp'
+    // PDF
+    if (u8.length > 5 && asStr(0,5) === '%PDF-') return 'application/pdf'
+    // SVG (text XML/HTML-ish)
+    if (u8.length > 5) {
+      const head = asStr(0, Math.min(128, u8.length)).trim().toLowerCase()
+      if (head.startsWith('<?xml') || head.includes('<svg')) return 'image/svg+xml'
+    }
+    // MP4 (ftyp)
+    if (u8.length > 12 && asStr(4,4) === 'ftyp') return 'video/mp4'
+    // WebM/Matroska (EBML header)
+    if (u8.length > 4 && u8[0] === 0x1A && u8[1] === 0x45 && u8[2] === 0xDF && u8[3] === 0xA3) return 'video/webm'
+    // Ogg
+    if (u8.length > 4 && asStr(0,4) === 'OggS') return 'audio/ogg'
+    // WAV (RIFF....WAVE)
+    if (u8.length > 12 && asStr(0,4) === 'RIFF' && asStr(8,4) === 'WAVE') return 'audio/wav'
+    // MP3 (ID3 tag or frame sync 0xFFFB)
+    if (u8.length > 3 && asStr(0,3) === 'ID3') return 'audio/mpeg'
+    if (u8.length > 2 && u8[0] === 0xFF && (u8[1] & 0xE0) === 0xE0) return 'audio/mpeg'
+  } catch {}
+  return fallback || 'application/octet-stream'
 }
 
 async function makeNip98Header(url: string, method: string, payloadHex?: string): Promise<string | null> {

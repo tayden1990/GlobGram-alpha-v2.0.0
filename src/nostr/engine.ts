@@ -20,6 +20,53 @@ function getOrCreateRoomSubId(pk: string) {
   return ROOM_SUB_ID
 }
 
+// Normalize data URL mime using simple signature sniffing when provided mime is generic/missing
+function normalizeDataUrlMime(dataUrl: string): string {
+  try {
+    if (!dataUrl.startsWith('data:')) return dataUrl
+    const m = /^data:([^;,]+)?(;base64)?,(.*)$/i.exec(dataUrl)
+    if (!m) return dataUrl
+    const mime = (m[1] || '').toLowerCase()
+    const isB64 = (m[2] || '').toLowerCase().includes('base64')
+    const payload = m[3] || ''
+    const bytes = (() => {
+      if (isB64) {
+        const bin = atob(payload)
+        const u = new Uint8Array(bin.length)
+        for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i)
+        return u
+      }
+      const dec = decodeURIComponent(payload)
+      const enc = new TextEncoder()
+      return enc.encode(dec)
+    })()
+    const asStr = (start: number, len: number) => Array.from(bytes.slice(start, start + len)).map(c => String.fromCharCode(c)).join('')
+    let sniff: string | null = null
+    if (bytes.length > 3 && bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) sniff = 'image/jpeg'
+    else if (bytes.length > 8 && bytes[0] === 0x89 && asStr(1,3) === 'PNG') sniff = 'image/png'
+    else if (bytes.length > 6 && (asStr(0,6) === 'GIF87a' || asStr(0,6) === 'GIF89a')) sniff = 'image/gif'
+    else if (bytes.length > 12 && asStr(0,4) === 'RIFF' && asStr(8,4) === 'WEBP') sniff = 'image/webp'
+    else if (bytes.length > 5 && asStr(0,5) === '%PDF-') sniff = 'application/pdf'
+    else if (bytes.length > 5) {
+      const head = asStr(0, Math.min(128, bytes.length)).trim().toLowerCase()
+      if (head.startsWith('<?xml') || head.includes('<svg')) sniff = 'image/svg+xml'
+    }
+    else if (bytes.length > 12 && asStr(4,4) === 'ftyp') sniff = 'video/mp4'
+    else if (bytes.length > 4 && bytes[0] === 0x1A && bytes[1] === 0x45 && bytes[2] === 0xDF && bytes[3] === 0xA3) sniff = 'video/webm'
+    else if (bytes.length > 4 && asStr(0,4) === 'OggS') sniff = 'audio/ogg'
+    else if (bytes.length > 12 && asStr(0,4) === 'RIFF' && asStr(8,4) === 'WAVE') sniff = 'audio/wav'
+    else if (bytes.length > 3 && asStr(0,3) === 'ID3') sniff = 'audio/mpeg'
+    else if (bytes.length > 2 && bytes[0] === 0xFF && (bytes[1] & 0xE0) === 0xE0) sniff = 'audio/mpeg'
+    const finalMime = sniff || mime || 'application/octet-stream'
+    // Rebuild data URL with corrected mime if changed
+    if (finalMime === mime || !finalMime) return dataUrl
+    const prefix = `data:${finalMime}${isB64 ? ';base64' : ''},`
+    return prefix + payload
+  } catch {
+    return dataUrl
+  }
+}
+
 export function startNostrEngine(sk: string) {
   const pk = getPublicKey(hexToBytes(sk))
   const urls = useRelayStore.getState().relays.filter(r => r.enabled).map(r => r.url)
@@ -193,11 +240,11 @@ export function startNostrEngine(sk: string) {
                   try {
                     const key = parseMemUrl(attachment) ?? attachment
                     const obj = await getObject(key)
-                    if (obj) attachment = `data:${obj.mime};base64,${obj.base64Data}`
+                    if (obj) attachment = normalizeDataUrlMime(`data:${obj.mime};base64,${obj.base64Data}`)
                   } catch {}
                 } else if (typeof attachment === 'object' && attachment) {
                   const r = await resolve(attachment)
-                  attachment = r || undefined
+                  attachment = r ? normalizeDataUrlMime(r) : undefined
                 }
                 if (attachments) {
                   const out: string[] = []
@@ -207,7 +254,7 @@ export function startNostrEngine(sk: string) {
                         try {
                           const key = parseMemUrl(a) ?? a
                           const obj = await getObject(key)
-                          if (obj) out.push(`data:${obj.mime};base64,${obj.base64Data}`)
+                          if (obj) out.push(normalizeDataUrlMime(`data:${obj.mime};base64,${obj.base64Data}`))
                           else out.push(a)
                         } catch { out.push(a) }
                       } else {
@@ -215,7 +262,7 @@ export function startNostrEngine(sk: string) {
                       }
                     } else {
                       const r = await resolve(a)
-                      if (r) out.push(r)
+                      if (r) out.push(normalizeDataUrlMime(r))
                     }
                   }
                   attachments = out.length ? out : undefined
@@ -358,11 +405,11 @@ export function startNostrEngine(sk: string) {
                     try {
                       const key = parseMemUrl(attachment) ?? attachment
                       const obj = await getObject(key)
-                      if (obj) attachment = `data:${obj.mime};base64,${obj.base64Data}`
+                      if (obj) attachment = normalizeDataUrlMime(`data:${obj.mime};base64,${obj.base64Data}`)
                     } catch {}
                   } else if (typeof attachment === 'object' && attachment) {
                     const r = await resolve(attachment)
-                    attachment = r || undefined
+                    attachment = r ? normalizeDataUrlMime(r) : undefined
                   }
                   if (attachments) {
                     const out: string[] = []
@@ -372,7 +419,7 @@ export function startNostrEngine(sk: string) {
                           try {
                             const key = parseMemUrl(a) ?? a
                             const obj = await getObject(key)
-                            if (obj) out.push(`data:${obj.mime};base64,${obj.base64Data}`)
+                            if (obj) out.push(normalizeDataUrlMime(`data:${obj.mime};base64,${obj.base64Data}`))
                             else out.push(a)
                           } catch { out.push(a) }
                         } else {
@@ -380,7 +427,7 @@ export function startNostrEngine(sk: string) {
                         }
                       } else {
                         const r = await resolve(a)
-                        if (r) out.push(r)
+                        if (r) out.push(normalizeDataUrlMime(r))
                       }
                     }
                     attachments = out.length ? out : undefined
