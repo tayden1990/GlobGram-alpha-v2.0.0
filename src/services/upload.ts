@@ -185,6 +185,8 @@ export async function putObject(key: string, mime: string, base64Data: string): 
           let fileHashB64: string | null = null
           let bodyHashHex: string | undefined
           let bodyHashB64: string | null = null
+          let bodyB64: string | null = null
+          let bodyB64url: string | null = null
           let multipartBytes: Uint8Array | undefined
           let multipartCT: string | undefined
           if (AUTH_MODE === 'nip98') {
@@ -211,6 +213,14 @@ export async function putObject(key: string, mime: string, base64Data: string): 
               bodyHashB64Local = btoa(s)
             } catch {}
             bodyHashB64 = bodyHashB64Local
+            // Also compute base64 of entire multipart body (not just the hash) for servers expecting raw body in payload
+            try {
+              const mb = multipartBytes
+              let s = ''
+              for (let i = 0; i < mb.length; i++) s += String.fromCharCode(mb[i])
+              bodyB64 = btoa(s)
+              bodyB64url = bodyB64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+            } catch {}
             const addAttempt = async (label: string, payload?: string, withChallenge = false) => {
               const extraTags: Array<[string, string]> = []
               if (withChallenge && challenge) extraTags.push(['challenge', challenge])
@@ -295,8 +305,9 @@ export async function putObject(key: string, mime: string, base64Data: string): 
                   }
                 }
               }
+              const www = r.headers.get('www-authenticate') || r.headers.get('WWW-Authenticate') || ''
               const text = await r.text().catch(() => '')
-              attemptLogs.push(`[${label}] HTTP ${r.status} ${r.statusText}${text ? ` - ${truncate(text)}` : ''}`)
+              attemptLogs.push(`[${label}] HTTP ${r.status} ${r.statusText}${www ? ` - WWW-Authenticate: ${www}` : ''}${text ? ` - ${truncate(text)}` : ''}`)
               lastErr = new Error(`HTTP ${r.status}`)
             } catch (e: any) {
               attemptLogs.push(`[${label}] ${e?.name || 'Error'}: ${e?.message || e}`)
@@ -357,6 +368,15 @@ export async function putObject(key: string, mime: string, base64Data: string): 
                       await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl}-chalTag-bodyHashB64url`, u, true, toB64Url(bodyHashB64), encUrl, false)
                       await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl}-chalContent-bodyHashB64url`, u, true, toB64Url(bodyHashB64), encUrl, true)
                     }
+                    // raw-body payload (b64/b64url) variants
+                    if (bodyB64) {
+                      await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl}-chalTag-bodyB64`, u, true, bodyB64, encUrl, false)
+                      await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl}-chalContent-bodyB64`, u, true, bodyB64, encUrl, true)
+                    }
+                    if (bodyB64url) {
+                      await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl}-chalTag-bodyB64url`, u, true, bodyB64url, encUrl, false)
+                      await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl}-chalContent-bodyB64url`, u, true, bodyB64url, encUrl, true)
+                    }
                   }
                   // file-hash variant using FormData body
                   if (fileHashHex) {
@@ -369,8 +389,9 @@ export async function putObject(key: string, mime: string, base64Data: string): 
                 try {
                   const r = await fetch(uploadUrl, init)
                   if (r.ok) { res = r; attemptLogs.push(`[${label}] OK ${r.status}`); break }
+                  const www = r.headers.get('www-authenticate') || r.headers.get('WWW-Authenticate') || ''
                   const text = await r.text().catch(() => '')
-                  attemptLogs.push(`[${label}] HTTP ${r.status} ${r.statusText}${text ? ` - ${truncate(text)}` : ''}`)
+                  attemptLogs.push(`[${label}] HTTP ${r.status} ${r.statusText}${www ? ` - WWW-Authenticate: ${www}` : ''}${text ? ` - ${truncate(text)}` : ''}`)
                 } catch (e: any) {
                   attemptLogs.push(`[${label}] ${e?.name || 'Error'}: ${e?.message || e}`)
                 }
@@ -800,10 +821,13 @@ async function makeNip98HeaderWithTags(url: string, method: string, payloadHex?:
 }
 
 // Custom variant: supports base64url JSON encoding and putting challenge into content.
-async function makeNip98HeaderCustom(url: string, method: string, payloadHex?: string, extraTags?: Array<[string, string]>, content?: string, base64Url?: boolean): Promise<string | null> {
+type MethodCase = 'both' | 'upper' | 'lower'
+async function makeNip98HeaderCustom(url: string, method: string, payloadHex?: string, extraTags?: Array<[string, string]>, content?: string, base64Url?: boolean, methodCase: MethodCase = 'both'): Promise<string | null> {
   try {
     const now = Math.floor(Date.now() / 1000)
-    const tags: Array<[string, string]> = [ ['u', url], ['method', method.toUpperCase()] ]
+  const tags: Array<[string, string]> = [ ['u', url] ]
+  if (methodCase === 'both' || methodCase === 'upper') tags.push(['method', method.toUpperCase()])
+  if (methodCase === 'both' || methodCase === 'lower') tags.push(['method', method.toLowerCase()])
     if (payloadHex) tags.push(['payload', payloadHex])
     if (Array.isArray(extraTags)) {
       for (const t of extraTags) {

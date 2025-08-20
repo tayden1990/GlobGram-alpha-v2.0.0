@@ -25,5 +25,5 @@ export const CONFIG = {
   AUTO_RESOLVE_MEDIA_DEFAULT: false,
 
   // NIP-94: auto-publish a kind 1063 File Metadata event after successful uploads
-  AUTO_PUBLISH_NIP94: true,
+  AUTO_PUBLISH_NIP94: false,
 }
