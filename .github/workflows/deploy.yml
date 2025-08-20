@@ -30,12 +30,12 @@ jobs:
       - name: Build
         env:
           REPO_NAME: ${{ github.event.repository.name }}
-          # Optional: configure public upload server for production
-          VITE_UPLOAD_BASE_URL: ${{ secrets.VITE_UPLOAD_BASE_URL }}
-          VITE_UPLOAD_MODE: ${{ secrets.VITE_UPLOAD_MODE }}
-          VITE_UPLOAD_AUTH_MODE: ${{ secrets.VITE_UPLOAD_AUTH_MODE }}
-          VITE_UPLOAD_AUTH_TOKEN: ${{ secrets.VITE_UPLOAD_AUTH_TOKEN }}
-          VITE_UPLOAD_PUBLIC_BASE_URL: ${{ secrets.VITE_UPLOAD_PUBLIC_BASE_URL }}
+          # Optional: configure public upload server for production (prefer Secrets, fallback to Variables)
+          VITE_UPLOAD_BASE_URL: ${{ secrets.VITE_UPLOAD_BASE_URL || vars.VITE_UPLOAD_BASE_URL }}
+          VITE_UPLOAD_MODE: ${{ secrets.VITE_UPLOAD_MODE || vars.VITE_UPLOAD_MODE }}
+          VITE_UPLOAD_AUTH_MODE: ${{ secrets.VITE_UPLOAD_AUTH_MODE || vars.VITE_UPLOAD_AUTH_MODE }}
+          VITE_UPLOAD_AUTH_TOKEN: ${{ secrets.VITE_UPLOAD_AUTH_TOKEN || vars.VITE_UPLOAD_AUTH_TOKEN }}
+          VITE_UPLOAD_PUBLIC_BASE_URL: ${{ secrets.VITE_UPLOAD_PUBLIC_BASE_URL || vars.VITE_UPLOAD_PUBLIC_BASE_URL }}
         run: npm run build
       - name: Add SPA 404 fallback
         run: cp dist/index.html dist/404.html
