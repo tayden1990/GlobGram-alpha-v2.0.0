@@ -55,6 +55,8 @@ export function ChatWindow() {
   const [preparing, setPreparing] = useState(false)
   const [prepProgress, setPrepProgress] = useState(0)
   const [sending, setSending] = useState(false)
+  // Env toggle: do not auto-download media unless explicitly enabled
+  const AUTO_RESOLVE_MEDIA = (() => { try { return String((import.meta as any).env?.VITE_AUTO_RESOLVE_MEDIA || '0') !== '0' } catch { return false } })()
   // Upload backend hint banner
   const hasBackend = (() => { try { return Boolean((import.meta as any).env?.VITE_UPLOAD_BASE_URL) } catch { return false } })()
   const uploadBannerMsg = (() => {
@@ -188,6 +190,7 @@ export function ChatWindow() {
 
   // Auto-resolve pointer attachments for visible items (best-effort, background)
   useEffect(() => {
+  if (!AUTO_RESOLVE_MEDIA) return
     let cancelled = false
     const run = async () => {
       const maxConcurrent = 3
@@ -238,7 +241,7 @@ export function ChatWindow() {
     }
     run()
     return () => { cancelled = true }
-  }, [items, selectedPeer, updateMessage])
+  }, [items, selectedPeer, updateMessage, AUTO_RESOLVE_MEDIA])
 
   // if user is near bottom when new messages arrive, keep pinned to bottom
   useEffect(() => {
@@ -516,7 +519,21 @@ export function ChatWindow() {
                         <div key={i} style={{ width: THUMB_SIZE, justifySelf: 'start', display: 'grid', gap: 6 }}>
                           <div style={{ fontSize: 12, color: 'var(--muted)' }}>{t('chat.resolvingMedia') || 'Resolving media…'}</div>
                           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                            <button style={{ fontSize: 12 }} onClick={async () => {
+                            {(() => {
+                              try {
+                                const isPageLocal = /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(location.hostname)
+                                const u = String(a || '')
+                                const isLocalPtr = typeof u === 'string' && /^https?:\/\/localhost(?::\d+)?/i.test(u)
+                                if (!isPageLocal && isLocalPtr) {
+                                  return (
+                                    <span style={{ fontSize: 12, color: 'var(--muted)' }} title={t('chat.mediaUnavailable') || 'Media unavailable'}>
+                                      Unavailable on this host (localhost upload)
+                                    </span>
+                                  )
+                                }
+                              } catch {}
+                              return (
+                                <button style={{ fontSize: 12 }} onClick={async () => {
                               async function resolveVerbose(u: string) {
                                 try {
                                   const key = parseMemUrl(u) ?? u
@@ -534,6 +551,8 @@ export function ChatWindow() {
                                 show(t('chat.mediaUnavailable')!, 'error')
                               }
                             }}>{t('chat.load') || 'Load'}</button>
+                              )
+                            })()}
                             {typeof a === 'string' && a.startsWith('http') && (
                               <a href={a} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12 }} title={t('chat.openInNewTab') || 'Open in new tab'}>
                                 {t('chat.open') || 'Open'}
