@@ -17,6 +17,8 @@ export type RoomMessage = {
   text?: string
   attachment?: string
   attachments?: string[]
+  name?: string
+  names?: string[]
 }
 
 type State = {

@@ -174,31 +174,48 @@ export function ChatWindow() {
     return (u.startsWith('mem://') || (u.startsWith('http://') || u.startsWith('https://')))
   }
   // Resolve a pointer to a data URL and patch message
-  async function resolvePointerToDataURL(ptr: string): Promise<string | null> {
+  function dataUrlToName(durl: string) {
+    try {
+      const m = /^data:([^;]+);/.exec(durl)
+      const mime = m?.[1] || 'application/octet-stream'
+      const ext = guessExt(mime)
+      return `download.${ext}`
+    } catch { return 'download.bin' }
+  }
+  async function resolvePointerToDataURL(ptr: string): Promise<{ durl: string; name: string } | null> {
     try {
       const key = parseMemUrl(ptr) ?? ptr
       const obj = await getObject(key)
-      if (obj) return `data:${obj.mime};base64,${obj.base64Data}`
+      if (obj) {
+        const d = `data:${obj.mime};base64,${obj.base64Data}`
+        return { durl: d, name: dataUrlToName(d) }
+      }
     } catch {}
     return null
   }
   function guessExt(mime: string) {
     const map: Record<string, string> = {
-  'application/pdf': 'pdf', 'application/zip': 'zip', 'application/json': 'json', 'text/plain': 'txt',
+      'application/pdf': 'pdf',
+      'application/zip': 'zip', 'application/x-zip-compressed': 'zip',
+      'application/x-7z-compressed': '7z',
+      'application/x-rar-compressed': 'rar', 'application/vnd.rar': 'rar',
+      'application/json': 'json', 'text/plain': 'txt', 'text/csv': 'csv', 'text/markdown': 'md', 'text/html': 'html',
+      'application/xml': 'xml', 'text/xml': 'xml', 'application/rtf': 'rtf',
       'application/vnd.ms-excel': 'xls', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
       'application/msword': 'doc', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
       'application/vnd.ms-powerpoint': 'ppt', 'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
-  'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/svg+xml': 'svg',
-  'audio/mpeg': 'mp3', 'audio/ogg': 'ogg', 'audio/webm': 'webm', 'audio/wav': 'wav',
-  'video/mp4': 'mp4', 'video/webm': 'webm',
+      'application/vnd.android.package-archive': 'apk', 'application/x-msdownload': 'exe',
+      'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/svg+xml': 'svg', 'image/heic': 'heic', 'image/heif': 'heif', 'image/avif': 'avif',
+      'audio/mpeg': 'mp3', 'audio/ogg': 'ogg', 'audio/webm': 'webm', 'audio/wav': 'wav', 'audio/aac': 'aac', 'audio/flac': 'flac',
+      'video/mp4': 'mp4', 'video/webm': 'webm', 'video/quicktime': 'mov', 'video/3gpp': '3gp'
     }
-    return map[mime] || ''
+    return map[mime] || 'bin'
   }
   function filenameForDataUrl(durl: string) {
     const m = /^data:([^;]+);/.exec(durl)
     const mime = m?.[1] || 'application/octet-stream'
     const ext = guessExt(mime)
-    return ext ? `download.${ext}` : 'download'
+    return `download.${ext}`
   }
   // Infer extension from a URL (best-effort, ignores query/hash)
   function inferExtFromUrl(u: string) {
@@ -229,8 +246,8 @@ export function ChatWindow() {
           seen.add(m.id+':a')
           const ptr = m.attachment
           tasks.push(async () => {
-            const d = await resolvePointerToDataURL(ptr)
-            if (!cancelled && d && selectedPeer) updateMessage(selectedPeer, m.id, { attachment: d })
+            const r = await resolvePointerToDataURL(ptr)
+            if (!cancelled && r && selectedPeer) updateMessage(selectedPeer, m.id, { attachment: r.durl, name: r.name })
           })
         }
         if (Array.isArray(m.attachments)) {
@@ -239,14 +256,17 @@ export function ChatWindow() {
               seen.add(m.id+':as:'+i)
               const ptr = a
               tasks.push(async () => {
-                const d = await resolvePointerToDataURL(ptr)
-                if (!cancelled && d && selectedPeer) {
+                const r = await resolvePointerToDataURL(ptr)
+                if (!cancelled && r && selectedPeer) {
                   const conv = useChatStore.getState().conversations[selectedPeer] || []
                   const found = conv.find((x: any) => x.id === m.id)
                   const base = (found?.attachments || m.attachments || []) as string[]
                   const next = [...base]
-                  next[i] = d
-                  updateMessage(selectedPeer, m.id, { attachments: next })
+                  next[i] = r.durl
+                  const names = (found?.names || m.names || []) as string[]
+                  const nextNames = [...names]
+                  nextNames[i] = r.name
+                  updateMessage(selectedPeer, m.id, { attachments: next, names: nextNames })
                 }
               })
             }
@@ -442,7 +462,7 @@ export function ChatWindow() {
                               return null
                             }
                             const d = await resolveVerbose(m.attachment!)
-                            if (d) updateMessage(selectedPeer, m.id, { attachment: d })
+                            if (d) updateMessage(selectedPeer, m.id, { attachment: d, name: filenameForDataUrl(d) })
                             else {
                               show(t('chat.mediaUnavailable')!, 'error')
                             }
@@ -472,8 +492,8 @@ export function ChatWindow() {
                     )}
                     {m.attachment && m.attachment.startsWith('data:') && !m.attachment.startsWith('data:image/') && !m.attachment.startsWith('data:video/') && !m.attachment.startsWith('data:audio/') && (
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <a href={m.attachment!} download={filenameForDataUrl(m.attachment!)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--accent)' }} onClick={() => { try { log(`ChatWindow.download.file size=${dataURLSize(m.attachment!)}B`) } catch {} }}>
-                          {t('chat.downloadFile', { size: readableSize(dataURLSize(m.attachment)) })}
+                        <a href={m.attachment!} download={m.name || filenameForDataUrl(m.attachment!)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--accent)' }} onClick={() => { try { log(`ChatWindow.download.file size=${dataURLSize(m.attachment!)}B`) } catch {} }}>
+                          {(t('chat.download') || 'Download')} {(m.name || filenameForDataUrl(m.attachment!))} ({readableSize(dataURLSize(m.attachment))})
                         </a>
                         <button style={{ fontSize: 12 }} onClick={async () => {
                           try { await navigator.clipboard.writeText(m.attachment!); show(t('chat.linkCopied')!, 'success'); try { log(`ChatWindow.copy.link size=${dataURLSize(m.attachment!)}B`) } catch {} } catch { show(t('chat.copyFailed')!, 'error'); try { log('ChatWindow.copy.link.error') } catch {} }
@@ -522,8 +542,8 @@ export function ChatWindow() {
                         </>
                       ) : a.startsWith('data:') ? (
                         <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                          <a href={a} download={filenameForDataUrl(a)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--accent)' }} onClick={() => { try { log(`ChatWindow.download.file size=${dataURLSize(a)}B`) } catch {} }}>
-                            {t('chat.downloadFile', { size: readableSize(dataURLSize(a)) })}
+                          <a href={a} download={(m.names && m.names[i]) || filenameForDataUrl(a)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--accent)' }} onClick={() => { try { log(`ChatWindow.download.file size=${dataURLSize(a)}B`) } catch {} }}>
+                            {(t('chat.download') || 'Download')} {(m.names && m.names[i]) || filenameForDataUrl(a)} ({readableSize(dataURLSize(a))})
                           </a>
                           <button style={{ fontSize: 12 }} onClick={async () => {
                             try { await navigator.clipboard.writeText(a); show(t('chat.linkCopied')!, 'success'); try { log(`ChatWindow.copy.link size=${dataURLSize(a)}B`) } catch {} } catch { show(t('chat.copyFailed')!, 'error'); try { log('ChatWindow.copy.link.error') } catch {} }
@@ -591,7 +611,9 @@ export function ChatWindow() {
                               if (d) {
                                 const next = [...(m.attachments || [])]
                                 next[i] = d
-                                updateMessage(selectedPeer, m.id, { attachments: next })
+                                const names = [...(m.names || [])]
+                                names[i] = filenameForDataUrl(d)
+                                updateMessage(selectedPeer, m.id, { attachments: next, names })
                               } else {
                                 show(t('chat.mediaUnavailable')!, 'error')
                               }

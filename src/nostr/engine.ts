@@ -12,6 +12,27 @@ import { emitToast } from '../ui/Toast'
 import { tGlobal } from '../i18n'
 import { CONFIG } from '../config'
 
+// Helper to generate filename from data URL MIME
+function dataUrlToFilename(durl: string): string {
+  try {
+    const m = /^data:([^;]+);/.exec(durl)
+    const mime = (m?.[1] || '').toLowerCase()
+    const extMap: Record<string, string> = {
+      'application/pdf': 'pdf', 'application/zip': 'zip', 'application/json': 'json', 'text/plain': 'txt',
+      'application/vnd.ms-excel': 'xls', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+      'application/msword': 'doc', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+      'application/vnd.ms-powerpoint': 'ppt', 'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+      'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/svg+xml': 'svg',
+      'audio/mpeg': 'mp3', 'audio/ogg': 'ogg', 'audio/webm': 'webm', 'audio/wav': 'wav',
+      'video/mp4': 'mp4', 'video/webm': 'webm'
+    }
+    const ext = extMap[mime] || 'bin'
+    return `download.${ext}`
+  } catch {
+    return 'download.bin'
+  }
+}
+
 // Stable per-session room subscription id and per-relay active state to prevent duplicate REQs
 let ROOM_SUB_ID: string | null = null
 const activeRoomSubs = new Map<string, { roomId: string | null, subId: string }>() // key: relay url
@@ -276,6 +297,21 @@ export function startNostrEngine(sk: string) {
             }
             const { addMessage } = useChatStore.getState()
             const isBlocked = !!useChatStore.getState().blocked[peerPk]
+            
+            // Generate filenames for resolved data URLs
+            let name: string | undefined
+            let names: string[] | undefined
+            
+            if (typeof attachment === 'string' && attachment.startsWith('data:')) {
+              name = dataUrlToFilename(attachment)
+            }
+            
+            if (attachments && attachments.length > 0) {
+              names = attachments.map(a => 
+                typeof a === 'string' && a.startsWith('data:') ? dataUrlToFilename(a) : 'download.bin'
+              )
+            }
+            
             const message: ChatMessage = {
               id: evt.id,
               from: evt.pubkey,
@@ -284,6 +320,8 @@ export function startNostrEngine(sk: string) {
               text,
               attachment,
               attachments,
+              name,
+              names,
             }
             if (!isBlocked) addMessage(peerPk, message)
             else log(`Message from blocked peer ${peerPk.slice(0,8)}… ignored`, 'warn')
@@ -439,7 +477,32 @@ export function startNostrEngine(sk: string) {
               } catch {
                 text = evt.content
               }
-              useRoomStore.getState().addRoomMessage(roomId, { id: evt.id, roomId, from: evt.pubkey, ts: evt.created_at ?? Math.floor(Date.now()/1000), text, attachment, attachments })
+              
+              // Generate filenames for resolved data URLs in room messages
+              let name: string | undefined
+              let names: string[] | undefined
+              
+              if (typeof attachment === 'string' && attachment.startsWith('data:')) {
+                name = dataUrlToFilename(attachment)
+              }
+              
+              if (attachments && attachments.length > 0) {
+                names = attachments.map(a => 
+                  typeof a === 'string' && a.startsWith('data:') ? dataUrlToFilename(a) : 'download.bin'
+                )
+              }
+              
+              useRoomStore.getState().addRoomMessage(roomId, { 
+                id: evt.id, 
+                roomId, 
+                from: evt.pubkey, 
+                ts: evt.created_at ?? Math.floor(Date.now()/1000), 
+                text, 
+                attachment, 
+                attachments,
+                name,
+                names
+              })
             }
           }
         }

@@ -10,6 +10,8 @@ export type ChatMessage = {
   text?: string
   attachment?: string // data URL (legacy single)
   attachments?: string[] // data URLs (new multi)
+  name?: string // suggested filename for single attachment
+  names?: string[] // suggested filenames for multi attachments
   status?: 'pending' | 'sent' | 'delivered' | 'failed'
   error?: string
 }
