@@ -56,6 +56,14 @@ export function ChatWindow() {
   const [preparing, setPreparing] = useState(false)
   const [prepProgress, setPrepProgress] = useState(0)
   const [sending, setSending] = useState(false)
+  type SendProg = { stage: 'idle'|'uploading'|'publishing'|'done'; uploaded: number; total: number; fileProgress?: { current: number; total: number; fileIndex: number } }
+  const [sendProg, setSendProg] = useState<SendProg>({ stage: 'idle', uploaded: 0, total: 0, fileProgress: undefined })
+  // Format bytes for progress display
+  function formatBytes(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+  }
   // Download progress per message/attachment key: `${msgId}:a` for single, `${msgId}:as:${i}` for multi
   const [dlProgress, setDlProgress] = useState<Record<string, { received: number; total?: number }>>({})
   // User setting: auto-resolve media (default from env, persisted in localStorage)
@@ -891,7 +899,29 @@ export function ChatWindow() {
             <input type="checkbox" checked={autoResolveMedia} onChange={(e) => setAutoResolveMedia(e.target.checked)} />
             {t('chat.autoLoadMedia') || 'Auto-load media'}
           </label>
-          <div style={{ marginLeft: 'auto' }}>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+            {sending && (
+              <span style={{ fontSize: 12, color: 'var(--muted)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ width: 120, height: 6, background: 'var(--border)', borderRadius: 4, overflow: 'hidden', display: 'inline-block' }}>
+                  <span
+                    style={{
+                      display: 'block',
+                      height: '100%',
+                      width: sendProg.stage === 'uploading' && sendProg.fileProgress && sendProg.fileProgress.total > 0
+                        ? `${Math.round((sendProg.fileProgress.current / sendProg.fileProgress.total) * 100)}%`
+                        : (sendProg.total ? `${Math.round((sendProg.uploaded/sendProg.total)*100)}` : '100') + '%',
+                      background: 'var(--accent)',
+                      transition: 'width 150ms linear'
+                    }}
+                  />
+                </span>
+                {sendProg.stage === 'uploading' && sendProg.fileProgress && sendProg.fileProgress.total > 0
+                  ? `${t('chat.uploading') || 'Uploading'} ${sendProg.uploaded + 1}/${sendProg.total} (${Math.round((sendProg.fileProgress.current/sendProg.fileProgress.total)*100)}% - ${formatBytes(sendProg.fileProgress.current)} / ${formatBytes(sendProg.fileProgress.total)})`
+                  : sendProg.stage === 'uploading'
+                    ? `${t('chat.uploading') || 'Uploading'} ${sendProg.uploaded}/${sendProg.total}`
+                    : (sendProg.stage === 'publishing' ? (t('chat.publishing') || 'Publishing…') : (t('chat.sending') || 'Sending…'))}
+              </span>
+            )}
             <button style={{ minWidth: 88 }} onClick={async () => {
               if (navigator.vibrate) try { navigator.vibrate(15) } catch {}
               const sk = localStorage.getItem('nostr_sk')
@@ -915,12 +945,24 @@ export function ChatWindow() {
                 }
               } catch {}
               setSending(true)
-              await sendDM(sk, selectedPeer, { t: text || undefined, a: attachment || undefined, as: attachments.length ? attachments : undefined, p })
+              setSendProg({ stage: 'uploading', uploaded: 0, total: 0, fileProgress: undefined })
+              await sendDM(sk, selectedPeer, { t: text || undefined, a: attachment || undefined, as: attachments.length ? attachments : undefined, p }, {
+                onProgress: ({ stage, uploaded, totalUploads, fileProgress }) => {
+                  setSendProg({ stage, uploaded: uploaded ?? 0, total: totalUploads ?? 0, fileProgress })
+                }
+              })
+// Format bytes for progress display
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+}
               setText('')
               setAttachment(null)
               setAttachments([])
               setSending(false)
-            }} disabled={preparing || (!text && !attachment && attachments.length===0)}>{t('common.send')}</button>
+              setSendProg({ stage: 'idle', uploaded: 0, total: 0, fileProgress: undefined })
+            }} disabled={preparing || sending || (!text && !attachment && attachments.length===0)}>{t('common.send')}</button>
           </div>
         </div>
       </footer>

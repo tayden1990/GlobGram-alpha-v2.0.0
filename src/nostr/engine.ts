@@ -704,7 +704,7 @@ export async function sendDM(
   sk: string,
   to: string,
   payload: { t?: string; a?: any; as?: any[]; p?: string },
-  opts?: { reuseId?: string }
+  opts?: { reuseId?: string; onProgress?: (p: { stage: 'uploading' | 'publishing' | 'done'; uploaded?: number; totalUploads?: number; fileProgress?: { current: number; total: number; fileIndex: number } }) => void }
 ): Promise<{ id: string; acked: Promise<boolean> }> {
   const SMALL_INLINE_LIMIT = 128 * 1024 // 128 KB inline fallback for non-encrypted media
   const readableSize = (bytes: number) => {
@@ -729,19 +729,23 @@ export async function sendDM(
   // When payload.p is empty, we still upload the raw bytes and return a small mem: pointer (new).
   let requiresBackendForReceiver = false
   let requiresBackendBytes: number | null = null
-  const processOne = async (d: any): Promise<any> => {
+  const processOne = async (d: any, fileIndex: number): Promise<any> => {
     if (typeof d === 'string' && d.startsWith('data:')) {
       const evtIdSeed = Math.floor(Math.random() * 1e9)
       if (payload.p) {
         const enc = await encryptDataURL(d, payload.p)
         const key = `${toHex}:${evtIdSeed}:${Math.random().toString(36).slice(2)}`
-        const url = await putObject(key, enc.mime, enc.ct)
+        const url = await putObject(key, enc.mime, enc.ct, {
+          onUploadProgress: (current, total) => {
+            try { opts?.onProgress?.({ stage: 'uploading', uploaded, totalUploads, fileProgress: { current, total, fileIndex } }) } catch {}
+          }
+        })
         // Prefer pointer, but if no backend (mem://) and ciphertext is small, include ctInline for immediate cross-device receive
         const out: any = { url, enc: { iv: Array.from(atob(enc.iv).split('').map(c=>c.charCodeAt(0))), keySalt: Array.from(atob(enc.keySalt).split('').map(c=>c.charCodeAt(0))), mime: enc.mime, sha256: enc.sha256 } }
         if (url.startsWith('mem://')) {
           const bytes = base64ByteLength(enc.ct)
           if (bytes <= SMALL_INLINE_LIMIT) out.ctInline = enc.ct
-    else { requiresBackendForReceiver = true; requiresBackendBytes = bytes }
+          else { requiresBackendForReceiver = true; requiresBackendBytes = bytes }
         }
         return out
       } else {
@@ -749,20 +753,48 @@ export async function sendDM(
         const { mime, bytes } = dataURLToBytes(d)
         const key = `${toHex}:${evtIdSeed}:${Math.random().toString(36).slice(2)}`
         const b64 = bytesToBase64(bytes)
-        const url = await putObject(key, mime, b64)
-  // If no backend and storage fell back to mem://, receivers can't fetch it.
-  // For small files, inline the original data URL so it works cross-device.
-  if (url.startsWith('mem://') && bytes.length <= SMALL_INLINE_LIMIT) return d
-  if (url.startsWith('mem://') && bytes.length > SMALL_INLINE_LIMIT) { requiresBackendForReceiver = true; requiresBackendBytes = bytes.length }
-  return url // string (mem:// or http…)
+        const url = await putObject(key, mime, b64, {
+          onUploadProgress: (current, total) => {
+            try { opts?.onProgress?.({ stage: 'uploading', uploaded, totalUploads, fileProgress: { current, total, fileIndex } }) } catch {}
+          }
+        })
+        // If no backend and storage fell back to mem://, receivers can't fetch it.
+        // For small files, inline the original data URL so it works cross-device.
+        if (url.startsWith('mem://') && bytes.length <= SMALL_INLINE_LIMIT) return d
+        if (url.startsWith('mem://') && bytes.length > SMALL_INLINE_LIMIT) { requiresBackendForReceiver = true; requiresBackendBytes = bytes.length }
+        return url // string (mem:// or http…)
       }
     }
     return d
   }
 
-  // Build attachments (network payload)
-  const outA = payload.a ? await processOne(payload.a) : undefined
-  const outAs = payload.as ? await Promise.all(payload.as.map(processOne)) : undefined
+  // Build attachments (network payload) with simple progress across files
+  const totalUploads = (
+    (typeof payload.a === 'string' && payload.a.startsWith('data:') ? 1 : 0) +
+    (Array.isArray(payload.as) ? payload.as.filter(a => typeof a === 'string' && a.startsWith('data:')).length : 0)
+  )
+  let uploaded = 0
+  const notify = (stage: 'uploading' | 'publishing' | 'done') => {
+    try { opts?.onProgress?.({ stage, uploaded, totalUploads }) } catch {}
+  }
+  let outA: any = undefined
+  if (payload.a) {
+    if (typeof payload.a === 'string' && payload.a.startsWith('data:')) notify('uploading')
+    outA = await processOne(payload.a, 0)
+    if (typeof payload.a === 'string' && payload.a.startsWith('data:')) { uploaded += 1; notify('uploading') }
+  }
+  let outAs: any[] | undefined = undefined
+  if (Array.isArray(payload.as)) {
+    outAs = []
+    let fileIdx = (payload.a && typeof payload.a === 'string' && payload.a.startsWith('data:')) ? 1 : 0
+    for (const a of payload.as) {
+      if (typeof a === 'string' && a.startsWith('data:')) notify('uploading')
+      const r = await processOne(a, fileIdx)
+      outAs.push(r)
+      if (typeof a === 'string' && a.startsWith('data:')) { uploaded += 1; notify('uploading') }
+      fileIdx++
+    }
+  }
 
   // Derive local display attachments: prefer original data URLs for instant preview;
   // if we only have mem/http pointers, resolve from store/backend to data URLs.
@@ -823,6 +855,8 @@ export async function sendDM(
   const template: EventTemplate = { kind: 4, created_at: now, content: ciphertext, tags: [["p", toHex]] }
   let evt: any = finalizeEvent(template, hexToBytes(sk))
   const pub = JSON.stringify(["EVENT", evt])
+  // entering publish stage
+  notify('publishing')
 
   // getPublicKey expects a Uint8Array in our nostr-tools version
   const me = getPublicKey(hexToBytes(sk))
@@ -895,24 +929,22 @@ export async function sendDM(
               const reason = typeof data[3] === 'string' ? data[3] : undefined
               if (reason) {
                 lastReason = reason
-                // detect NIP-13 PoW requirement in reason, e.g., "pow: 28 bits needed"
                 const m = /(pow)\s*:\s*(\d+)\s*bits/i.exec(reason)
-                if (m) {
-                  powBitsRequired = parseInt(m[2], 10)
-                  log(`PoW required @ ${url}: ${powBitsRequired} bits`,'warn')
-                }
+                if (m) { powBitsRequired = parseInt(m[2], 10); log(`PoW required @ ${url}: ${powBitsRequired} bits`,'warn') }
                 log(`OK false @ ${url}: ${reason}`, 'warn')
               }
             }
           }
         } catch {}
       }
-  try { ws.addEventListener('message', handler as any); trackListener(ws, 'message', handler as any); handlers.push({ ws, fn: handler }) } catch {}
+      try { ws.addEventListener('message', handler as any); trackListener(ws, 'message', handler as any); handlers.push({ ws, fn: handler }) } catch {}
     } else if (ws.readyState === ws.CONNECTING) {
       try { ws.addEventListener('open', () => ws.send(pub), { once: true } as any) } catch {}
       log(`EVENT queued -> ${url} (CONNECTING) id=${evt.id.slice(0,8)}…`)
     }
   }
+  // initial send queued; mark progress done for UI
+  notify('done')
   // If no relays are available, resolve immediately as false
   if (pool.size === 0) {
     try { clearTimeout(ackTimeout) } catch {}

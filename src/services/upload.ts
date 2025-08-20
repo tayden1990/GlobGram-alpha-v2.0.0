@@ -96,7 +96,36 @@ function withAuth(init: RequestInit = {}, url?: string): RequestInit {
   return { ...init, headers }
 }
 
-export async function putObject(key: string, mime: string, base64Data: string): Promise<string> {
+export async function putObject(key: string, mime: string, base64Data: string, opts?: { onUploadProgress?: (sent: number, total: number) => void }): Promise<string> {
+  // Helper: upload with progress using XMLHttpRequest
+  async function uploadWithProgress(form: FormData, url: string, headers?: Headers) {
+    return new Promise<Response>((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', url)
+      if (headers) headers.forEach((v, k) => xhr.setRequestHeader(k, v))
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && opts?.onUploadProgress) opts.onUploadProgress(e.loaded, e.total)
+      }
+      xhr.onload = () => {
+        // Parse raw header string to object
+        const rawHeaders = xhr.getAllResponseHeaders()
+        const headerObj: Record<string, string> = {}
+        rawHeaders.split(/\r?\n/).forEach(line => {
+          const idx = line.indexOf(':')
+          if (idx > 0) {
+            const key = line.slice(0, idx).trim()
+            const val = line.slice(idx + 1).trim()
+            if (key) headerObj[key] = val
+          }
+        })
+        const res = new Response(xhr.response, { status: xhr.status, statusText: xhr.statusText, headers: headerObj })
+        resolve(res)
+      }
+      xhr.onerror = () => reject(new Error('Upload failed'))
+      xhr.responseType = 'arraybuffer'
+      xhr.send(form)
+    })
+  }
   if (BASE_URL) {
     // Two modes:
     // - simple: POST JSON to /upload (our dev server)
@@ -211,7 +240,12 @@ export async function putObject(key: string, mime: string, base64Data: string): 
                   const obj = JSON.parse(json)
                   console.debug('[DEBUG] NIP-98 priority header tags', obj?.tags)
                 } catch {}
-                const r0 = await fetch(uploadUrl, { method: 'POST', body: makeForm(), headers: h })
+                let r0: Response
+                if (opts?.onUploadProgress) {
+                  r0 = await uploadWithProgress(makeForm(), uploadUrl, h)
+                } else {
+                  r0 = await fetch(uploadUrl, { method: 'POST', body: makeForm(), headers: h })
+                }
                 if (r0.ok) { res = r0; attemptLogs.push(`[${label}] OK ${r0.status}`); return }
                 const www0 = r0.headers.get('www-authenticate') || r0.headers.get('WWW-Authenticate') || ''
                 const text0 = await r0.text().catch(() => '')
@@ -224,7 +258,12 @@ export async function putObject(key: string, mime: string, base64Data: string): 
                     const auth1 = await buildPriorityAuth(newChal0)
                     if (auth1) {
                       const h1 = new Headers({ 'Authorization': auth1, 'Accept': 'application/json' })
-                      const r1 = await fetch(uploadUrl, { method: 'POST', body: makeForm(), headers: h1 })
+                      let r1: Response
+                      if (opts?.onUploadProgress) {
+                        r1 = await uploadWithProgress(makeForm(), uploadUrl, h1)
+                      } else {
+                        r1 = await fetch(uploadUrl, { method: 'POST', body: makeForm(), headers: h1 })
+                      }
                       if (r1.ok) { res = r1; attemptLogs.push(`[${label} RETRY] OK ${r1.status}`) }
                       else {
                         const t1 = await r1.text().catch(() => '')
@@ -252,7 +291,12 @@ export async function putObject(key: string, mime: string, base64Data: string): 
                     const raw = `Nostr ${JSON.stringify(signed)}`
                     const h2 = new Headers({ 'Authorization': raw, 'Accept': 'application/json' })
                     h2.set('X-Authorization', raw)
-                    const r2 = await fetch(uploadUrl, { method: 'POST', body: makeForm(), headers: h2 })
+                    let r2: Response
+                    if (opts?.onUploadProgress) {
+                      r2 = await uploadWithProgress(makeForm(), uploadUrl, h2)
+                    } else {
+                      r2 = await fetch(uploadUrl, { method: 'POST', body: makeForm(), headers: h2 })
+                    }
                     if (r2.ok) { res = r2; attemptLogs.push(`[nip-98-rawjson] OK ${r2.status}`) }
                     else {
                       const www2 = r2.headers.get('www-authenticate') || r2.headers.get('WWW-Authenticate') || ''
@@ -361,7 +405,12 @@ export async function putObject(key: string, mime: string, base64Data: string): 
           }
           for (const { init, label } of attempts) {
             try {
-              const r = await fetch(uploadUrl, init)
+              let r: Response
+              if (opts?.onUploadProgress && init.method === 'POST' && init.body instanceof FormData) {
+                r = await uploadWithProgress(init.body, uploadUrl, init.headers instanceof Headers ? init.headers : undefined)
+              } else {
+                r = await fetch(uploadUrl, init)
+              }
               if (r.ok) { res = r; attemptLogs.push(`[${label}] OK ${r.status}`); break }
               // If 401 and server provided a fresh challenge, retry once with that challenge
               if (r.status === 401) {
@@ -390,7 +439,12 @@ export async function putObject(key: string, mime: string, base64Data: string): 
                     } else {
                       retryInit.body = makeForm()
                     }
-                    const r2 = await fetch(uploadUrl, retryInit)
+                    let r2: Response
+                    if (opts?.onUploadProgress && retryInit.method === 'POST' && retryInit.body instanceof FormData) {
+                      r2 = await uploadWithProgress(retryInit.body, uploadUrl, retryInit.headers instanceof Headers ? retryInit.headers : undefined)
+                    } else {
+                      r2 = await fetch(uploadUrl, retryInit)
+                    }
                     if (r2.ok) { res = r2; attemptLogs.push(`[${label} RETRY challenge] OK ${r2.status}`); break }
                     const t2 = await r2.text().catch(() => '')
                     attemptLogs.push(`[${label} RETRY challenge] HTTP ${r2.status} ${r2.statusText}${t2 ? ` - ${truncate(t2)}` : ''}`)
@@ -496,7 +550,12 @@ export async function putObject(key: string, mime: string, base64Data: string): 
               }
               for (const { init, label } of secondAttempts) {
                 try {
-                  const r = await fetch(uploadUrl, init)
+                  let r: Response
+                  if (opts?.onUploadProgress && init.method === 'POST' && init.body instanceof FormData) {
+                    r = await uploadWithProgress(init.body, uploadUrl, init.headers instanceof Headers ? init.headers : undefined)
+                  } else {
+                    r = await fetch(uploadUrl, init)
+                  }
                   if (r.ok) { res = r; attemptLogs.push(`[${label}] OK ${r.status}`); break }
                   const www = r.headers.get('www-authenticate') || r.headers.get('WWW-Authenticate') || ''
                   const text = await r.text().catch(() => '')
@@ -566,7 +625,9 @@ export async function putObject(key: string, mime: string, base64Data: string): 
         // Be defensive to avoid double '/upload/upload' if BASE_URL already points to '/upload'.
         const baseTrimmed = BASE_URL.replace(/\/$/, '')
         const url = baseTrimmed.endsWith('/upload') ? baseTrimmed : `${baseTrimmed}/upload`
-        const res = await fetch(url, withAuth({
+        let res: Response
+        // No progress for JSON uploads; fallback to fetch
+        res = await fetch(url, withAuth({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ key, mime, data: base64Data })
