@@ -18,13 +18,19 @@ function dataUrlToFilename(durl: string): string {
     const m = /^data:([^;]+);/.exec(durl)
     const mime = (m?.[1] || '').toLowerCase()
     const extMap: Record<string, string> = {
-      'application/pdf': 'pdf', 'application/zip': 'zip', 'application/json': 'json', 'text/plain': 'txt',
+      'application/pdf': 'pdf',
+      'application/zip': 'zip', 'application/x-zip-compressed': 'zip',
+      'application/x-7z-compressed': '7z',
+      'application/x-rar-compressed': 'rar', 'application/vnd.rar': 'rar',
+      'application/json': 'json', 'text/plain': 'txt', 'text/csv': 'csv', 'text/markdown': 'md', 'text/html': 'html',
+      'application/xml': 'xml', 'text/xml': 'xml', 'application/rtf': 'rtf',
       'application/vnd.ms-excel': 'xls', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
       'application/msword': 'doc', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
       'application/vnd.ms-powerpoint': 'ppt', 'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
-      'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/svg+xml': 'svg',
-      'audio/mpeg': 'mp3', 'audio/ogg': 'ogg', 'audio/webm': 'webm', 'audio/wav': 'wav',
-      'video/mp4': 'mp4', 'video/webm': 'webm'
+      'application/vnd.android.package-archive': 'apk', 'application/x-msdownload': 'exe',
+      'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/svg+xml': 'svg', 'image/heic': 'heic', 'image/heif': 'heif', 'image/avif': 'avif',
+      'audio/mpeg': 'mp3', 'audio/ogg': 'ogg', 'audio/webm': 'webm', 'audio/wav': 'wav', 'audio/aac': 'aac', 'audio/flac': 'flac',
+      'video/mp4': 'mp4', 'video/webm': 'webm', 'video/quicktime': 'mov', 'video/3gpp': '3gp'
     }
     const ext = extMap[mime] || 'bin'
     return `download.${ext}`
@@ -304,12 +310,28 @@ export function startNostrEngine(sk: string) {
             
             if (typeof attachment === 'string' && attachment.startsWith('data:')) {
               name = dataUrlToFilename(attachment)
+              // Debug log to see what MIME we detected
+              try {
+                const mimeMatch = /^data:([^;]+);/.exec(attachment)
+                const detectedMime = mimeMatch?.[1] || 'unknown'
+                log(`DM attachment resolved: MIME=${detectedMime}, filename=${name}`)
+              } catch {}
             }
             
             if (attachments && attachments.length > 0) {
-              names = attachments.map(a => 
-                typeof a === 'string' && a.startsWith('data:') ? dataUrlToFilename(a) : 'download.bin'
-              )
+              names = attachments.map((a, i) => {
+                if (typeof a === 'string' && a.startsWith('data:')) {
+                  const filename = dataUrlToFilename(a)
+                  // Debug log to see what MIME we detected
+                  try {
+                    const mimeMatch = /^data:([^;]+);/.exec(a)
+                    const detectedMime = mimeMatch?.[1] || 'unknown'
+                    log(`DM attachment[${i}] resolved: MIME=${detectedMime}, filename=${filename}`)
+                  } catch {}
+                  return filename
+                }
+                return 'download.bin'
+              })
             }
             
             const message: ChatMessage = {
@@ -484,12 +506,28 @@ export function startNostrEngine(sk: string) {
               
               if (typeof attachment === 'string' && attachment.startsWith('data:')) {
                 name = dataUrlToFilename(attachment)
+                // Debug log to see what MIME we detected
+                try {
+                  const mimeMatch = /^data:([^;]+);/.exec(attachment)
+                  const detectedMime = mimeMatch?.[1] || 'unknown'
+                  log(`Room attachment resolved: MIME=${detectedMime}, filename=${name}`)
+                } catch {}
               }
               
               if (attachments && attachments.length > 0) {
-                names = attachments.map(a => 
-                  typeof a === 'string' && a.startsWith('data:') ? dataUrlToFilename(a) : 'download.bin'
-                )
+                names = attachments.map((a, i) => {
+                  if (typeof a === 'string' && a.startsWith('data:')) {
+                    const filename = dataUrlToFilename(a)
+                    // Debug log to see what MIME we detected
+                    try {
+                      const mimeMatch = /^data:([^;]+);/.exec(a)
+                      const detectedMime = mimeMatch?.[1] || 'unknown'
+                      log(`Room attachment[${i}] resolved: MIME=${detectedMime}, filename=${filename}`)
+                    } catch {}
+                    return filename
+                  }
+                  return 'download.bin'
+                })
               }
               
               useRoomStore.getState().addRoomMessage(roomId, { 
