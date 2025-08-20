@@ -1,5 +1,5 @@
 // Bump these on releases
-const APP_VERSION = '2025-08-15-5'
+const APP_VERSION = '2025-08-20-1'
 const DEBUG = true
 const CACHE_NAME = 'globgram-v2'
 

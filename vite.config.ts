@@ -10,6 +10,16 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    open: true
+    open: true,
+    proxy: {
+      // Dev-only proxy to avoid CORS when talking to relay1.matrus.org
+      '/_relay': {
+        target: 'https://relay1.matrus.org',
+        changeOrigin: true,
+        secure: true,
+        // strip the '/_relay' prefix
+        rewrite: (path) => path.replace(/^\/_relay/, '')
+      }
+    }
   }
 })

@@ -45,7 +45,7 @@ async function discoverNip96(): Promise<Nip96Config | null> {
   }
 }
 
-async function getNip96Endpoints(): Promise<{ apiUrl: string; downloadBase: string } | null> {
+async function getNip96Endpoints(): Promise<{ apiUrl: string; downloadBase: string; canonicalApiUrl: string; canonicalDownloadBase: string } | null> {
   if (MODE !== 'nip96') return null
   if (!BASE_URL) return null
   // Clear cache to ensure fresh discovery
@@ -55,11 +55,26 @@ async function getNip96Endpoints(): Promise<{ apiUrl: string; downloadBase: stri
   console.log('[DEBUG] NIP-96 discovery result:', cfg)
   console.log('[DEBUG] BASE_URL from config:', BASE_URL)
   console.log('[DEBUG] PUBLIC_BASE_URL from config:', PUBLIC_BASE_URL)
-  const apiUrl = (cfg?.api_url || BASE_URL).replace(/\/$/, '')
-  // Prefer server-provided download_url first, then api_url; PUBLIC_BASE_URL only as a fallback
-  const downloadBase = (cfg?.download_url || cfg?.api_url || PUBLIC_BASE_URL || BASE_URL).replace(/\/$/, '')
+  // Canonical (remote) endpoints used for NIP-98 'u' tag
+  let canonicalApiUrl = (cfg?.api_url || BASE_URL).replace(/\/$/, '')
+  let canonicalDownloadBase = (cfg?.download_url || cfg?.api_url || PUBLIC_BASE_URL || BASE_URL).replace(/\/$/, '')
+  // Proxied endpoints used for actual fetches in dev
+  let apiUrl = canonicalApiUrl
+  let downloadBase = canonicalDownloadBase
+  // In dev, rewrite to same-origin proxy to avoid CORS
+  try {
+    const dev = (import.meta as any).env?.DEV || (typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(location.hostname))
+    if (dev) {
+      const toProxy = (u: string) => {
+        const url = new URL(u)
+        return `/_relay${url.pathname}`.replace(/\/$/, '')
+      }
+      apiUrl = toProxy(apiUrl)
+      downloadBase = toProxy(downloadBase)
+    }
+  } catch {}
   console.log('[DEBUG] NIP-96 endpoints - apiUrl:', apiUrl, 'downloadBase:', downloadBase)
-  return { apiUrl, downloadBase }
+  return { apiUrl, downloadBase, canonicalApiUrl, canonicalDownloadBase }
 }
 const MODE = (CONFIG.USE_HARDCODED ? CONFIG.UPLOAD_MODE : (((import.meta as any).env?.VITE_UPLOAD_MODE as string | undefined)?.toLowerCase() as any)) || 'simple'
 const AUTH_MODE = (CONFIG.USE_HARDCODED ? CONFIG.UPLOAD_AUTH_MODE : (((import.meta as any).env?.VITE_UPLOAD_AUTH_MODE as string | undefined)?.toLowerCase() as any)) || (AUTH_TOKEN ? 'token' : 'none')
@@ -89,17 +104,23 @@ export async function putObject(key: string, mime: string, base64Data: string): 
       log(`Upload -> ${key} (${mime}), backend=${BASE_URL} mode=${MODE} auth=${AUTH_MODE}`)
   if (MODE === 'nip96') {
         // NIP-96 upload expects multipart/form-data at the API URL (BASE_URL)
-        const endpoints = await getNip96Endpoints()
-        const apiUrl = (endpoints?.apiUrl || BASE_URL).replace(/\/$/, '')
-        const downloadBase = (endpoints?.downloadBase || BASE_URL).replace(/\/$/, '')
+  const endpoints = await getNip96Endpoints()
+  const apiUrl = (endpoints?.apiUrl || BASE_URL).replace(/\/$/, '')
+  const downloadBase = (endpoints?.downloadBase || BASE_URL).replace(/\/$/, '')
+  const canonicalApiUrl = (endpoints?.canonicalApiUrl || BASE_URL).replace(/\/$/, '')
         console.log('[DEBUG] Final upload URL will be:', apiUrl)
         const bytes = base64ToBytes(base64Data)
   // Copy into a plain ArrayBuffer to avoid SharedArrayBuffer typing issues
   const ab = new ArrayBuffer(bytes.byteLength)
   new Uint8Array(ab).set(bytes)
   const file = new Blob([ab], { type: mime })
-        const form = new FormData()
-        form.set('file', file, 'upload')
+  const form = new FormData()
+  // Use an extension-aware filename to help servers infer type when headers get stripped
+  const guessedExt = guessExtFromMime(mime)
+  const uploadName = guessedExt ? `upload.${guessedExt}` : 'upload'
+  // Provide a stable filename; servers may ignore but it helps some setups
+  const inferredExt = guessExtFromMime(mime) || 'bin'
+  form.set('file', file, `upload.${inferredExt}`)
         form.set('size', String(bytes.length))
         form.set('content_type', mime)
         // Optional extras (caption/alt) could be set by callers later
@@ -113,7 +134,8 @@ export async function putObject(key: string, mime: string, base64Data: string): 
           // For NIP-98 with multipart, some servers expect the payload to be the sha256 hex of the body
           console.log('[DEBUG] Attempting NIP-98 auth for URL:', uploadUrl)
           const payloadHashHex = await sha256Hex(bytes)
-          const auth = await makeNip98Header(uploadUrl, 'POST', payloadHashHex)
+          // IMPORTANT: use canonical (remote) URL in 'u' tag, not the proxied dev URL
+          const auth = await makeNip98Header(canonicalApiUrl, 'POST', payloadHashHex)
           if (auth) {
             console.log('[DEBUG] NIP-98 auth header created with payload hash:', auth.substring(0, 50) + '...')
             const h = new Headers()
@@ -122,7 +144,7 @@ export async function putObject(key: string, mime: string, base64Data: string): 
           }
           
           // Also try without payload hash as fallback
-          const authNoPayload = await makeNip98Header(uploadUrl, 'POST')
+          const authNoPayload = await makeNip98Header(canonicalApiUrl, 'POST')
           if (authNoPayload) {
             console.log('[DEBUG] NIP-98 auth header created without payload:', authNoPayload.substring(0, 50) + '...')
             const h = new Headers()
@@ -317,7 +339,7 @@ export async function getObject(keyOrUrl: string, opts?: { verbose?: boolean }):
   } else if (MODE === 'nip96' && BASE_URL && !parseMemUrl(keyOrUrl)) {
     // In NIP-96 mode, if we received a key (hash) instead of absolute URL, build the download URL from endpoints
     try {
-      const endpoints = await getNip96Endpoints()
+  const endpoints = await getNip96Endpoints()
       if (!endpoints) throw new Error('NIP-96 discovery failed')
       // Detect if keyOrUrl is a NIP-96 ox hash (64 hex, optional .ext), else treat as server key requiring /o/:key
       const isHash = /^[0-9a-f]{64}(?:\.[a-z0-9]+)?$/i.test(keyOrUrl)
@@ -326,9 +348,18 @@ export async function getObject(keyOrUrl: string, opts?: { verbose?: boolean }):
         // Hash style resources live directly under downloadBase (prefer server-provided download_url)
         candidates.push(`${endpoints.downloadBase.replace(/\/$/, '')}/${encodeURIComponent(keyOrUrl)}`)
       } else {
+        // If key looks like '<64hex>:...' (legacy/simple server key), derive the leading hash and try direct hash path
+        const m = keyOrUrl.match(/^([0-9a-f]{64})(?::.+)$/i)
+        if (m) {
+          const hash = m[1]
+          candidates.push(`${endpoints.downloadBase.replace(/\/$/, '')}/${hash}`)
+        }
         // For server-generated keys, prefer the discovered downloadBase first
         const baseTrimmed = endpoints.apiUrl.replace(/\/$/, '')
         const pubTrimmed = (PUBLIC_BASE_URL || '').replace(/\/$/, '')
+        const dlTrimmed = endpoints.downloadBase.replace(/\/$/, '')
+        // Try download base '/o/:key' first (some servers expose key endpoints under download base)
+        candidates.push(`${dlTrimmed}/o/${encodeURIComponent(keyOrUrl)}`)
         candidates.push(`${baseTrimmed}/o/${encodeURIComponent(keyOrUrl)}`)
         if (pubTrimmed && pubTrimmed !== baseTrimmed) candidates.push(`${pubTrimmed}/o/${encodeURIComponent(keyOrUrl)}`)
         try {
@@ -344,7 +375,19 @@ export async function getObject(keyOrUrl: string, opts?: { verbose?: boolean }):
         log(`Download <- ${keyOrUrl} (nip96 try ${url})`)
         const attempts: Array<{ init: RequestInit; label: string }> = [{ init: {}, label: 'no-auth' }]
         if (AUTH_MODE === 'nip98') {
-          const auth = await makeNip98Header(url, 'GET')
+          // Map proxied URL back to canonical remote URL for NIP-98 'u'
+          let canonicalUrl = url
+          try {
+            if (url.startsWith('/_relay')) {
+              // Decide whether this is under upload (api) or media (download)
+              if (url.startsWith('/_relay/upload')) {
+                canonicalUrl = url.replace('/_relay/upload', endpoints.canonicalApiUrl)
+              } else if (url.startsWith('/_relay/media')) {
+                canonicalUrl = url.replace('/_relay/media', endpoints.canonicalDownloadBase)
+              }
+            }
+          } catch {}
+          const auth = await makeNip98Header(canonicalUrl, 'GET')
           if (auth) attempts.push({ init: { headers: { Authorization: auth } }, label: 'nip-98' })
         }
         if (AUTH_TOKEN) attempts.push({ init: { headers: { Authorization: `Bearer ${AUTH_TOKEN}` } }, label: 'token' })

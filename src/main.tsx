@@ -12,11 +12,17 @@ root.render(
     </I18nProvider>
   </React.StrictMode>
 )
-// PWA service worker registration
+// PWA service worker registration (disabled in dev to prevent caching during HMR)
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    const swUrl = (import.meta as any).env?.BASE_URL ? `${(import.meta as any).env.BASE_URL}sw.js` : 'sw.js'
-    navigator.serviceWorker.register(swUrl).catch(()=>{})
+    const isDev = !!(import.meta as any).env?.DEV || location.hostname === 'localhost'
+    if (isDev) {
+      // Unregister any existing SWs to avoid stale caches during development
+      navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister().catch(()=>{}))).catch(()=>{})
+    } else {
+      const swUrl = (import.meta as any).env?.BASE_URL ? `${(import.meta as any).env.BASE_URL}sw.js` : 'sw.js'
+      navigator.serviceWorker.register(swUrl).catch(()=>{})
+    }
   })
 }
 // Update theme-color based on data-theme
