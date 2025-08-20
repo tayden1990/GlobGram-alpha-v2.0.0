@@ -4,9 +4,10 @@
 import { log } from '../ui/logger'
 import { emitToast } from '../ui/Toast'
 import { base64ToBytes, sha256Hex } from '../nostr/utils'
-import { finalizeEvent, type EventTemplate } from 'nostr-tools'
+import { finalizeEvent, type EventTemplate, nip19 } from 'nostr-tools'
 import { hexToBytes } from '../nostr/utils'
 import { CONFIG } from '../config'
+import { buildFromServerNip94, buildNip94Template, publishNip94 } from '../nostr/nip94'
 
 const store = new Map<string, { mime: string; data: string }>() // fallback store (dev/demo)
 let BASE_URL = CONFIG.USE_HARDCODED ? CONFIG.UPLOAD_BASE_URL : (import.meta as any).env?.VITE_UPLOAD_BASE_URL as string | undefined
@@ -114,71 +115,273 @@ export async function putObject(key: string, mime: string, base64Data: string): 
   const ab = new ArrayBuffer(bytes.byteLength)
   new Uint8Array(ab).set(bytes)
   const file = new Blob([ab], { type: mime })
-  const form = new FormData()
-  // Use an extension-aware filename to help servers infer type when headers get stripped
-  const guessedExt = guessExtFromMime(mime)
-  const uploadName = guessedExt ? `upload.${guessedExt}` : 'upload'
-  // Provide a stable filename; servers may ignore but it helps some setups
-  const inferredExt = guessExtFromMime(mime) || 'bin'
-  form.set('file', file, `upload.${inferredExt}`)
-        form.set('size', String(bytes.length))
-        form.set('content_type', mime)
+  const makeForm = () => {
+          const f = new FormData()
+          // Provide a stable filename; servers may ignore but it helps some setups
+          const inferredExt = guessExtFromMime(mime) || 'bin'
+          f.set('file', file, `upload.${inferredExt}`)
+          // Keep ONLY the required 'file' field. Some servers reject unknown fields.
+          return f
+        }
+    const buildManualMultipart = () => {
+          const inferredExt = guessExtFromMime(mime) || 'bin'
+          const filename = `upload.${inferredExt}`
+          const boundary = '----GlobGramBoundary' + Math.random().toString(16).slice(2)
+          const crlf = '\r\n'
+          const head = `--${boundary}${crlf}`
+            + `Content-Disposition: form-data; name="file"; filename="${filename}"${crlf}`
+      + `Content-Type: ${mime || 'application/octet-stream'}${crlf}`
+      + `Content-Transfer-Encoding: binary${crlf}${crlf}`
+          const tail = `${crlf}--${boundary}--${crlf}`
+          const enc = new TextEncoder()
+          const headBytes = enc.encode(head)
+          const tailBytes = enc.encode(tail)
+          const bodyBytes = new Uint8Array(headBytes.length + bytes.length + tailBytes.length)
+          bodyBytes.set(headBytes, 0)
+          bodyBytes.set(bytes, headBytes.length)
+          bodyBytes.set(tailBytes, headBytes.length + bytes.length)
+          const contentType = `multipart/form-data; boundary=${boundary}`
+          return { bodyBytes, contentType, filename }
+        }
         // Optional extras (caption/alt) could be set by callers later
         const uploadUrl = apiUrl
-        // Build attempt list: no-auth → NIP-98 (no payload tag) → Bearer
-        const attempts: Array<{ init: RequestInit; label: string }> = []
-        // No-auth first (bypasses CORS preflight on some servers)
-        attempts.push({ init: { method: 'POST', body: form }, label: 'no-auth' })
-        // NIP-98 attempt with proper payload hash for multipart
-        if (AUTH_MODE === 'nip98') {
-          // For NIP-98 with multipart, some servers expect the payload to be the sha256 hex of the body
-          console.log('[DEBUG] Attempting NIP-98 auth for URL:', uploadUrl)
-          const payloadHashHex = await sha256Hex(bytes)
-          // IMPORTANT: use canonical (remote) URL in 'u' tag, not the proxied dev URL
-          const auth = await makeNip98Header(canonicalApiUrl, 'POST', payloadHashHex)
-          if (auth) {
-            console.log('[DEBUG] NIP-98 auth header created with payload hash:', auth.substring(0, 50) + '...')
-            const h = new Headers()
-            h.set('Authorization', auth)
-            attempts.push({ init: { method: 'POST', body: form, headers: h }, label: 'nip-98-with-payload' })
-          }
-          
-          // Also try without payload hash as fallback
-          const authNoPayload = await makeNip98Header(canonicalApiUrl, 'POST')
-          if (authNoPayload) {
-            console.log('[DEBUG] NIP-98 auth header created without payload:', authNoPayload.substring(0, 50) + '...')
-            const h = new Headers()
-            h.set('Authorization', authNoPayload)
-            attempts.push({ init: { method: 'POST', body: form, headers: h }, label: 'nip-98-no-payload' })
-          }
-          
-          if (!auth && !authNoPayload) {
-            emitToast('Cannot sign NIP-98 auth. Import a key or enable a NIP-07 extension.', 'error')
-          }
-        }
-        // Bearer token attempt last
-        if (AUTH_TOKEN) {
-          const h = new Headers()
-          h.set('Authorization', `Bearer ${AUTH_TOKEN}`)
-          attempts.push({ init: { method: 'POST', body: form, headers: h }, label: 'token' })
-        }
-
+        // Build attempt list with optional NIP-98 challenge from a probing 401
         let res: Response | null = null
         let lastErr: any = null
         const attemptLogs: string[] = []
-        for (const { init, label } of attempts) {
+        let challenge: string | undefined
+        // Probe first without auth to extract WWW-Authenticate challenge (if any)
+        const probeOnce = async (method: 'HEAD' | 'GET' | 'POST') => {
           try {
-            res = await fetch(uploadUrl, init)
-            if (res.ok) { attemptLogs.push(`[${label}] OK ${res.status}`); break }
-            const text = await res.text().catch(() => '')
-            attemptLogs.push(`[${label}] HTTP ${res.status} ${res.statusText}${text ? ` - ${truncate(text)}` : ''}`)
-            lastErr = new Error(`HTTP ${res.status}`)
+            const init: RequestInit = { method }
+            if (method === 'POST') init.body = makeForm()
+            init.headers = { 'Accept': 'application/json' }
+            const resp = await fetch(uploadUrl, init)
+            if (resp.status === 401) {
+              const www = resp.headers.get('www-authenticate') || resp.headers.get('WWW-Authenticate') || ''
+              attemptLogs.push(`[probe ${method}] HTTP ${resp.status} ${resp.statusText}${www ? ` - WWW-Authenticate: ${www}` : ''}`)
+              const parsed = parseWwwAuthenticate(www)
+              if (parsed?.scheme?.toLowerCase() === 'nostr') challenge = parsed.params['challenge']
+              if (challenge) console.log('[DEBUG] NIP-98 challenge received (', method, '):', challenge)
+            } else if (!resp.ok) {
+              const text = await resp.text().catch(() => '')
+              attemptLogs.push(`[probe ${method}] HTTP ${resp.status} ${resp.statusText}${text ? ` - ${truncate(text)}` : ''}`)
+            } else {
+              res = resp
+              attemptLogs.push(`[probe ${method}] OK ${resp.status}`)
+            }
           } catch (e: any) {
-            attemptLogs.push(`[${label}] ${e?.name || 'Error'}: ${e?.message || e}`)
-            lastErr = e
+            attemptLogs.push(`[probe ${method}] ${e?.name || 'Error'}: ${e?.message || e}`)
+          }
+        }
+        if (!res) await probeOnce('HEAD')
+        if (!res && !challenge) await probeOnce('GET')
+        if (!res && !challenge) await probeOnce('POST')
+
+  if (!res) {
+          const attempts: Array<{ init: RequestInit; label: string }> = []
+          // Predeclare variables so we can reuse in retry logic
+          let fileHashHex: string | undefined
+          let fileHashB64: string | null = null
+          let bodyHashHex: string | undefined
+          let bodyHashB64: string | null = null
+          let multipartBytes: Uint8Array | undefined
+          let multipartCT: string | undefined
+          if (AUTH_MODE === 'nip98') {
+            console.log('[DEBUG] Attempting NIP-98 auth for URL:', uploadUrl)
+            // Compute hashes of both file bytes and a manual multipart body to satisfy different servers
+            fileHashHex = await sha256Hex(bytes)
+            let payloadHashB64: string | null = null
+            try {
+              const payloadBytes = hexToBytes(fileHashHex)
+              let s = ''
+              for (let i = 0; i < payloadBytes.length; i++) s += String.fromCharCode(payloadBytes[i])
+              payloadHashB64 = btoa(s)
+            } catch {}
+            fileHashB64 = payloadHashB64
+            const manualBuilt = buildManualMultipart()
+            multipartBytes = manualBuilt.bodyBytes
+            multipartCT = manualBuilt.contentType
+            bodyHashHex = await sha256Hex(multipartBytes)
+            let bodyHashB64Local: string | null = null
+            try {
+              const payloadBytes = hexToBytes(bodyHashHex)
+              let s = ''
+              for (let i = 0; i < payloadBytes.length; i++) s += String.fromCharCode(payloadBytes[i])
+              bodyHashB64Local = btoa(s)
+            } catch {}
+            bodyHashB64 = bodyHashB64Local
+            const addAttempt = async (label: string, payload?: string, withChallenge = false) => {
+              const extraTags: Array<[string, string]> = []
+              if (withChallenge && challenge) extraTags.push(['challenge', challenge])
+              const auth = await makeNip98HeaderWithTags(canonicalApiUrl, 'POST', payload, extraTags)
+              if (auth) {
+                const h = new Headers()
+                h.set('Authorization', auth)
+                // If payload corresponds to body hash, use the manual multipart bytes; otherwise use FormData
+                const useManual = payload === bodyHashHex || payload === bodyHashB64
+                if (useManual) {
+                  if (multipartCT) h.set('Content-Type', multipartCT)
+                  h.set('Accept', 'application/json')
+                  h.set('X-Manual-Multipart', '1')
+                  const mb = multipartBytes!
+                  const ab = new ArrayBuffer(mb.byteLength)
+                  new Uint8Array(ab).set(mb)
+                  attempts.push({ init: { method: 'POST', body: new Blob([ab], { type: multipartCT || '' }), headers: h }, label })
+                } else {
+                  h.set('Accept', 'application/json')
+                  attempts.push({ init: { method: 'POST', body: makeForm(), headers: h }, label })
+                }
+              }
+            }
+            // Prefer challenge-based attempts first
+            await addAttempt('nip-98-challenge-no-payload', undefined, true)
+            // Body-hash payload (exact request bytes)
+            await addAttempt('nip-98-challenge-with-body-hash', bodyHashHex, true)
+            if (bodyHashB64) await addAttempt('nip-98-challenge-with-body-hash-b64', bodyHashB64, true)
+            // File-hash payload variants
+            await addAttempt('nip-98-challenge-with-file-hash', fileHashHex, true)
+            if (payloadHashB64) await addAttempt('nip-98-challenge-with-file-hash-b64', payloadHashB64, true)
+            // Legacy attempts without challenge
+            await addAttempt('nip-98-no-payload')
+            await addAttempt('nip-98-with-body-hash', bodyHashHex)
+            if (bodyHashB64) await addAttempt('nip-98-with-body-hash-b64', bodyHashB64)
+            await addAttempt('nip-98-with-file-hash', fileHashHex)
+            if (payloadHashB64) await addAttempt('nip-98-with-file-hash-b64', payloadHashB64)
+            if (attempts.length === 0) emitToast('Cannot sign NIP-98 auth. Import a key or enable a NIP-07 extension.', 'error')
+          }
+      // Bearer token attempt last
+          if (AUTH_TOKEN) {
+            const h = new Headers()
+            h.set('Authorization', `Bearer ${AUTH_TOKEN}`)
+            h.set('Accept', 'application/json')
+            attempts.push({ init: { method: 'POST', body: makeForm(), headers: h }, label: 'token' })
+          }
+          for (const { init, label } of attempts) {
+            try {
+              const r = await fetch(uploadUrl, init)
+              if (r.ok) { res = r; attemptLogs.push(`[${label}] OK ${r.status}`); break }
+              // If 401 and server provided a fresh challenge, retry once with that challenge
+              if (r.status === 401) {
+                const www = r.headers.get('www-authenticate') || r.headers.get('WWW-Authenticate') || ''
+                const parsed = parseWwwAuthenticate(www)
+                const newChallenge = parsed?.scheme?.toLowerCase() === 'nostr' ? parsed.params['challenge'] : undefined
+                if (newChallenge && newChallenge !== challenge) {
+                  const h = new Headers(init.headers || {})
+          // Detect if this attempt used manual body via our marker header
+          const usedManual = h.get('X-Manual-Multipart') === '1'
+          const payload = usedManual ? bodyHashHex : fileHashHex
+          const payloadB64 = usedManual ? bodyHashB64 : fileHashB64
+                  const extraTags: Array<[string, string]> = [['challenge', newChallenge]]
+                  const authRetry = await makeNip98HeaderWithTags(canonicalApiUrl, 'POST', payload || undefined, extraTags)
+                  if (authRetry) {
+                    h.set('Authorization', authRetry)
+                    const retryInit: RequestInit = { method: 'POST', headers: h }
+                    if (usedManual) {
+                      h.set('Accept', 'application/json')
+                      {
+                        const mb2 = multipartBytes!
+                        const ab2 = new ArrayBuffer(mb2.byteLength)
+                        new Uint8Array(ab2).set(mb2)
+                        retryInit.body = new Blob([ab2], { type: h.get('Content-Type') || '' })
+                      }
+                    } else {
+                      retryInit.body = makeForm()
+                    }
+                    const r2 = await fetch(uploadUrl, retryInit)
+                    if (r2.ok) { res = r2; attemptLogs.push(`[${label} RETRY challenge] OK ${r2.status}`); break }
+                    const t2 = await r2.text().catch(() => '')
+                    attemptLogs.push(`[${label} RETRY challenge] HTTP ${r2.status} ${r2.statusText}${t2 ? ` - ${truncate(t2)}` : ''}`)
+                  }
+                }
+              }
+              const text = await r.text().catch(() => '')
+              attemptLogs.push(`[${label}] HTTP ${r.status} ${r.statusText}${text ? ` - ${truncate(text)}` : ''}`)
+              lastErr = new Error(`HTTP ${r.status}`)
+            } catch (e: any) {
+              attemptLogs.push(`[${label}] ${e?.name || 'Error'}: ${e?.message || e}`)
+              lastErr = e
+            }
+          }
+          // If still no success and we have NIP-98, try alternative 'u' canonicalizations and header encodings
+          if (!res && AUTH_MODE === 'nip98') {
+            try {
+              const urlObj = new URL(canonicalApiUrl)
+              const pathOnly = urlObj.pathname.replace(/\/$/, '') || '/'
+              const httpVariant = urlObj.protocol === 'https:' ? `http://${urlObj.host}${pathOnly}` : canonicalApiUrl
+              const uVariants = Array.from(new Set<string>([
+                canonicalApiUrl,
+                canonicalApiUrl + '/',
+                httpVariant,
+                httpVariant + '/',
+                pathOnly,
+                pathOnly + '/',
+              ]))
+              const secondAttempts: Array<{ init: RequestInit; label: string }> = []
+              const toB64Url = (b64: string) => b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+              const buildAuth = async (u: string, payload?: string, withChallenge?: boolean, encUrl?: boolean, challengeInContent?: boolean) => {
+                const extraTags: Array<[string, string]> = []
+                const content = withChallenge && challengeInContent && challenge ? challenge : undefined
+                if (withChallenge && challenge && !challengeInContent) extraTags.push(['challenge', challenge])
+                return await makeNip98HeaderCustom(u, 'POST', payload, extraTags, content, !!encUrl)
+              }
+              const pushAttempt = async (label: string, u: string, useManual: boolean, payload?: string, encUrl?: boolean, challengeInContent?: boolean) => {
+                const auth = await buildAuth(u, payload, true, encUrl, challengeInContent)
+                if (!auth) return
+                const h = new Headers()
+                h.set('Authorization', auth)
+                h.set('Accept', 'application/json')
+                if (useManual) {
+                  if (multipartCT) h.set('Content-Type', multipartCT)
+                  const mb = multipartBytes!
+                  const ab = new ArrayBuffer(mb.byteLength)
+                  new Uint8Array(ab).set(mb)
+                  secondAttempts.push({ init: { method: 'POST', body: new Blob([ab], { type: multipartCT || '' }), headers: h }, label })
+                } else {
+                  secondAttempts.push({ init: { method: 'POST', body: makeForm(), headers: h }, label })
+                }
+              }
+              // Limit second wave to a focused matrix: {uVariants} x {std vs url b64} x {challenge-in-content true/false} for key payloads
+              for (const u of uVariants) {
+                for (const encUrl of [false, true]) {
+                  // no-payload variants (challenge in tag and in content)
+                  await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl}-chalTag-noPayload`, u, false, undefined, encUrl, false)
+                  await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl}-chalContent-noPayload`, u, false, undefined, encUrl, true)
+                  // body-hash variants using manual multipart body
+                  if (bodyHashHex) {
+                    await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl}-chalTag-bodyHash`, u, true, bodyHashHex, encUrl, false)
+                    await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl}-chalContent-bodyHash`, u, true, bodyHashHex, encUrl, true)
+                    if (bodyHashB64) {
+                      await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl}-chalTag-bodyHashB64`, u, true, bodyHashB64, encUrl, false)
+                      await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl}-chalContent-bodyHashB64`, u, true, bodyHashB64, encUrl, true)
+                      await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl}-chalTag-bodyHashB64url`, u, true, toB64Url(bodyHashB64), encUrl, false)
+                      await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl}-chalContent-bodyHashB64url`, u, true, toB64Url(bodyHashB64), encUrl, true)
+                    }
+                  }
+                  // file-hash variant using FormData body
+                  if (fileHashHex) {
+                    await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl}-chalTag-fileHash`, u, false, fileHashHex, encUrl, false)
+                    await pushAttempt(`nip-98-v2-u:${u} enc:${encUrl}-chalContent-fileHash`, u, false, fileHashHex, encUrl, true)
+                  }
+                }
+              }
+              for (const { init, label } of secondAttempts) {
+                try {
+                  const r = await fetch(uploadUrl, init)
+                  if (r.ok) { res = r; attemptLogs.push(`[${label}] OK ${r.status}`); break }
+                  const text = await r.text().catch(() => '')
+                  attemptLogs.push(`[${label}] HTTP ${r.status} ${r.statusText}${text ? ` - ${truncate(text)}` : ''}`)
+                } catch (e: any) {
+                  attemptLogs.push(`[${label}] ${e?.name || 'Error'}: ${e?.message || e}`)
+                }
+              }
+            } catch (e) {
+              attemptLogs.push(`[nip-98 second-wave] ${(e as any)?.message || e}`)
+            }
           }
         }
         if (!res || !res.ok) {
+          try { console.error('[DEBUG] Upload attempts summary for', uploadUrl, '\n- ' + attemptLogs.join('\n- ')) } catch {}
           const endpointsInfo = (() => {
             try { return `api=${apiUrl}, downloadBase=${downloadBase}` } catch { return '' }
           })()
@@ -195,7 +398,15 @@ export async function putObject(key: string, mime: string, base64Data: string): 
         const nip94 = out?.nip94_event
         if (nip94 && Array.isArray(nip94.tags)) {
           const urlTag = nip94.tags.find((t: any) => Array.isArray(t) && t[0] === 'url')
-          if (urlTag && typeof urlTag[1] === 'string') return urlTag[1]
+          const urlFromTag = urlTag && typeof urlTag[1] === 'string' ? urlTag[1] : undefined
+          // Auto-publish NIP-94 using server-provided nip94_event if configured
+          try {
+            if (CONFIG.AUTO_PUBLISH_NIP94) {
+              const tmpl = buildFromServerNip94(nip94)
+              if (tmpl) publishNip94(tmpl)
+            }
+          } catch {}
+          if (urlFromTag) return urlFromTag
         }
         if (typeof out.url === 'string') return out.url
         // Compat: some servers return just a "key"; construct predictable path /o/:key under apiUrl
@@ -209,7 +420,15 @@ export async function putObject(key: string, mime: string, base64Data: string): 
           const ext = guessExtFromMime(mTag?.[1] || mime)
           // Per NIP-96, standard download path is $api_url/<hash>(.ext) unless download_url is provided
           const base = downloadBase
-          return `${base}/${oxTag[1]}${ext ? '.'+ext : ''}`
+          const url = `${base}/${oxTag[1]}${ext ? '.'+ext : ''}`
+          // If we didn't publish above, publish our own NIP-94 based on constructed url
+          try {
+            if (CONFIG.AUTO_PUBLISH_NIP94 && (!nip94 || !Array.isArray(nip94.tags))) {
+              const tmpl = buildNip94Template({ url, mime: mTag?.[1] || mime, ox: oxTag[1], service: 'nip96' })
+              publishNip94(tmpl)
+            }
+          } catch {}
+          return url
         }
         throw new Error('Upload response missing url')
       } else {
@@ -512,11 +731,11 @@ async function makeNip98Header(url: string, method: string, payloadHex?: string)
     if (payloadHex) unsigned.tags!.push(['payload', payloadHex])
 
     // Prefer local secret if present; else try NIP-07 (window.nostr)
-    const sk = localStorage.getItem('nostr_sk')
-    console.log('[DEBUG] NIP-98 auth - private key available:', !!sk)
+    const skBytes = getLocalSKBytes()
+    console.log('[DEBUG] NIP-98 auth - private key available:', !!skBytes)
     let signed: any | null = null
-    if (sk) {
-      signed = finalizeEvent(unsigned, hexToBytes(sk))
+    if (skBytes) {
+      signed = finalizeEvent(unsigned, skBytes)
       console.log('[DEBUG] NIP-98 auth - signed with local key, kind:', signed.kind)
     } else if (typeof (globalThis as any).window !== 'undefined' && (window as any).nostr?.signEvent) {
       try { 
@@ -538,4 +757,123 @@ async function makeNip98Header(url: string, method: string, payloadHex?: string)
     console.log('[DEBUG] NIP-98 auth - error:', e)
     return null
   }
+}
+
+// Variant that allows injecting extra tags like ['challenge', '...']
+async function makeNip98HeaderWithTags(url: string, method: string, payloadHex?: string, extraTags?: Array<[string, string]>): Promise<string | null> {
+  try {
+    const now = Math.floor(Date.now() / 1000)
+    const tags: Array<[string, string]> = [ ['u', url], ['method', method.toUpperCase()] ]
+    if (payloadHex) tags.push(['payload', payloadHex])
+    if (Array.isArray(extraTags)) {
+      for (const t of extraTags) {
+        if (Array.isArray(t) && typeof t[0] === 'string' && typeof t[1] === 'string') tags.push([t[0], t[1]])
+      }
+    }
+    const unsigned: EventTemplate = { kind: 27235 as any, created_at: now, content: '', tags }
+    const skBytes = getLocalSKBytes()
+    console.log('[DEBUG] NIP-98 auth - private key available:', !!skBytes)
+    let signed: any | null = null
+    if (skBytes) {
+      signed = finalizeEvent(unsigned, skBytes)
+      console.log('[DEBUG] NIP-98 auth - signed with local key, kind:', signed.kind)
+    } else if (typeof (globalThis as any).window !== 'undefined' && (window as any).nostr?.signEvent) {
+      try { 
+        signed = await (window as any).nostr.signEvent(unsigned)
+        console.log('[DEBUG] NIP-98 auth - signed with NIP-07, kind:', signed?.kind)
+      } catch (e) {
+        console.log('[DEBUG] NIP-98 auth - NIP-07 signing failed:', e)
+      }
+    }
+    if (!signed) {
+      console.log('[DEBUG] NIP-98 auth - no signing method available')
+      return null
+    }
+    const json = JSON.stringify(signed)
+    const b64 = btoa(unescape(encodeURIComponent(json)))
+    console.log('[DEBUG] NIP-98 auth - header created, length:', b64.length)
+    return `Nostr ${b64}`
+  } catch (e) {
+    console.log('[DEBUG] NIP-98 auth - error:', e)
+    return null
+  }
+}
+
+// Custom variant: supports base64url JSON encoding and putting challenge into content.
+async function makeNip98HeaderCustom(url: string, method: string, payloadHex?: string, extraTags?: Array<[string, string]>, content?: string, base64Url?: boolean): Promise<string | null> {
+  try {
+    const now = Math.floor(Date.now() / 1000)
+    const tags: Array<[string, string]> = [ ['u', url], ['method', method.toUpperCase()] ]
+    if (payloadHex) tags.push(['payload', payloadHex])
+    if (Array.isArray(extraTags)) {
+      for (const t of extraTags) {
+        if (Array.isArray(t) && typeof t[0] === 'string' && typeof t[1] === 'string') tags.push([t[0], t[1]])
+      }
+    }
+    const unsigned: EventTemplate = { kind: 27235 as any, created_at: now, content: content || '', tags }
+    const skBytes = getLocalSKBytes()
+    let signed: any | null = null
+    if (skBytes) signed = finalizeEvent(unsigned, skBytes)
+    else if (typeof (globalThis as any).window !== 'undefined' && (window as any).nostr?.signEvent) {
+      try { signed = await (window as any).nostr.signEvent(unsigned) } catch {}
+    }
+    if (!signed) return null
+    const json = JSON.stringify(signed)
+    if (!base64Url) {
+      const b64 = btoa(unescape(encodeURIComponent(json)))
+      return `Nostr ${b64}`
+    }
+    // base64url without padding
+    const b64std = btoa(unescape(encodeURIComponent(json)))
+    const b64url = b64std.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+    return `Nostr ${b64url}`
+  } catch {
+    return null
+  }
+}
+
+function getLocalSKBytes(): Uint8Array | null {
+  try {
+    const sk = localStorage.getItem('nostr_sk')
+    if (!sk) return null
+    if (/^[0-9a-fA-F]{64}$/.test(sk)) return hexToBytes(sk)
+    if (sk.startsWith('nsec')) {
+      try {
+        const decoded = nip19.decode(sk)
+        if (decoded?.type === 'nsec' && decoded.data instanceof Uint8Array) return decoded.data as Uint8Array
+        if (decoded?.type === 'nsec' && Array.isArray(decoded.data)) return new Uint8Array(decoded.data as number[])
+      } catch {}
+    }
+  } catch {}
+  return null
+}
+
+// Minimal parser for WWW-Authenticate header. Returns auth scheme and key/value params.
+function parseWwwAuthenticate(header: string): { scheme: string; params: Record<string, string> } | null {
+  if (!header) return null
+  const m = header.match(/^\s*([A-Za-z][A-Za-z0-9_-]*)\s*(.*)$/)
+  if (!m) return null
+  const scheme = m[1]
+  let rest = m[2] || ''
+  const params: Record<string, string> = {}
+  // Split by commas not inside quotes
+  const parts: string[] = []
+  let buf = ''
+  let q = false
+  for (let i = 0; i < rest.length; i++) {
+    const c = rest[i]
+    if (c === '"') { q = !q; buf += c; continue }
+    if (c === ',' && !q) { if (buf.trim()) parts.push(buf.trim()); buf = ''; continue }
+    buf += c
+  }
+  if (buf.trim()) parts.push(buf.trim())
+  for (const p of parts) {
+    const eq = p.indexOf('=')
+    if (eq < 0) continue
+    const k = p.slice(0, eq).trim()
+    let v = p.slice(eq + 1).trim()
+    if (v.startsWith('"') && v.endsWith('"')) v = v.slice(1, -1)
+    params[k] = v
+  }
+  return { scheme, params }
 }

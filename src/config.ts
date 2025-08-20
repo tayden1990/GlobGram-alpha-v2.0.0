@@ -23,4 +23,7 @@ export const CONFIG = {
 
   // UI: default behavior for auto-resolving media (can be toggled by user and persisted in localStorage)
   AUTO_RESOLVE_MEDIA_DEFAULT: false,
+
+  // NIP-94: auto-publish a kind 1063 File Metadata event after successful uploads
+  AUTO_PUBLISH_NIP94: true,
 }
