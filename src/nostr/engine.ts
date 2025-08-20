@@ -10,6 +10,7 @@ import { useSettingsStore } from '../ui/settingsStore'
 import { log } from '../ui/logger'
 import { emitToast } from '../ui/Toast'
 import { tGlobal } from '../i18n'
+import { CONFIG } from '../config'
 
 // Stable per-session room subscription id and per-relay active state to prevent duplicate REQs
 let ROOM_SUB_ID: string | null = null
@@ -678,7 +679,7 @@ export async function sendDM(
       }
       const sz = requiresBackendBytes != null ? readable(requiresBackendBytes) : 'unknown'
       const limit = readable(limitBytes)
-      emitToast(`Cannot send large media without an upload server (size ${sz} > inline limit ${limit}). Configure VITE_UPLOAD_BASE_URL or send a smaller file.`, 'error')
+  emitToast(`Cannot send large media without an upload server (size ${sz} > inline limit ${limit}). Configure an upload server or send a smaller file.`, 'error')
       log('Blocked sending: upload backend missing and media exceeds inline limit', 'warn')
       // If this was a resend, mark the existing bubble failed
       if (opts?.reuseId) {
@@ -715,15 +716,14 @@ export async function sendDM(
   // If we detected that a large attachment fell back to mem:// (no backend), warn the sender with details.
   try {
     if (requiresBackendForReceiver) {
-      const env = (import.meta as any).env || {}
-      const base = env?.VITE_UPLOAD_BASE_URL || 'unset'
-      const mode = (env?.VITE_UPLOAD_MODE || 'simple')
-      const auth = (env?.VITE_UPLOAD_AUTH_MODE || (env?.VITE_UPLOAD_AUTH_TOKEN ? 'token' : 'none'))
+      const base = CONFIG.UPLOAD_BASE_URL || 'unset'
+      const mode = CONFIG.UPLOAD_MODE || 'simple'
+      const auth = CONFIG.UPLOAD_AUTH_MODE || (CONFIG.UPLOAD_AUTH_TOKEN ? 'token' : 'none')
       const sz = requiresBackendBytes != null ? readableSize(requiresBackendBytes) : 'unknown'
       const limit = readableSize(SMALL_INLINE_LIMIT)
       const msg = `Media fell back to mem:// (size ${sz} > inline limit ${limit}). Receiver cannot fetch while you're offline. Configure an upload server.\nBASE_URL=${base}, MODE=${mode}, AUTH=${auth}`
       emitToast(msg, 'info')
-      log('Large media requires upload backend for receiver to view (set VITE_UPLOAD_BASE_URL)', 'warn')
+      log('Large media requires upload backend for receiver to view (configure upload server)', 'warn')
     }
   } catch {}
 

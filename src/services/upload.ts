@@ -6,11 +6,12 @@ import { emitToast } from '../ui/Toast'
 import { base64ToBytes, sha256Hex } from '../nostr/utils'
 import { finalizeEvent, type EventTemplate } from 'nostr-tools'
 import { hexToBytes } from '../nostr/utils'
+import { CONFIG } from '../config'
 
 const store = new Map<string, { mime: string; data: string }>() // fallback store (dev/demo)
-let BASE_URL = (import.meta as any).env?.VITE_UPLOAD_BASE_URL as string | undefined
-const AUTH_TOKEN = (import.meta as any).env?.VITE_UPLOAD_AUTH_TOKEN as string | undefined
-const PUBLIC_BASE_URL = (import.meta as any).env?.VITE_UPLOAD_PUBLIC_BASE_URL as string | undefined
+let BASE_URL = CONFIG.USE_HARDCODED ? CONFIG.UPLOAD_BASE_URL : (import.meta as any).env?.VITE_UPLOAD_BASE_URL as string | undefined
+const AUTH_TOKEN = CONFIG.USE_HARDCODED ? (CONFIG.UPLOAD_AUTH_TOKEN || undefined) : (import.meta as any).env?.VITE_UPLOAD_AUTH_TOKEN as string | undefined
+const PUBLIC_BASE_URL = CONFIG.USE_HARDCODED ? CONFIG.UPLOAD_PUBLIC_BASE_URL : (import.meta as any).env?.VITE_UPLOAD_PUBLIC_BASE_URL as string | undefined
 
 // Guard: if running on a non-localhost origin (e.g., GitHub Pages) and BASE_URL points to localhost,
 // disable backend usage to avoid connection refused in production and fall back to mem://.
@@ -53,8 +54,8 @@ async function getNip96Endpoints(): Promise<{ apiUrl: string; downloadBase: stri
   const downloadBase = (PUBLIC_BASE_URL || cfg?.download_url || cfg?.api_url || BASE_URL).replace(/\/$/, '')
   return { apiUrl, downloadBase }
 }
-const MODE = ((import.meta as any).env?.VITE_UPLOAD_MODE as string | undefined)?.toLowerCase() || 'simple' // 'simple' | 'nip96'
-const AUTH_MODE = ((import.meta as any).env?.VITE_UPLOAD_AUTH_MODE as string | undefined)?.toLowerCase() || (AUTH_TOKEN ? 'token' : 'none') // 'none' | 'token' | 'nip98'
+const MODE = (CONFIG.USE_HARDCODED ? CONFIG.UPLOAD_MODE : (((import.meta as any).env?.VITE_UPLOAD_MODE as string | undefined)?.toLowerCase() as any)) || 'simple'
+const AUTH_MODE = (CONFIG.USE_HARDCODED ? CONFIG.UPLOAD_AUTH_MODE : (((import.meta as any).env?.VITE_UPLOAD_AUTH_MODE as string | undefined)?.toLowerCase() as any)) || (AUTH_TOKEN ? 'token' : 'none')
 
 function withAuth(init: RequestInit = {}, url?: string): RequestInit {
   const headers = new Headers(init.headers || {})

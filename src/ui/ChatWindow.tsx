@@ -8,6 +8,7 @@ import { useToast } from './Toast'
 import { THUMB_SIZE, PRELOAD_ROOT_MARGIN } from './constants'
 import { log } from './logger'
 import { useI18n } from '../i18n'
+import { CONFIG } from '../config'
 import { useIsMobile } from './useIsMobile'
 
 export function ChatWindow() {
@@ -55,16 +56,32 @@ export function ChatWindow() {
   const [preparing, setPreparing] = useState(false)
   const [prepProgress, setPrepProgress] = useState(0)
   const [sending, setSending] = useState(false)
-  // Env toggle: do not auto-download media unless explicitly enabled
-  const AUTO_RESOLVE_MEDIA = (() => { try { return String((import.meta as any).env?.VITE_AUTO_RESOLVE_MEDIA || '0') !== '0' } catch { return false } })()
+  // User setting: auto-resolve media (default from env, persisted in localStorage)
+  const [autoResolveMedia, setAutoResolveMedia] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem('autoResolveMedia')
+      if (stored != null) return stored === '1'
+    } catch {}
+    try {
+      const envDefault = String((import.meta as any).env?.VITE_AUTO_RESOLVE_MEDIA || '')
+      if (envDefault) return envDefault !== '0'
+    } catch {}
+    return CONFIG.AUTO_RESOLVE_MEDIA_DEFAULT
+  })
+  useEffect(() => {
+    try { localStorage.setItem('autoResolveMedia', autoResolveMedia ? '1' : '0') } catch {}
+  }, [autoResolveMedia])
   // Upload backend hint banner
-  const hasBackend = (() => { try { return Boolean((import.meta as any).env?.VITE_UPLOAD_BASE_URL) } catch { return false } })()
+  const hasBackend = (() => {
+    try { return Boolean((import.meta as any).env?.VITE_UPLOAD_BASE_URL) } catch {}
+    return Boolean(CONFIG.UPLOAD_BASE_URL)
+  })()
   const uploadBannerMsg = (() => {
     try {
-      const cfg = (import.meta as any).env?.VITE_UPLOAD_BASE_URL as string | undefined
+      const cfg = ((import.meta as any).env?.VITE_UPLOAD_BASE_URL as string | undefined) ?? CONFIG.UPLOAD_BASE_URL
       const isPageLocal = typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(location.hostname)
       const cfgIsLocal = !!cfg && /^https?:\/\/localhost(?::\d+)?/i.test(cfg)
-      if (!hasBackend) return 'Uploads not configured. Large media won’t be visible to others. Configure VITE_UPLOAD_BASE_URL.'
+  if (!hasBackend) return 'Uploads not configured. Large media won’t be visible to others. Configure an upload server.'
       if (!isPageLocal && cfgIsLocal) return 'Upload server points to localhost and won’t work from this host. Configure a public upload server.'
     } catch {}
     return null as string | null
@@ -75,7 +92,7 @@ export function ChatWindow() {
   // Warn once when no upload backend is configured (mem:// fallback is not cross-device)
   useEffect(() => {
     try {
-      const hasBackend = Boolean((import.meta as any).env?.VITE_UPLOAD_BASE_URL)
+      const hasBackend = Boolean(((import.meta as any).env?.VITE_UPLOAD_BASE_URL) || CONFIG.UPLOAD_BASE_URL)
       const warnedKey = 'warn_upload_backend_v1'
       const warned = localStorage.getItem(warnedKey)
       if (!hasBackend && !warned) {
@@ -183,6 +200,16 @@ export function ChatWindow() {
     const ext = guessExt(mime)
     return ext ? `download.${ext}` : 'download'
   }
+  // Infer extension from a URL (best-effort, ignores query/hash)
+  function inferExtFromUrl(u: string) {
+    try {
+      const pure = u.split('?')[0].split('#')[0]
+      const last = pure.split('/').pop() || ''
+      const dot = last.lastIndexOf('.')
+      if (dot > 0 && dot < last.length - 1) return last.slice(dot + 1).toLowerCase()
+    } catch {}
+    return ''
+  }
 
   useEffect(() => {
     if (scrollerRef.current) scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight
@@ -190,7 +217,7 @@ export function ChatWindow() {
 
   // Auto-resolve pointer attachments for visible items (best-effort, background)
   useEffect(() => {
-  if (!AUTO_RESOLVE_MEDIA) return
+  if (!autoResolveMedia) return
     let cancelled = false
     const run = async () => {
       const maxConcurrent = 3
@@ -241,7 +268,7 @@ export function ChatWindow() {
     }
     run()
     return () => { cancelled = true }
-  }, [items, selectedPeer, updateMessage, AUTO_RESOLVE_MEDIA])
+  }, [items, selectedPeer, updateMessage, autoResolveMedia])
 
   // if user is near bottom when new messages arrive, keep pinned to bottom
   useEffect(() => {
@@ -378,6 +405,15 @@ export function ChatWindow() {
                     )}
                     {isPointer(m.attachment) && (
                       <div style={{ width: THUMB_SIZE, justifySelf: 'start', display: 'grid', gap: 6 }}>
+                        {/* Placeholder thumbnail with inferred extension */}
+                        {(() => {
+                          const ext = inferExtFromUrl(String(m.attachment))
+                          return (
+                            <div style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, background: 'var(--card)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', userSelect: 'none' }}>
+                              {(ext || 'file').toUpperCase()}
+                            </div>
+                          )
+                        })()}
                         <div style={{ fontSize: 12, color: 'var(--muted)' }}>{t('chat.resolvingMedia') || 'Resolving media…'}</div>
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                           {/* If hosted non-locally and pointer targets localhost, avoid futile loads */}
@@ -415,7 +451,7 @@ export function ChatWindow() {
                           })()}
                           {typeof m.attachment === 'string' && m.attachment.startsWith('http') && (
                             <a href={m.attachment} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12 }} title={t('chat.openInNewTab') || 'Open in new tab'}>
-                              {t('chat.open') || 'Open'}
+                              {(() => { const ext = inferExtFromUrl(String(m.attachment)); return (t('chat.open') || 'Open') + (ext ? ` (.${ext})` : '') })()}
                             </a>
                           )}
                         </div>
@@ -517,6 +553,15 @@ export function ChatWindow() {
                         </div>
                       ) : isPointer(a) ? (
                         <div key={i} style={{ width: THUMB_SIZE, justifySelf: 'start', display: 'grid', gap: 6 }}>
+                          {/* Placeholder thumbnail with inferred extension */}
+                          {(() => {
+                            const ext = inferExtFromUrl(String(a))
+                            return (
+                              <div style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, background: 'var(--card)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', userSelect: 'none' }}>
+                                {(ext || 'file').toUpperCase()}
+                              </div>
+                            )
+                          })()}
                           <div style={{ fontSize: 12, color: 'var(--muted)' }}>{t('chat.resolvingMedia') || 'Resolving media…'}</div>
                           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                             {(() => {
@@ -555,7 +600,7 @@ export function ChatWindow() {
                             })()}
                             {typeof a === 'string' && a.startsWith('http') && (
                               <a href={a} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12 }} title={t('chat.openInNewTab') || 'Open in new tab'}>
-                                {t('chat.open') || 'Open'}
+                                {(() => { const ext = inferExtFromUrl(String(a)); return (t('chat.open') || 'Open') + (ext ? ` (.${ext})` : '') })()}
                               </a>
                             )}
                           </div>
@@ -798,6 +843,11 @@ export function ChatWindow() {
           )}
           {attachment && !preparing && <span style={{ fontSize: 12 }}>{t('chat.attachmentReady')}</span>}
           {attachments.length > 0 && <span style={{ fontSize: 12 }}>{t('chat.filesReady', { n: attachments.length })}</span>}
+          {/* Auto-load media toggle */}
+          <label title={t('chat.autoLoadMediaHint') || 'Automatically load media previews when visible'} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+            <input type="checkbox" checked={autoResolveMedia} onChange={(e) => setAutoResolveMedia(e.target.checked)} />
+            {t('chat.autoLoadMedia') || 'Auto-load media'}
+          </label>
           <div style={{ marginLeft: 'auto' }}>
             <button style={{ minWidth: 88 }} onClick={async () => {
               if (navigator.vibrate) try { navigator.vibrate(15) } catch {}
@@ -808,7 +858,7 @@ export function ChatWindow() {
               if (encOn && (attachment || attachments.length) && !p) { show(t('errors.enterMediaPassphrase')!, 'error'); return }
               // Prevent sending large media without a configured upload backend to avoid mem:// pointers
               try {
-                const hasBackend = Boolean((import.meta as any).env?.VITE_UPLOAD_BASE_URL)
+                const hasBackend = Boolean(((import.meta as any).env?.VITE_UPLOAD_BASE_URL) || CONFIG.UPLOAD_BASE_URL)
                 if (!hasBackend) {
                   const inlineLimit = 128 * 1024
                   const sizes: number[] = []
@@ -816,7 +866,7 @@ export function ChatWindow() {
                   for (const a of attachments) if (a.startsWith('data:')) sizes.push(dataURLSize(a))
                   const anyTooLarge = sizes.some(s => s > inlineLimit)
                   if (anyTooLarge) {
-                    show('Cannot send large media without an upload server. Configure VITE_UPLOAD_BASE_URL or send a smaller file.', 'error')
+                    show('Cannot send large media without an upload server. Configure an upload server or send a smaller file.', 'error')
                     return
                   }
                 }
