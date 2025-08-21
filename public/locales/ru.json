@@ -20,6 +20,8 @@
 	"settings.onboardingAgain": "Повторить онбординг",
 	"settings.viewLog": "Просмотреть лог",
 	"settings.language": "Язык",
+	"settings.showAds": "Показывать рекламу",
+	"settings.manageAds": "Управлять рекламой",
 
 	"common.close": "Закрыть",
 	"common.next": "Далее →",
@@ -41,6 +43,7 @@
 	"common.share": "Поделиться…",
 	"common.copyLink": "Копировать ссылку",
 	"common.send": "Отправить",
+	"common.reset": "Сброс",
 
 	"status.notRequested": "Ещё не запрошено",
 	"status.granted": "Предоставлено",

@@ -20,6 +20,8 @@
 	"settings.onboardingAgain": "Relancer l’accueil",
 	"settings.viewLog": "Afficher le journal",
 	"settings.language": "Langue",
+	"settings.showAds": "Afficher les publicités",
+	"settings.manageAds": "Gérer les publicités",
 
 	"common.close": "Fermer",
 	"common.next": "Suivant →",
@@ -41,6 +43,7 @@
 	"common.share": "Partager…",
 	"common.copyLink": "Copier le lien",
 	"common.send": "Envoyer",
+	"common.reset": "Réinitialiser",
 
 	"status.notRequested": "Pas encore demandé",
 	"status.granted": "Accordé",

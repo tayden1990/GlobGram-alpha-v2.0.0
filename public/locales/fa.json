@@ -20,6 +20,8 @@
 	"settings.onboardingAgain": "اجرای دوباره راه‌اندازی",
 	"settings.viewLog": "نمایش گزارش",
 	"settings.language": "زبان",
+	"settings.showAds": "نمایش تبلیغات",
+	"settings.manageAds": "مدیریت تبلیغات",
 
 	"common.close": "بستن",
 	"common.next": "بعدی →",
@@ -41,6 +43,7 @@
 	"common.share": "اشتراک‌گذاری…",
 	"common.copyLink": "کپی لینک",
 	"common.send": "ارسال",
+	"common.reset": "بازنشانی",
 
 	"status.notRequested": "هنوز درخواست نشده",
 	"status.granted": "اعطا شد",
@@ -205,6 +208,8 @@
 	"chat.recordVideo": "ضبط ویدئو",
 	"chat.stopVideo": "توقف ویدئو",
 	"chat.preparing": "در حال آماده‌سازی… {pct}%",
+	"chat.autoLoadMedia": "بارگذاری خودکار رسانه",
+	"chat.autoLoadMediaHint": "پیش‌نمایش رسانه‌ها را هنگام نمایش به‌طور خودکار بارگذاری کن",
 	"chat.editAlias": "ویرایش نام مستعار",
 	"chat.aliasForContact": "نام مستعار برای مخاطب:",
 	"chat.kind.image": "تصویر",

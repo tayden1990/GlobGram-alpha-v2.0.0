@@ -20,6 +20,8 @@
 	"settings.onboardingAgain": "Executar integração novamente",
 	"settings.viewLog": "Ver log",
 	"settings.language": "Idioma",
+	"settings.showAds": "Mostrar anúncios",
+	"settings.manageAds": "Gerenciar anúncios",
 
 	"common.close": "Fechar",
 	"common.next": "Próximo →",
@@ -41,6 +43,7 @@
 	"common.share": "Compartilhar…",
 	"common.copyLink": "Copiar link",
 	"common.send": "Enviar",
+	"common.reset": "Redefinir",
 
 	"status.notRequested": "Ainda não solicitado",
 	"status.granted": "Concedido",

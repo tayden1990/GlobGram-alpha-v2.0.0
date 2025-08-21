@@ -20,6 +20,8 @@
 	"settings.onboardingAgain": "Repetir introducción",
 	"settings.viewLog": "Ver registro",
 	"settings.language": "Idioma",
+	"settings.showAds": "Mostrar anuncios",
+	"settings.manageAds": "Administrar anuncios",
 
 	"common.close": "Cerrar",
 	"common.next": "Siguiente →",
@@ -41,6 +43,7 @@
 	"common.share": "Compartir…",
 	"common.copyLink": "Copiar enlace",
 	"common.send": "Enviar",
+	"common.reset": "Restablecer",
 
 	"status.notRequested": "Aún no solicitado",
 	"status.granted": "Concedido",

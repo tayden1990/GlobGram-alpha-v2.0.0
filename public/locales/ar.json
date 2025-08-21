@@ -20,6 +20,8 @@
 	"settings.onboardingAgain": "إعادة تشغيل الإعداد الأولي",
 	"settings.viewLog": "عرض السجل",
 	"settings.language": "اللغة",
+	"settings.showAds": "إظهار الإعلانات",
+	"settings.manageAds": "إدارة الإعلانات",
 
 	"common.close": "إغلاق",
 	"common.next": "التالي →",
@@ -41,6 +43,7 @@
 	"common.share": "مشاركة…",
 	"common.copyLink": "نسخ الرابط",
 	"common.send": "إرسال",
+	"common.reset": "إعادة ضبط",
 
 	"status.notRequested": "لم يُطلب بعد",
 	"status.granted": "مُنِح",

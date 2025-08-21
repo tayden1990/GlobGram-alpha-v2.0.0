@@ -21,6 +21,8 @@
 	"settings.onboardingAgain": "Run onboarding again",
 	"settings.viewLog": "View log",
 	"settings.language": "Language",
+	"settings.showAds": "Show ads",
+	"settings.manageAds": "Manage ads",
 
 	"common.close": "Close",
 	"common.next": "Next →",
@@ -42,6 +44,7 @@
 	"common.share": "Share…",
 	"common.copyLink": "Copy link",
 	"common.send": "Send",
+	"common.reset": "Reset",
 
 	"status.notRequested": "Not requested yet",
 	"status.granted": "Granted",

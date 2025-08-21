@@ -20,6 +20,8 @@
 	"settings.onboardingAgain": "Einführung erneut starten",
 	"settings.viewLog": "Protokoll anzeigen",
 	"settings.language": "Sprache",
+	"settings.showAds": "Werbung anzeigen",
+	"settings.manageAds": "Werbung verwalten",
 
 	"common.close": "Schließen",
 	"common.next": "Weiter →",
@@ -41,6 +43,7 @@
 	"common.share": "Teilen…",
 	"common.copyLink": "Link kopieren",
 	"common.send": "Senden",
+	"common.reset": "Zurücksetzen",
 
 	"status.notRequested": "Noch nicht angefordert",
 	"status.granted": "Gewährt",

@@ -86,6 +86,8 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     return supported.includes(base) ? base : 'en'
   })
   const [messages, setMessages] = useState<Messages>({})
+  // Fallback to English for any missing keys to avoid showing raw keys
+  const [fallbackMessages, setFallbackMessages] = useState<Messages>({})
 
   useEffect(() => {
     let active = true
@@ -104,6 +106,24 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     return () => { active = false }
   }, [locale])
 
+  // Load English as a fallback once (and refresh if basePath changes implicitly)
+  useEffect(() => {
+    let active = true
+    const loadFallback = async () => {
+      try {
+        const mod = await loaders['en']()
+        if (!active) return
+        setFallbackMessages(mod.default || {})
+      } catch {
+        if (!active) return
+        setFallbackMessages({})
+      }
+    }
+    loadFallback()
+    return () => { active = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Apply text direction for RTL languages
   useEffect(() => {
     const rtlLocales = new Set(['fa', 'ar'])
@@ -121,8 +141,9 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
   const t = useMemo(() => {
     const format = (key: string, vars?: Record<string, string | number>) => {
-      const val = messages[key]
-      if (typeof val === 'undefined') {
+    const hasPrimary = Object.prototype.hasOwnProperty.call(messages, key)
+    const val = hasPrimary ? messages[key] : fallbackMessages[key]
+    if (typeof val === 'undefined') {
         if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production') {
           // eslint-disable-next-line no-console
           console.warn(`[i18n] Missing key for locale "${locale}":`, key)
@@ -133,7 +154,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       return Object.keys(vars).reduce((out, k) => out.replace(new RegExp(`{${k}}`, 'g'), String(vars[k]!)), template)
     }
     return format
-  }, [messages, locale])
+  }, [messages, fallbackMessages, locale])
 
   const value: I18nContextType = {
     locale,
