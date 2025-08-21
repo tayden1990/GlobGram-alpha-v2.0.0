@@ -29,6 +29,7 @@ jobs:
 
       - name: Compute App URL
         id: app
+        shell: bash
         run: |
           REPO_URL="https://$GITHUB_SERVER_URL/${GITHUB_REPOSITORY}"
           # GitHub Pages URL for this repo (no custom domain assumed)
@@ -37,37 +38,31 @@ jobs:
           echo "app_url=$APP_URL" >> $GITHUB_OUTPUT
 
       - name: Build with Nativefier
+        shell: bash
         run: |
+          set -euxo pipefail
           mkdir -p dist-desktop
-          ICON_PATH="public/branding/logo.png"
-          # Windows filename issues with ':' etc are handled by nativefier
-          nativefier "${{ env.APP_URL }}" \
+          # Build app for the current platform. Omit --icon to avoid cross-OS icon format issues.
+          npx -y nativefier@latest "$APP_URL" \
             --name "GlobGram" \
-            --icon "$ICON_PATH" \
             --internal-urls ".*" \
             --disable-dev-tools \
             --single-instance \
             --out dist-desktop
-
-      - name: Archive artifacts (zip)
-        shell: bash
-        run: |
-          cd dist-desktop
-          # Zip each app folder produced by Nativefier
-          for d in */ ; do
-            zip -r "${d%/}.zip" "$d"
-          done
+          echo "Built contents:"
+          ls -la dist-desktop || true
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: desktop-${{ runner.os }}
-          path: dist-desktop/*.zip
+          path: dist-desktop/**
+          if-no-files-found: error
 
       - name: Attach to GitHub Release (if tag)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist-desktop/*.zip
+          files: dist-desktop/**
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

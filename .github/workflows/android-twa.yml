@@ -25,6 +25,10 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+      - name: Verify Java
+        run: |
+          java -version
+          echo "JAVA_HOME=$JAVA_HOME"
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -34,21 +38,31 @@ jobs:
         with:
           node-version: '20'
       - run: npm i -g @bubblewrap/cli
+      - name: Show Bubblewrap version
+        run: bubblewrap --version
       - name: Compute App URL
         run: |
           echo "APP_URL=https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/" >> $GITHUB_ENV
-      - name: Init Bubblewrap project
+      - name: Init Bubblewrap project (non-interactive)
+        shell: bash
         run: |
-          mkdir twa && cd twa
-          bubblewrap init --manifest=https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/public/manifest.webmanifest --directory . --skipPwaValidation
+          set -euxo pipefail
+          mkdir -p twa
+          cd twa
+          # Answer JDK installation prompt with 'n' to use the already installed JDK
+          printf 'n\n' | bubblewrap init --manifest=https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/public/manifest.webmanifest --directory . --skipPwaValidation
           # Update the start URL to GitHub Pages URL
           sed -i "s#\"start_url\": \".\"#\"start_url\": \"${APP_URL}\"#" twa-manifest.json || true
           bubblewrap build
 
       - name: Sign APK (if keystore provided)
         if: ${{ env.KEYSTORE_B64 != '' }}
+        shell: bash
         run: |
           echo "$KEYSTORE_B64" | base64 -d > keystore.jks
+          # Ensure apksigner is available in PATH
+          export PATH="$ANDROID_HOME/build-tools/$(ls -1 $ANDROID_HOME/build-tools | sort -V | tail -n 1):$PATH"
+          which apksigner || true
           apksigner sign --ks keystore.jks --ks-key-alias "$KEY_ALIAS" --ks-pass pass:"$STORE_PASSWORD" --key-pass pass:"$KEY_PASSWORD" twa/build/app-release-unsigned.apk
           mv twa/build/app-release-unsigned.apk globgram-twa-release.apk
 
@@ -59,6 +73,7 @@ jobs:
           path: |
             globgram-twa-release.apk
             twa/build/app-release.apk
+          if-no-files-found: warn
 
       - name: Attach to GitHub Release (if tag)
         if: startsWith(github.ref, 'refs/tags/v')
