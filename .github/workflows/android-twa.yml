@@ -84,11 +84,17 @@ jobs:
           set pathpart $env(PATHPART)
           spawn bubblewrap init --manifest=$env(MANIFEST_URL) --directory . --skipPwaValidation
           expect {
-            -re {Domain.*:} { send -- "$domain\r"; exp_continue }
-            -re {URL path.*:} { send -- "$pathpart\r"; exp_continue }
-            -re {\(Y/n\)} { send -- "\r"; exp_continue }
-            -re {\(y/N\)} { send -- "\r"; exp_continue }
-            -re {: $} { send -- "\r"; exp_continue }
+            -re {(D|d)omain.*:} { send -- "$domain\r"; exp_continue }
+            -re {(U|u)RL path.*:} { send -- "$pathpart\r"; exp_continue }
+            -re {Please, enter details.*} { send -- "\r"; exp_continue }
+            -re {(A|a)pp(lication)?\s+[Nn]ame.*:} { send -- "\r"; exp_continue }
+            -re {(S|s)hort\s+[Nn]ame.*:} { send -- "\r"; exp_continue }
+            -re {(L|l)auncher\s+(N|n)ame.*:} { send -- "\r"; exp_continue }
+            -re {(P|p)ackage|(A|a)pplication\s+I[dD]).*:} { send -- "\r"; exp_continue }
+            -re {(I|i)con(s)?\b.*\?:} { send -- "\r"; exp_continue }
+            -re {(S|s)igning.*\?:} { send -- "\r"; exp_continue }
+            -re {\([Yy]/[Nn]\)} { send -- "\r"; exp_continue }
+            -re {[:?]\s*$} { send -- "\r"; exp_continue }
             eof
           }
           EOS
