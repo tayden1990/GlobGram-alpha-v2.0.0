@@ -3,8 +3,8 @@ name: Build Android APK (TWA)
 on:
   push:
     tags:
-  - 'v*.*.*'      # stable releases like v1.2.3
-  - 'v*.*.*-*'    # pre-releases like v1.2.3-beta.1
+      - 'v*.*.*'      # stable releases like v1.2.3
+      - 'v*.*.*-*'    # pre-releases like v1.2.3-beta.1
   workflow_dispatch:
 
 jobs:
