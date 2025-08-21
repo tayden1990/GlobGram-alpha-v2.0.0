@@ -27,6 +27,7 @@ type State = {
   messages: Record<string, RoomMessage[]>
   owners: Record<string, string> // roomId -> owner pubkey
   members: Record<string, Record<string, true>> // roomId -> set of member pubkeys
+  membersTs?: Record<string, number> // roomId -> last applied membership event created_at
 }
 
 type Actions = {
@@ -38,6 +39,7 @@ type Actions = {
   clearRoom: (id: string) => void
   setOwner: (id: string, owner: string) => void
   setMembers: (id: string, members: string[]) => void
+  setMembersIfNewer: (id: string, members: string[], createdAt: number) => void
   addMember: (id: string, member: string) => void
   removeMember: (id: string, member: string) => void
 }
@@ -52,6 +54,7 @@ export const useRoomStore = create<State & Actions>()(
   messages: {},
   owners: {},
   members: {},
+  membersTs: {},
       addRoom: (room) => {
         const prev = get().rooms[room.id]
         const next = { ...(prev || {}), ...room }
@@ -109,6 +112,25 @@ export const useRoomStore = create<State & Actions>()(
         if (equal) return
         try { log(`roomStore.setMembers ${id.slice(0,8)}… count=${arr.length}`) } catch {}
         set({ members: { ...get().members, [id]: setMap } })
+      },
+      setMembersIfNewer: (id, arr, createdAt) => {
+        const tsMap = get().membersTs || {}
+        const prevTs = tsMap[id] || 0
+        if (createdAt && createdAt < prevTs) { try { log(`roomStore.setMembersIfNewer skip older ts=${createdAt} < ${prevTs}`) } catch {}; return }
+        const prev = get().members[id] || {}
+        const setMap: Record<string, true> = {}
+        for (const m of arr) setMap[m] = true
+        const sameSize = Object.keys(prev).length === Object.keys(setMap).length
+        let equal = sameSize
+        if (equal) {
+          for (const k of Object.keys(setMap)) { if (!prev[k]) { equal = false; break } }
+        }
+        if (equal && createdAt === prevTs) return
+        try { log(`roomStore.setMembersIfNewer ${id.slice(0,8)}… count=${arr.length} ts=${createdAt}`) } catch {}
+        set({ 
+          members: { ...get().members, [id]: setMap },
+          membersTs: { ...tsMap, [id]: createdAt || Math.floor(Date.now()/1000) }
+        })
       },
       addMember: (id, member) => {
         try { log(`roomStore.addMember ${id.slice(0,8)}… + ${member.slice(0,8)}…`) } catch {}

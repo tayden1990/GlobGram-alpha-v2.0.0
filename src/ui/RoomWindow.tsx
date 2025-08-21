@@ -8,6 +8,7 @@ import { useToast } from './Toast'
 import { THUMB_SIZE, PRELOAD_ROOT_MARGIN } from './constants'
 import { useIsMobile } from './useIsMobile'
 import { useI18n } from '../i18n'
+import { CONFIG } from '../config'
 
 export function RoomWindow() {
 	const { t } = useI18n()
@@ -38,6 +39,21 @@ export function RoomWindow() {
 		// media encryption
 		const [encOn, setEncOn] = useState(false)
 		const [encPass, setEncPass] = useState('')
+	// User setting: auto-resolve media (default from env, persisted in localStorage)
+	const [autoResolveMedia, setAutoResolveMedia] = useState<boolean>(() => {
+		try {
+			const stored = localStorage.getItem('autoResolveMedia')
+			if (stored != null) return stored === '1'
+		} catch {}
+		try {
+			const envDefault = String((import.meta as any).env?.VITE_AUTO_RESOLVE_MEDIA || '')
+			if (envDefault) return envDefault !== '0'
+		} catch {}
+		return CONFIG.AUTO_RESOLVE_MEDIA_DEFAULT
+	})
+	useEffect(() => {
+		try { localStorage.setItem('autoResolveMedia', autoResolveMedia ? '1' : '0') } catch {}
+	}, [autoResolveMedia])
 	const [visibleCount, setVisibleCount] = useState<number>(50)
 	const loadingMoreRef = useRef(false)
 	const topSentinelRef = useRef<HTMLDivElement | null>(null)
@@ -49,7 +65,15 @@ export function RoomWindow() {
 	// preparing/progress state
 	const [preparing, setPreparing] = useState(false)
 	const [prepProgress, setPrepProgress] = useState(0)
+	type SendProg = { stage: 'idle'|'uploading'|'publishing'|'done'; uploaded: number; total: number; fileProgress?: { current: number; total: number; fileIndex: number } }
 	const [sending, setSending] = useState(false)
+	const [sendProg, setSendProg] = useState<SendProg>({ stage: 'idle', uploaded: 0, total: 0, fileProgress: undefined })
+
+	function formatBytes(bytes: number): string {
+		if (bytes < 1024) return `${bytes} B`
+		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+		return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+	}
 
 	// Grid layout ensures footer has its own row and never overlaps the scroller
 	
@@ -227,56 +251,73 @@ export function RoomWindow() {
 										{m.text && (
 											<div style={{ background: 'var(--bubble)', color: 'var(--bubble-fg)', borderRadius: 12, padding: '8px 10px' }}>{m.text}</div>
 										)}
-										{m.attachment?.startsWith('data:image/') && (
-											<div title={t('chat.openImage')!} onClick={() => setLightbox({ type: 'image', src: m.attachment! })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: 'var(--border)', cursor: 'pointer', justifySelf: 'start' }}>
-												<img src={m.attachment} alt="image" loading="lazy" decoding="async" onLoad={() => rowVirtualizer.measure()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-											</div>
-										)}
-										{m.attachment?.startsWith('data:video/') && (
-											<div title={t('chat.playVideo')!} onClick={() => setLightbox({ type: 'video', src: m.attachment! })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: '#000', position: 'relative', cursor: 'pointer', justifySelf: 'start' }}>
-												<video src={m.attachment} muted preload="metadata" onLoadedMetadata={() => rowVirtualizer.measure()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
-												<div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 28, textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>▶</div>
-											</div>
-										)}
-										{/* spacer to ensure separation from media above */}
-										<div style={{ height: 2 }} />
-										{m.attachment?.startsWith('data:audio/') && (
-											<div style={{ width: THUMB_SIZE, justifySelf: 'start' }}>
-												<button title={t('chat.playAudio')!} onClick={() => setLightbox({ type: 'audio', src: m.attachment! })} className="msg-audio" style={{ width: '100%', padding: '6px 10px', borderRadius: 16, background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--fg)', cursor: 'pointer' }}>{t('chat.audio')}</button>
-											</div>
-										)}
-										{m.attachment && m.attachment.startsWith('data:') && !m.attachment.startsWith('data:image/') && !m.attachment.startsWith('data:video/') && !m.attachment.startsWith('data:audio/') && (
-											<div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-												<a href={m.attachment} download={filenameForDataUrl(m.attachment)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--accent)' }}>
-													{t('chat.downloadFile', { size: readableSize(dataURLSize(m.attachment)) })}
-												</a>
-											</div>
-										)}
-										{m.attachments?.map((a: string, i: number) => (
-											a.startsWith('data:image/') ? (
-												<div key={i} title={t('chat.openImage')!} onClick={() => setLightbox({ type: 'image', src: a })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: 'var(--border)', cursor: 'pointer', justifySelf: 'start' }}>
-													<img src={a} alt="image" loading="lazy" decoding="async" onLoad={() => rowVirtualizer.measure()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-												</div>
-											) : a.startsWith('data:video/') ? (
-												<div key={i} title={t('chat.playVideo')!} onClick={() => setLightbox({ type: 'video', src: a })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: '#000', position: 'relative', cursor: 'pointer', justifySelf: 'start' }}>
-													<video src={a} muted preload="metadata" onLoadedMetadata={() => rowVirtualizer.measure()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
-													<div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 28, textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>▶</div>
-												</div>
-											) : a.startsWith('data:audio/') ? (
-												<>
-													<div style={{ height: 2 }} />
-													<div style={{ width: THUMB_SIZE, justifySelf: 'start' }}>
-														<button key={i} title={t('chat.playAudio')!} onClick={() => setLightbox({ type: 'audio', src: a })} className="msg-audio" style={{ width: '100%', padding: '6px 10px', borderRadius: 16, background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--fg)', cursor: 'pointer' }}>{t('chat.audio')}</button>
-													</div>
-												</>
-											) : a.startsWith('data:') ? (
-												<div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-													<a href={a} download={filenameForDataUrl(a)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--accent)' }}>
-														{t('chat.downloadFile', { size: readableSize(dataURLSize(a)) })}
-													</a>
-												</div>
-											) : null
-										))}
+										   {/* Render image attachments (data:*, http(s)://, mem://) */}
+										   {m.attachment && (/^(data:|https?:\/\/|mem:\/\/)/.test(m.attachment)) && (() => {
+											   if (/^data:image\//.test(m.attachment) || /\.(jpg|jpeg|png|gif|webp|svg|heic|heif|avif)$/i.test(m.attachment)) {
+												   return (
+													   <div title={t('chat.openImage')!} onClick={() => setLightbox({ type: 'image', src: m.attachment! })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: 'var(--border)', cursor: 'pointer', justifySelf: 'start' }}>
+														   <img src={m.attachment} alt="image" loading="lazy" decoding="async" onLoad={() => rowVirtualizer.measure()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+													   </div>
+												   )
+											   }
+											   if (/^data:video\//.test(m.attachment) || /\.(mp4|webm|mov|3gp)$/i.test(m.attachment)) {
+												   return (
+													   <div title={t('chat.playVideo')!} onClick={() => setLightbox({ type: 'video', src: m.attachment! })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: '#000', position: 'relative', cursor: 'pointer', justifySelf: 'start' }}>
+														   <video src={m.attachment} muted preload="metadata" onLoadedMetadata={() => rowVirtualizer.measure()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
+														   <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 28, textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>▶</div>
+													   </div>
+												   )
+											   }
+											   if (/^data:audio\//.test(m.attachment) || /\.(mp3|ogg|wav|aac|flac|webm)$/i.test(m.attachment)) {
+												   return (
+													   <div style={{ width: THUMB_SIZE, justifySelf: 'start' }}>
+														   <button title={t('chat.playAudio')!} onClick={() => setLightbox({ type: 'audio', src: m.attachment! })} className="msg-audio" style={{ width: '100%', padding: '6px 10px', borderRadius: 16, background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--fg)', cursor: 'pointer' }}>{t('chat.audio')}</button>
+													   </div>
+												   )
+											   }
+											   // Generic file download for other types
+											   return (
+												   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+													   <a href={m.attachment} download style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--accent)' }}>
+														   {t('chat.downloadFile')}
+													   </a>
+												   </div>
+											   )
+										   })()}
+										   {m.attachments?.map((a: string, i: number) => {
+											   if (/^data:image\//.test(a) || /^(https?:\/\/|mem:\/\/).+\.(jpg|jpeg|png|gif|webp|svg|heic|heif|avif)$/i.test(a)) {
+												   return (
+													   <div key={i} title={t('chat.openImage')!} onClick={() => setLightbox({ type: 'image', src: a })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: 'var(--border)', cursor: 'pointer', justifySelf: 'start' }}>
+														   <img src={a} alt="image" loading="lazy" decoding="async" onLoad={() => rowVirtualizer.measure()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+													   </div>
+												   )
+											   }
+											   if (/^data:video\//.test(a) || /^(https?:\/\/|mem:\/\/).+\.(mp4|webm|mov|3gp)$/i.test(a)) {
+												   return (
+													   <div key={i} title={t('chat.playVideo')!} onClick={() => setLightbox({ type: 'video', src: a })} style={{ width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: 8, overflow: 'hidden', background: '#000', position: 'relative', cursor: 'pointer', justifySelf: 'start' }}>
+														   <video src={a} muted preload="metadata" onLoadedMetadata={() => rowVirtualizer.measure()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
+														   <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 28, textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>▶</div>
+													   </div>
+												   )
+											   }
+											   if (/^data:audio\//.test(a) || /^(https?:\/\/|mem:\/\/).+\.(mp3|ogg|wav|aac|flac|webm)$/i.test(a)) {
+												   return (
+													   <div key={i} style={{ width: THUMB_SIZE, justifySelf: 'start' }}>
+														   <button title={t('chat.playAudio')!} onClick={() => setLightbox({ type: 'audio', src: a })} className="msg-audio" style={{ width: '100%', padding: '6px 10px', borderRadius: 16, background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--fg)', cursor: 'pointer' }}>{t('chat.audio')}</button>
+													   </div>
+												   )
+											   }
+											   if (/^(data:|https?:\/\/|mem:\/\/)/.test(a)) {
+												   return (
+													   <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+														   <a href={a} download style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--accent)' }}>
+															   {t('chat.downloadFile')}
+														   </a>
+													   </div>
+												   )
+											   }
+											   return null
+										   })}
 										<div className="msg-meta" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
 											<div style={{ fontSize: 10, color: 'var(--muted)' }}>{new Date(m.ts * 1000).toLocaleTimeString()}</div>
 										</div>
@@ -481,19 +522,88 @@ export function RoomWindow() {
 				)}
 				{attachment && !preparing && <span style={{ fontSize: 12 }}>{t('chat.attachmentReady')}</span>}
 				{attachments.length > 0 && <span style={{ fontSize: 12 }}>{t('chat.filesReady', { n: attachments.length })}</span>}
-				<div style={{ marginLeft: 'auto' }}>
-						<button style={{ minWidth: 88 }} onClick={async () => {
-					const sk = localStorage.getItem('nostr_sk')
-					if (!sk || !roomId) return
-							const p = (encOn && (attachment || attachments.length)) ? encPass : undefined
-							if (encOn && (attachment || attachments.length) && !p) { show('Enter a media passphrase', 'error'); return }
-							if (navigator.vibrate) try { navigator.vibrate(15) } catch {}
-							setSending(true)
-							await sendRoom(sk, roomId, text || undefined, { a: attachment || undefined, as: attachments.length ? attachments : undefined, p })
-					setText('')
-					setAttachment(null)
-					setAttachments([])
+				{/* Auto-load media toggle (rooms) */}
+				<label title={t('chat.autoLoadMediaHint') || 'Automatically load media previews when visible'} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+					<input type="checkbox" checked={autoResolveMedia} onChange={(e) => setAutoResolveMedia(e.target.checked)} />
+					{t('chat.autoLoadMedia') || 'Auto-load media'}
+				</label>
+				<div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+					{sending && (
+						<span style={{ fontSize: 12, color: 'var(--muted)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+							<span style={{ width: 120, height: 6, background: 'var(--border)', borderRadius: 4, overflow: 'hidden', display: 'inline-block' }}>
+								<span
+									style={{
+										display: 'block',
+										height: '100%',
+										width: sendProg.stage === 'uploading' && sendProg.fileProgress && sendProg.fileProgress.total > 0
+											? `${Math.round((sendProg.fileProgress.current / sendProg.fileProgress.total) * 100)}%`
+											: (sendProg.total ? `${Math.round((sendProg.uploaded/sendProg.total)*100)}` : '100') + '%',
+										background: 'var(--accent)',
+										transition: 'width 150ms linear'
+									}}
+								/>
+							</span>
+							{sendProg.stage === 'uploading' && sendProg.fileProgress && sendProg.fileProgress.total > 0
+								? `${t('chat.uploading') || 'Uploading'} ${sendProg.uploaded + 1}/${sendProg.total} (${Math.round((sendProg.fileProgress.current/sendProg.fileProgress.total)*100)}% - ${formatBytes(sendProg.fileProgress.current)} / ${formatBytes(sendProg.fileProgress.total)})`
+								: sendProg.stage === 'uploading'
+									? `${t('chat.uploading') || 'Uploading'} ${sendProg.uploaded}/${sendProg.total}`
+									: (sendProg.stage === 'publishing' ? (t('chat.publishing') || 'Publishing…') : (t('chat.sending') || 'Sending…'))}
+						</span>
+					)}
+					<button style={{ minWidth: 88 }} onClick={async () => {
+						const sk = localStorage.getItem('nostr_sk')
+						if (!sk || !roomId) return
+						const p = (encOn && (attachment || attachments.length)) ? encPass : undefined
+						if (encOn && (attachment || attachments.length) && !p) { show('Enter a media passphrase', 'error'); return }
+						if (navigator.vibrate) try { navigator.vibrate(15) } catch {}
+						setSending(true)
+						setSendProg({ stage: 'uploading', uploaded: 0, total: 0, fileProgress: undefined })
+						try {
+							// Prepare message data for local echo
+							let outA = attachment || undefined
+							let outAs = attachments.length ? attachments : undefined
+							let names: string[] | undefined = undefined
+							if (attachments.length > 0) {
+								names = attachments.map((a, i) => {
+									if (typeof a === 'string' && a.startsWith('data:')) {
+										const m = /^data:([^;]+);/.exec(a)
+										const mime = m?.[1] || 'application/octet-stream'
+										const ext = mime.split('/')[1] || 'bin'
+										return `upload.${ext}`
+									}
+									return 'download.bin'
+								})
+							}
+							const evtId = `${roomId}:${Date.now()}:${Math.random().toString(36).slice(2)}`
+							await sendRoom(sk, roomId, text || undefined, {
+								a: outA,
+								as: outAs,
+								p,
+								onProgress: ({ stage, uploaded, totalUploads, fileProgress }) => {
+									setSendProg({ stage, uploaded: uploaded ?? 0, total: totalUploads ?? 0, fileProgress })
+								}
+							})
+							// Add local echo message
+							useRoomStore.getState().addRoomMessage(roomId, {
+								id: evtId,
+								roomId,
+								from: myPubkey as string,
+								ts: Math.floor(Date.now()/1000),
+								text,
+								attachment: outA,
+								attachments: outAs,
+								name: outA ? 'upload.bin' : undefined,
+								names
+							})
+							setText('')
+							setAttachment(null)
+							setAttachments([])
+						} catch (e) {
+							show((e as any)?.message || 'Failed to send', 'error')
+						} finally {
 							setSending(false)
+							setSendProg({ stage: 'idle', uploaded: 0, total: 0, fileProgress: undefined })
+						}
 					}} disabled={preparing || sending || (!text && !attachment && attachments.length===0)}>{t('common.send')}</button>
 				</div>
 				</div>

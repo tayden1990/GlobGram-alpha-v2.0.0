@@ -131,7 +131,9 @@ export function startNostrEngine(sk: string) {
         // Close previous sub id on this relay if present
         try {
           const prev = active?.subId || subId
-          ws.send(JSON.stringify(["CLOSE", prev]))
+          if (ws.readyState === ws.OPEN) {
+            ws.send(JSON.stringify(["CLOSE", prev]))
+          }
         } catch {}
         // If no room selected, just record cleared state and continue
         if (!roomId) {
@@ -140,11 +142,27 @@ export function startNostrEngine(sk: string) {
         }
         const since = Math.floor(Date.now()/1000) - 7*24*60*60 // last 7 days
         const req = JSON.stringify(["REQ", subId, { kinds: [42], '#e': [roomId], since }])
-        try { ws.send(req); log(`Subscribe roomCur -> ${url} room=${roomId.slice(0,8)}… id=${subId}`) } catch {}
+        if (ws.readyState === ws.OPEN) {
+          try { ws.send(req); log(`Subscribe roomCur -> ${url} room=${roomId.slice(0,8)}… id=${subId}`) } catch {}
+        } else if (ws.readyState === ws.CONNECTING) {
+          try { ws.addEventListener('open', () => { try { ws.send(req); log(`Subscribe roomCur (onopen) -> ${url} room=${roomId.slice(0,8)}… id=${subId}`) } catch {} }, { once: true } as any) } catch {}
+        }
         activeRoomSubs.set(url, { roomId, subId })
       }
     } catch {}
   }
+  // Keep room subscription updated when UI selection changes
+  try {
+    let prevSel: string | null = null
+    const unsubSel = useRoomStore.subscribe((s) => {
+      const cur: string | null = s.selectedRoom || null
+      if (cur !== prevSel) {
+        prevSel = cur
+        try { updateCurrentRoomSub(cur) } catch {}
+      }
+    })
+    ;(window as any).__globgram_unsubSel = unsubSel
+  } catch {}
   // react to relay changes at runtime
   const attachHandlers = (url: string, ws: WebSocket) => {
     ws.onopen = () => {
@@ -416,7 +434,17 @@ export function startNostrEngine(sk: string) {
               const picture = evt.tags.find(t => t[0]==='picture')?.[1]
               if (name || about || picture) useRoomStore.getState().setRoomMeta(ref, { name, about, picture })
               const members = evt.tags.filter(t => t[0]==='p').map(t => t[1]).filter(Boolean)
-              if (members.length) useRoomStore.getState().setMembers(ref, members)
+              if (members.length) {
+                const createdAt = evt.created_at || Math.floor(Date.now()/1000)
+                useRoomStore.getState().setMembersIfNewer(ref, members, createdAt)
+                // If current user is in the new members list, ensure room exists locally
+                try {
+                  const me = pk
+                  if (members.includes(me)) {
+                    if (!useRoomStore.getState().rooms[ref]) useRoomStore.getState().addRoom({ id: ref })
+                  }
+                } catch {}
+              }
             }
       } else if (evt.kind === 42) { // NIP-28 Channel Message (with attachments envelope)
             const roomId = evt.tags.find(t => t[0] === 'e')?.[1]
@@ -1089,41 +1117,83 @@ export async function sendTyping(sk: string, to: string) {
 }
 
 // Minimal room send (NIP-28 channel message). We use provided roomId as an event tag 'e'.
-export async function sendRoom(sk: string, roomId: string, text?: string, opts?: { a?: string; as?: string[]; p?: string }) {
+export async function sendRoom(
+  sk: string,
+  roomId: string,
+  text?: string,
+  opts?: { a?: string; as?: string[]; p?: string; onProgress?: (p: { stage: 'uploading' | 'publishing' | 'done'; uploaded?: number; totalUploads?: number; fileProgress?: { current: number; total: number; fileIndex: number } }) => void }
+) {
   // membership/owner gate: only allow sending if caller is owner or member
   const me = getPublicKey(hexToBytes(sk))
   const owner = useRoomStore.getState().owners[roomId]
   const mem = useRoomStore.getState().members[roomId]
-  if (!(owner === me || !!(mem && mem[me]))) {
+  const knowMembership = !!owner || !!(mem && Object.keys(mem).length)
+  const isMember = (owner === me) || !!(mem && mem[me])
+  if (knowMembership && !isMember) {
     throw new Error('Not a member of this room')
   }
   const urls = useRelayStore.getState().relays.filter(r => r.enabled).map(r => r.url)
   const pool = getRelayPool(urls)
   const now = Math.floor(Date.now() / 1000)
   const evtIdSeed = Math.floor(Math.random() * 1e9)
-  const processOne = async (d: any): Promise<any> => {
+  const processOne = async (d: any, fileIndex: number): Promise<any> => {
     if (typeof d === 'string' && d.startsWith('data:')) {
       if (opts?.p) {
         const enc = await encryptDataURL(d, opts.p)
         const key = `${roomId}:${evtIdSeed}:${Math.random().toString(36).slice(2)}`
-        const url = await putObject(key, enc.mime, enc.ct)
+        const url = await putObject(key, enc.mime, enc.ct, {
+          onUploadProgress: (current, total) => {
+            try { opts?.onProgress?.({ stage: 'uploading', uploaded, totalUploads, fileProgress: { current, total, fileIndex } }) } catch {}
+          }
+        })
         return { url, enc: { iv: Array.from(atob(enc.iv).split('').map(c=>c.charCodeAt(0))), keySalt: Array.from(atob(enc.keySalt).split('').map(c=>c.charCodeAt(0))), mime: enc.mime, sha256: enc.sha256 } }
       } else {
         const { mime, bytes } = dataURLToBytes(d)
         const key = `${roomId}:${evtIdSeed}:${Math.random().toString(36).slice(2)}`
         const b64 = bytesToBase64(bytes)
-        const url = await putObject(key, mime, b64)
+        const url = await putObject(key, mime, b64, {
+          onUploadProgress: (current, total) => {
+            try { opts?.onProgress?.({ stage: 'uploading', uploaded, totalUploads, fileProgress: { current, total, fileIndex } }) } catch {}
+          }
+        })
         return url
       }
     }
     return d
   }
-  const outA = opts?.a ? await processOne(opts.a) : undefined
-  const outAs = opts?.as ? await Promise.all(opts.as.map(processOne)) : undefined
+  // Progress tracking
+  const totalUploads = (
+    (typeof opts?.a === 'string' && opts.a.startsWith('data:') ? 1 : 0) +
+    (Array.isArray(opts?.as) ? opts.as.filter(a => typeof a === 'string' && a.startsWith('data:')).length : 0)
+  )
+  let uploaded = 0
+  const notify = (stage: 'uploading' | 'publishing' | 'done') => {
+    try { opts?.onProgress?.({ stage, uploaded, totalUploads }) } catch {}
+  }
+  let outA: any = undefined
+  if (opts?.a) {
+    if (typeof opts.a === 'string' && opts.a.startsWith('data:')) notify('uploading')
+    outA = await processOne(opts.a, 0)
+    if (typeof opts.a === 'string' && opts.a.startsWith('data:')) { uploaded += 1; notify('uploading') }
+  }
+  let outAs: any[] | undefined = undefined
+  if (Array.isArray(opts?.as)) {
+    outAs = []
+    let fileIdx = (opts.a && typeof opts.a === 'string' && opts.a.startsWith('data:')) ? 1 : 0
+    for (const a of opts.as) {
+      if (typeof a === 'string' && a.startsWith('data:')) notify('uploading')
+      const r = await processOne(a, fileIdx)
+      outAs.push(r)
+      if (typeof a === 'string' && a.startsWith('data:')) { uploaded += 1; notify('uploading') }
+      fileIdx++
+    }
+  }
   const body = JSON.stringify({ t: text, a: outA, as: outAs, p: opts?.p })
   const template: EventTemplate = { kind: 42, created_at: now, content: body, tags: [["e", roomId]] }
   const evt = finalizeEvent(template, hexToBytes(sk))
   const pub = JSON.stringify(["EVENT", evt])
+  // Notify UI that uploads are complete and we're publishing the event
+  notify('publishing')
   log(`sendRoom room=${roomId.slice(0,8)}… text=${text ? (text.slice(0,24)+(text.length>24?'…':'')) : ''} a=${opts?.a?'y':'n'} as=${opts?.as?.length||0}`)
   for (const [url, ws] of pool.entries()) {
     if (ws.readyState === ws.OPEN) { ws.send(pub); log(`ROOM EVENT -> ${url} id=${evt.id.slice(0,8)}…`) }
@@ -1132,6 +1202,8 @@ export async function sendRoom(sk: string, roomId: string, text?: string, opts?:
       log(`ROOM EVENT queued -> ${url} id=${evt.id.slice(0,8)}…`)
     }
   }
+  // Publishing queued to all relays; mark as done
+  notify('done')
 }
 
 // Create a new channel and return its id. Owner is the creator.
