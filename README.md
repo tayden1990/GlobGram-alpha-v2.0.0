@@ -2,6 +2,8 @@
 
 [![Deploy to GitHub Pages](https://github.com/tayden1990/GlobGram-alpha-v2.0.0/actions/workflows/deploy.yml/badge.svg)](https://github.com/tayden1990/GlobGram-alpha-v2.0.0/actions/workflows/deploy.yml)
 [![Create Release](https://github.com/tayden1990/GlobGram-alpha-v2.0.0/actions/workflows/release.yml/badge.svg)](https://github.com/tayden1990/GlobGram-alpha-v2.0.0/actions/workflows/release.yml)
+[![Desktop Apps](https://github.com/tayden1990/GlobGram-alpha-v2.0.0/actions/workflows/desktop-nativefier.yml/badge.svg)](https://github.com/tayden1990/GlobGram-alpha-v2.0.0/actions/workflows/desktop-nativefier.yml)
+[![Android TWA](https://github.com/tayden1990/GlobGram-alpha-v2.0.0/actions/workflows/android-twa.yml/badge.svg)](https://github.com/tayden1990/GlobGram-alpha-v2.0.0/actions/workflows/android-twa.yml)
 
 GlobGram is a lightweight, mobile‑first chat app powered by the Nostr protocol. It’s a privacy‑first, PWA‑enabled messenger with end‑to‑end encrypted DMs, Rooms, media sharing, offline support, and a focus on user data ownership.
 
@@ -256,6 +258,37 @@ Tag the repo with a semver tag (e.g., `v0.1.0`) to trigger the Release workflow 
 npm version patch
 git push --follow-tags
 ```
+
+### Automated desktop app builds (Windows/macOS/Linux)
+
+This repo includes a workflow that packages the deployed PWA as native desktop apps using Nativefier.
+
+- Workflow: `.github/workflows/desktop-nativefier.yml`
+- Trigger: pushing a semver tag (e.g., `v0.2.0`) or manual dispatch
+- Output: zip archives for each OS attached to the workflow run and to the GitHub Release (when tag)
+
+Notes:
+- The app URL is inferred as `https://<user>.github.io/<repo>/`. If you use a custom domain, update the workflow’s APP_URL logic.
+- Nativefier wraps the web app; for offline/deep system integration, consider Electron proper.
+
+### Automated Android APK (Trusted Web Activity)
+
+This repo includes an experimental pipeline to build an Android APK via Bubblewrap (TWA) that launches your PWA in Chrome.
+
+- Workflow: `.github/workflows/android-twa.yml`
+- Trigger: pushing a semver tag (e.g., `v0.2.0`) or manual dispatch
+- Output: unsigned APK (and signed if you provide keystore secrets) as artifacts and attached to the Release
+
+Setup keystore (optional for local install; required for Play Store): add Secrets
+- ANDROID_KEYSTORE_BASE64: base64 of your keystore.jks
+- ANDROID_KEY_ALIAS: key alias
+- ANDROID_KEY_PASSWORD: key password
+- ANDROID_STORE_PASSWORD: store password
+
+Notes:
+- The TWA manifest is initialized from `public/manifest.webmanifest`; icons, name, and colors come from there.
+- The workflow sets start_url to your GitHub Pages URL; adjust if using a custom domain.
+- To publish to Play Store, you’ll likely want to fork the generated project locally (or in a dedicated repo) and iterate on signing, versioning, and Play requirements (package name, Digital Asset Links, etc.).
 
 ## Troubleshooting
 

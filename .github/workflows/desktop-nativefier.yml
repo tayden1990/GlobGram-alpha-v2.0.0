@@ -1,0 +1,72 @@
+name: Build Desktop Apps (Nativefier)
+
+on:
+  push:
+    tags:
+      - 'v2.0.0'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build desktop apps
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Nativefier
+        run: npm i -g nativefier
+
+      - name: Compute App URL
+        id: app
+        run: |
+          REPO_URL="https://$GITHUB_SERVER_URL/${GITHUB_REPOSITORY}"
+          # GitHub Pages URL for this repo (no custom domain assumed)
+          APP_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/"
+          echo "APP_URL=$APP_URL" >> $GITHUB_ENV
+          echo "app_url=$APP_URL" >> $GITHUB_OUTPUT
+
+      - name: Build with Nativefier
+        run: |
+          mkdir -p dist-desktop
+          ICON_PATH="public/branding/logo.png"
+          # Windows filename issues with ':' etc are handled by nativefier
+          nativefier "${{ env.APP_URL }}" \
+            --name "GlobGram" \
+            --icon "$ICON_PATH" \
+            --internal-urls ".*" \
+            --disable-dev-tools \
+            --single-instance \
+            --out dist-desktop
+
+      - name: Archive artifacts (zip)
+        shell: bash
+        run: |
+          cd dist-desktop
+          # Zip each app folder produced by Nativefier
+          for d in */ ; do
+            zip -r "${d%/}.zip" "$d"
+          done
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ runner.os }}
+          path: dist-desktop/*.zip
+
+      - name: Attach to GitHub Release (if tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist-desktop/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

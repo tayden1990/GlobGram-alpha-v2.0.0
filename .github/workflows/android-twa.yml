@@ -1,0 +1,70 @@
+name: Build Android APK (TWA)
+
+on:
+  push:
+    tags:
+      - 'v2.0.0'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Generate TWA project
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm i -g @bubblewrap/cli
+      - name: Compute App URL
+        run: |
+          echo "APP_URL=https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/" >> $GITHUB_ENV
+      - name: Init Bubblewrap project
+        run: |
+          mkdir twa && cd twa
+          bubblewrap init --manifest=https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/public/manifest.webmanifest --directory . --skipPwaValidation
+          # Update the start URL to GitHub Pages URL
+          sed -i "s#\"start_url\": \".\"#\"start_url\": \"${APP_URL}\"#" twa-manifest.json || true
+          bubblewrap build
+
+      - name: Sign APK (if keystore provided)
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > keystore.jks
+          apksigner sign --ks keystore.jks --ks-key-alias "$KEY_ALIAS" --ks-pass pass:"$STORE_PASSWORD" --key-pass pass:"$KEY_PASSWORD" twa/build/app-release-unsigned.apk
+          mv twa/build/app-release-unsigned.apk globgram-twa-release.apk
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: |
+            globgram-twa-release.apk
+            twa/build/app-release.apk
+
+      - name: Attach to GitHub Release (if tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            globgram-twa-release.apk
+            twa/build/app-release.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
