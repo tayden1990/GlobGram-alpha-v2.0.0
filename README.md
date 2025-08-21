@@ -16,7 +16,7 @@ This README explains the architecture, configuration, development workflow, depl
 Nostr (Notes and Other Stuff Transmitted by Relays) is an open, decentralized protocol for sharing events. Clients publish events to Relays (simple WebSocket servers). Anyone can run a Relay; anyone can use any Client.
 
 - Identities are public keys (npub). You own your identity because you own the keypair.
-- Messages are events signed with your secret key (nsec). Relays verify the signature before accepting.
+- Messages are events signed with your secret key (nsec). Relays verify signatures before accepting.
 - DMs use encrypted content (e.g., NIP‑04) so only sender and recipient can read them. Relays can see envelope metadata (time, size, type) but not plaintext.
 - You’re not locked into a server or app. Your npub works across clients; your data can be synced via multiple relays.
 
@@ -131,7 +131,6 @@ Requirements
 - Node.js 18+
 
 Install & run
-
 ```powershell
 # from repo root
 npm ci
@@ -141,7 +140,6 @@ npm run dev
 Open http://localhost:5173
 
 Build
-
 ```powershell
 npm run build
 ```
@@ -149,7 +147,6 @@ npm run build
 The optimized build is in `dist/`.
 
 Preview (optional)
-
 ```powershell
 npm run preview
 ```
@@ -225,10 +222,10 @@ Runtime i18n is provided by `src/i18n/index.tsx` with dynamic JSON loading per l
 Add a new language
 1. Duplicate `src/i18n/locales/en.json` to `src/i18n/locales/<code>.json` and translate
 2. In `src/i18n/index.tsx`, add the locale to:
-	- `loaders` (dynamic import)
-	- `localeNames` (display name)
-	- `localeFlags` (optional emoji flag shown next to the name)
-	- Add to RTL set if needed: `new Set(['fa', 'ar', ...])`
+	 - `loaders` (dynamic import)
+	 - `localeNames` (display name)
+	 - `localeFlags` (optional emoji flag shown next to the name)
+	 - Add to RTL set if needed: `new Set(['fa', 'ar', ...])`
 3. Build and run; the language should appear in onboarding and settings
 
 ## Deployment (GitHub Pages)
@@ -309,7 +306,7 @@ Notes:
 
 ## Contributing
 
-We welcome issues and pull requests! Please read `CONTRIBUTING.md` for how to set up your environment, coding conventions, and PR checklist. By participating, you agree to our `CODE_OF_CONDUCT.md`.
+We welcome issues and pull requests. Please read `CONTRIBUTING.md` for environment setup, coding conventions, and PR checklist. By participating, you agree to `CODE_OF_CONDUCT.md`.
 
 Useful entry points
 - `src/ui/App.tsx` for UI shell and flows (onboarding, invite, settings, PWA updates).
@@ -334,16 +331,16 @@ Useful entry points
 
 MIT — see `LICENSE`.
 
-## Production media (NIP-96/NIP-98) setup
+## Production media (NIP‑96/NIP‑98) setup
 
-When the app is hosted on GitHub Pages (or any non-localhost origin), it cannot reach `http://localhost:*`. To make large media work in production, point the app to a public upload server and enable CORS.
+When the app is hosted on GitHub Pages (or any non‑localhost origin), it cannot reach `http://localhost:*`. To make large media work in production, point the app to a public upload server and enable CORS.
 
 1) Choose an upload backend
 - Dev/simple (JSON): the included server at `server/upload-server.mjs` exposes:
 	- POST /upload → { url }
 	- GET  /o/:key → { mime, data }
 	Deploy it behind HTTPS with CORS for your Pages origin.
-- NIP-96: a Nostr media server supporting NIP-96 uploads and optional NIP-98 auth.
+- NIP‑96: a Nostr media server supporting NIP‑96 uploads and optional NIP‑98 auth.
 
 2) Enable CORS on your server
 - Allow Origin: your GitHub Pages origin, e.g. `https://<user>.github.io`
@@ -352,12 +349,12 @@ When the app is hosted on GitHub Pages (or any non-localhost origin), it cannot 
 - Return 200 to preflight OPTIONS
 
 Notes:
-- The app uses the standard `Authorization` header for NIP-98 and does not send any non-standard `X-Authorization` header. Make sure your server includes `Authorization` in `Access-Control-Allow-Headers`.
+- The app uses the standard `Authorization` header for NIP‑98 and does not send any non‑standard `X-Authorization` header. Make sure your server includes `Authorization` in `Access-Control-Allow-Headers`.
 - Multipart/form-data uploads trigger a preflight due to `Content-Type`. Ensure `Access-Control-Allow-Headers` includes `Content-Type`.
 
 3) Configure production env via GitHub Secrets
 Add these repository Secrets, then redeploy:
-- VITE_UPLOAD_BASE_URL → e.g. `https://media.example.com/upload` (NIP-96) or `https://media.example.com` (simple)
+- VITE_UPLOAD_BASE_URL → e.g. `https://media.example.com/upload` (NIP‑96) or `https://media.example.com` (simple)
 - VITE_UPLOAD_MODE → `nip96` or `simple`
 - VITE_UPLOAD_AUTH_MODE → `none` | `token` | `nip98`
 - VITE_UPLOAD_AUTH_TOKEN → only if using `token`
@@ -369,8 +366,15 @@ The workflow `.github/workflows/deploy.yml` forwards these to the build step.
 - On Pages, attach a large image. The UI should no longer show “Unavailable on this host (localhost upload)” and receivers should be able to Load/preview successfully.
 - If a fetch fails, the app shows verbose diagnostics with the attempted URLs and auth mode to help you pinpoint CORS or path issues.
 
-Note: In production, the app intentionally blocks attempts to fetch `localhost` URLs from a non-localhost origin to avoid ERR_CONNECTION_REFUSED loops.
+Note: In production, the app intentionally blocks attempts to fetch `localhost` URLs from a non‑localhost origin to avoid ERR_CONNECTION_REFUSED loops.
 
 ## Security
 
 Please report vulnerabilities privately by opening a “privately disclosed security vulnerability” at the repository’s Security tab (GitHub → Security → Advisories → New draft advisory). See `SECURITY.md` for details.
+
+## Quick release
+
+```bash
+git tag v2.0.1
+git push origin v2.0.1
+```

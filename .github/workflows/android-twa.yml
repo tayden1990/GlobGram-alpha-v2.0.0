@@ -11,6 +11,11 @@ jobs:
   build:
     name: Build Android APK
     runs-on: ubuntu-latest
+    env:
+      KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,12 +46,7 @@ jobs:
           bubblewrap build
 
       - name: Sign APK (if keystore provided)
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
-        env:
-          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+        if: ${{ env.KEYSTORE_B64 != '' }}
         run: |
           echo "$KEYSTORE_B64" | base64 -d > keystore.jks
           apksigner sign --ks keystore.jks --ks-key-alias "$KEY_ALIAS" --ks-pass pass:"$STORE_PASSWORD" --key-pass pass:"$KEY_PASSWORD" twa/build/app-release-unsigned.apk
