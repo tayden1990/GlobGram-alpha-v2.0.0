@@ -1,8 +1,13 @@
 # GlobGram (Alpha)
 
+[![Deploy to GitHub Pages](https://github.com/tayden1990/GlobGram-alpha-v2.0.0/actions/workflows/deploy.yml/badge.svg)](https://github.com/tayden1990/GlobGram-alpha-v2.0.0/actions/workflows/deploy.yml)
+[![Create Release](https://github.com/tayden1990/GlobGram-alpha-v2.0.0/actions/workflows/release.yml/badge.svg)](https://github.com/tayden1990/GlobGram-alpha-v2.0.0/actions/workflows/release.yml)
+
 GlobGram is a lightweight, mobile‑first chat app powered by the Nostr protocol. It’s a privacy‑first, PWA‑enabled messenger with end‑to‑end encrypted DMs, Rooms, media sharing, offline support, and a focus on user data ownership.
 
 Built with React 18, TypeScript, Vite, and nostr-tools.
+
+This README explains the architecture, configuration, development workflow, deployment, and how to contribute.
 
 ## What is Nostr?
 
@@ -36,11 +41,54 @@ Useful references: NIPs (Nostr Improvement Proposals) such as NIP‑01 (base pro
 	- Password‑gated log viewer (4522815), unlimited IndexedDB persistence, export/clear
 - Accessibility & Mobile‑first UI
 
+## Architecture overview
+
+High level
+- Clients publish/subscribe Nostr events over WebSocket relays (see `src/nostr`).
+- DMs are sent as encrypted events; Rooms are group channels based on kinds 40/41/42.
+- Media can be sent inline (small) or uploaded to a server (large) with signed pointers.
+- State is held with small, focused Zustand stores and React component state.
+
+Messaging engine (Nostr)
+- `src/nostr/engine.ts`: send/receive messages, deliver receipts, apply membership updates, handle room subscriptions; upload pipeline hooks for media (NIP‑96, optional NIP‑98 auth).
+- `src/nostr/pool.ts`: relay pool creation and WebSocket lifecycle.
+- `src/nostr/utils.ts`: helpers (hex/bytes, validation, etc.).
+- Event kinds: DMs, Receipts (custom 10001), Rooms (40/41/42); PoW (NIP‑13) optional.
+
+Media pipeline
+- Small attachments embed as data URLs or memory URLs (`mem://`) for local echo.
+- Large media: prepare → optionally encrypt → upload → send pointer; progress UI shows Preparing/Uploading/Publishing.
+- Upload backends: Simple (server/upload-server.mjs) or NIP‑96; optional NIP‑98 auth.
+
+UI
+- `src/ui/App.tsx`: root shell, onboarding, settings, ads bar, PWA install, SW updates, invite flow, build info.
+- `src/ui/ChatWindow.tsx` and `src/ui/RoomWindow.tsx`: message UIs with media controls, auto‑load media toggle, progress states.
+- `src/ui/Toast.tsx`: lightweight toast system.
+- Virtualized lists via `@tanstack/react-virtual`.
+
+State
+- `src/state/*`: small zustand stores for chats, rooms, relays, settings. Monotonic room membership application by created_at to avoid reordering.
+
+Internationalization (i18n)
+- `src/i18n/index.tsx`: runtime loader for `public/locales/*.json` with cache‑busting and RTL direction control. Missing keys fall back to English.
+- User’s locale persists in localStorage; can be overridden by `?lang=xx` in invite links.
+
+PWA / Service Worker
+- `public/sw.js`: offline fallback, simple cache, version broadcast to UI. Bump `APP_VERSION` on notable releases.
+- `public/manifest.webmanifest`: icons, theme, and PWA metadata.
+
+Build metadata
+- `src/version.ts` displays SHA, ref, date, mode, and base path in Settings so you can confirm which build is running.
+
 ### Internationalization
 - Multi‑language UI with auto‑detect, persistence, and runtime switching (Settings or first onboarding step)
 - Supported languages: 🇺🇸 English (`en`), 🇮🇷 فارسی (`fa`, RTL), 🇪🇸 Español (`es`), 🇫🇷 Français (`fr`), 🇩🇪 Deutsch (`de`), 🇵🇹 Português (`pt`), 🇷🇺 Русский (`ru`), 🇸🇦 العربية (`ar`, RTL)
 - RTL locales automatically set `dir="rtl"` and add a `.rtl` class on `<html>`
 - Dev‑time warning for missing translation keys in the console
+
+Runtime locale files
+- The app loads messages from `public/locales/<code>.json`. Ensure new keys are added to all languages.
+- Cache busting is built in. If you still see stale strings after deploy, click “Update now” in the app or hard‑refresh.
 
 ### Onboarding
 - Step 0: App + Nostr intro, choose language
@@ -106,6 +154,21 @@ npm run preview
 
 Tip: If you see an update banner in the app, you can click “Update now” or wait for the short auto‑apply countdown.
 
+## Configuration
+
+Environment variables (Vite)
+- `REPO_NAME` (CI): sets the Vite `base` path so assets resolve under `/<repo>/` on GitHub Pages.
+- `VITE_REPO_NAME`, `VITE_BUILD_SHA`, `VITE_BUILD_REF`, `VITE_BUILD_REF_NAME`, `VITE_BUILD_URL`, `VITE_BUILD_DATE` (CI): injected for build info UI.
+- Media upload (production):
+	- `VITE_UPLOAD_BASE_URL`: e.g. `https://media.example.com/upload` (NIP‑96) or `https://media.example.com` (simple server)
+	- `VITE_UPLOAD_MODE`: `nip96` or `simple`
+	- `VITE_UPLOAD_AUTH_MODE`: `none` | `token` | `nip98`
+	- `VITE_UPLOAD_AUTH_TOKEN`: when `token` is used
+	- `VITE_UPLOAD_PUBLIC_BASE_URL`: public base to help download URL inference
+
+Dev relay proxy
+- Vite dev server exposes `/_relay/*` → `https://relay1.matrus.org/*` to avoid CORS in local dev (see `vite.config.ts`).
+
 ## Using GlobGram
 
 1) Create or import a key
@@ -130,6 +193,23 @@ Tip: If you see an update banner in the app, you can click “Update now” or w
 - Click “Invite a friend” in the header
 - Share the text + link via your system share sheet (when available), or copy the invite text
 - Show the QR code to scan, or download it as a PNG
+
+## Project structure
+
+```
+src/
+	i18n/                Runtime loader + messages
+	nostr/               Engine, pool, media helpers, NIP helpers
+	services/            Upload/download utilities and MIME handling
+	state/               Zustand stores (chat, room, relay, settings)
+	ui/                  React components (App, ChatWindow, RoomWindow, lists, toasts)
+	version.ts           Build/version info exported to UI
+public/
+	locales/             Runtime translation JSONs
+	sw.js                Service worker with cache + version messaging
+	manifest.webmanifest PWA manifest
+server/                Minimal upload server for local dev/testing
+```
 
 ## Internationalization (i18n)
 
@@ -165,6 +245,9 @@ Publish
 2. Wait for the action to complete.
 3. Visit: `https://<your-username>.github.io/<this-repo-name>/`
 
+Build provenance
+- The Settings → Preferences screen shows the build’s commit, ref, date, mode, and Service Worker version.
+
 ## Release builds
 
 Tag the repo with a semver tag (e.g., `v0.1.0`) to trigger the Release workflow and upload a zip of `dist/`.
@@ -190,6 +273,16 @@ git push --follow-tags
 	- Web Share varies by platform; the app falls back to copying invite text to the clipboard
 - Missing translations
 	- In dev, missing keys log to the console; ensure the key exists in the locale JSON
+
+## Contributing
+
+We welcome issues and pull requests! Please read `CONTRIBUTING.md` for how to set up your environment, coding conventions, and PR checklist. By participating, you agree to our `CODE_OF_CONDUCT.md`.
+
+Useful entry points
+- `src/ui/App.tsx` for UI shell and flows (onboarding, invite, settings, PWA updates).
+- `src/nostr/engine.ts` for send/receive, room membership, and media stages.
+- `src/services/upload.ts` for upload/download backends and MIME handling.
+- `public/locales/*.json` to add or update translations.
 
 ## Roadmap (selected)
 
@@ -225,6 +318,10 @@ When the app is hosted on GitHub Pages (or any non-localhost origin), it cannot 
 - Headers: Authorization, Content-Type
 - Return 200 to preflight OPTIONS
 
+Notes:
+- The app uses the standard `Authorization` header for NIP-98 and does not send any non-standard `X-Authorization` header. Make sure your server includes `Authorization` in `Access-Control-Allow-Headers`.
+- Multipart/form-data uploads trigger a preflight due to `Content-Type`. Ensure `Access-Control-Allow-Headers` includes `Content-Type`.
+
 3) Configure production env via GitHub Secrets
 Add these repository Secrets, then redeploy:
 - VITE_UPLOAD_BASE_URL → e.g. `https://media.example.com/upload` (NIP-96) or `https://media.example.com` (simple)
@@ -240,3 +337,7 @@ The workflow `.github/workflows/deploy.yml` forwards these to the build step.
 - If a fetch fails, the app shows verbose diagnostics with the attempted URLs and auth mode to help you pinpoint CORS or path issues.
 
 Note: In production, the app intentionally blocks attempts to fetch `localhost` URLs from a non-localhost origin to avoid ERR_CONNECTION_REFUSED loops.
+
+## Security
+
+Please report vulnerabilities privately by opening a “privately disclosed security vulnerability” at the repository’s Security tab (GitHub → Security → Advisories → New draft advisory). See `SECURITY.md` for details.

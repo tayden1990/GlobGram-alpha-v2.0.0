@@ -229,8 +229,7 @@ export async function putObject(key: string, mime: string, base64Data: string, o
                 const auth = await buildPriorityAuth(chal)
                 if (!auth) return
                 const h = new Headers({ 'Authorization': auth, 'Accept': 'application/json' })
-                // Also set X-Authorization for quirky proxies/servers
-                h.set('X-Authorization', auth)
+                // Avoid non-standard headers that break CORS
                 // Debug decode tags
                 try {
                   const raw = auth.replace(/^Nostr\s+/, '')
@@ -290,7 +289,6 @@ export async function putObject(key: string, mime: string, base64Data: string, o
                   if (signed) {
                     const raw = `Nostr ${JSON.stringify(signed)}`
                     const h2 = new Headers({ 'Authorization': raw, 'Accept': 'application/json' })
-                    h2.set('X-Authorization', raw)
                     let r2: Response
                     if (opts?.onUploadProgress) {
                       r2 = await uploadWithProgress(makeForm(), uploadUrl, h2)
@@ -313,7 +311,7 @@ export async function putObject(key: string, mime: string, base64Data: string, o
             }
           }
 
-          const attempts: Array<{ init: RequestInit; label: string }> = []
+          const attempts: Array<{ init: RequestInit; label: string; usedManual?: boolean }> = []
           // Predeclare variables so we can reuse in retry logic
           let fileHashHex: string | undefined
           let fileHashB64: string | null = null
@@ -355,7 +353,7 @@ export async function putObject(key: string, mime: string, base64Data: string, o
               bodyB64 = btoa(s)
               bodyB64url = bodyB64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
             } catch {}
-            const addAttempt = async (label: string, payload?: string, withChallenge = false) => {
+        const addAttempt = async (label: string, payload?: string, withChallenge = false) => {
               const extraTags: Array<[string, string]> = []
               if (withChallenge && challenge) extraTags.push(['challenge', challenge])
               const auth = await makeNip98HeaderWithTags(canonicalApiUrl, 'POST', payload, extraTags)
@@ -366,20 +364,20 @@ export async function putObject(key: string, mime: string, base64Data: string, o
                 const useManual = payload === bodyHashHex || payload === bodyHashB64
                 if (useManual) {
                   if (multipartCT) h.set('Content-Type', multipartCT)
-                  h.set('Accept', 'application/json')
-                  h.set('X-Manual-Multipart', '1')
+          h.set('Accept', 'application/json')
                   const mb = multipartBytes!
                   const ab = new ArrayBuffer(mb.byteLength)
                   new Uint8Array(ab).set(mb)
-                  attempts.push({ init: { method: 'POST', body: new Blob([ab], { type: multipartCT || '' }), headers: h }, label })
+          attempts.push({ init: { method: 'POST', body: new Blob([ab], { type: multipartCT || '' }), headers: h }, label, usedManual: true })
                 } else {
                   h.set('Accept', 'application/json')
-                  attempts.push({ init: { method: 'POST', body: makeForm(), headers: h }, label })
+          attempts.push({ init: { method: 'POST', body: makeForm(), headers: h }, label, usedManual: false })
                 }
               }
             }
-            // Minimal set unless verbose
+            // Always try no-payload and a strict body-hash variant with server challenge
             await addAttempt('nip-98-challenge-no-payload', undefined, true)
+            if (bodyHashHex) await addAttempt('nip-98-challenge-with-body-hash', bodyHashHex, true)
             if (verbose) {
               // Body-hash payload (exact request bytes)
               await addAttempt('nip-98-challenge-with-body-hash', bodyHashHex, true)
@@ -403,7 +401,7 @@ export async function putObject(key: string, mime: string, base64Data: string, o
             h.set('Accept', 'application/json')
             attempts.push({ init: { method: 'POST', body: makeForm(), headers: h }, label: 'token' })
           }
-          for (const { init, label } of attempts) {
+          for (const { init, label, usedManual } of attempts) {
             try {
               let r: Response
               if (opts?.onUploadProgress && init.method === 'POST' && init.body instanceof FormData) {
@@ -419,8 +417,7 @@ export async function putObject(key: string, mime: string, base64Data: string, o
                 const newChallenge = parsed?.scheme?.toLowerCase() === 'nostr' ? parsed.params['challenge'] : undefined
                 if (newChallenge && newChallenge !== challenge) {
                   const h = new Headers(init.headers || {})
-          // Detect if this attempt used manual body via our marker header
-          const usedManual = h.get('X-Manual-Multipart') === '1'
+          // Detect if this attempt used manual body via local flag
           const payload = usedManual ? bodyHashHex : fileHashHex
           const payloadB64 = usedManual ? bodyHashB64 : fileHashB64
                   const extraTags: Array<[string, string]> = [['challenge', newChallenge]]
@@ -474,7 +471,7 @@ export async function putObject(key: string, mime: string, base64Data: string, o
                 pathOnly,
                 pathOnly + '/',
               ]))
-              const secondAttempts: Array<{ init: RequestInit; label: string }> = []
+              const secondAttempts: Array<{ init: RequestInit; label: string; usedManual?: boolean }> = []
               const toB64Url = (b64: string) => b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
               const buildAuth = async (u: string, payload?: string, withChallenge?: boolean, encUrl?: boolean, challengeInContent?: boolean, methodCase: MethodCase = 'both') => {
                 const extraTags: Array<[string, string]> = []
@@ -487,8 +484,6 @@ export async function putObject(key: string, mime: string, base64Data: string, o
                 if (!auth) return
                 const h = new Headers()
                 h.set('Authorization', auth)
-                // Some servers erroneously look at X-Authorization; set both
-                h.set('X-Authorization', auth)
                 h.set('Accept', 'application/json')
                 // Debug decode of tags
                 try {
@@ -508,9 +503,9 @@ export async function putObject(key: string, mime: string, base64Data: string, o
                   const mb = multipartBytes!
                   const ab = new ArrayBuffer(mb.byteLength)
                   new Uint8Array(ab).set(mb)
-                  secondAttempts.push({ init: { method: 'POST', body: new Blob([ab], { type: multipartCT || '' }), headers: h }, label })
+                  secondAttempts.push({ init: { method: 'POST', body: new Blob([ab], { type: multipartCT || '' }), headers: h }, label, usedManual: true })
                 } else {
-                  secondAttempts.push({ init: { method: 'POST', body: makeForm(), headers: h }, label })
+                  secondAttempts.push({ init: { method: 'POST', body: makeForm(), headers: h }, label, usedManual: false })
                 }
               }
               // Limit second wave to a focused matrix: {uVariants} x {std vs url b64} x {challenge-in-content true/false} for key payloads
