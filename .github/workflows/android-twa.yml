@@ -65,21 +65,14 @@ jobs:
           set -euxo pipefail
           mkdir -p twa
           cd twa
-          # Ensure jq exists
-          if ! command -v jq >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y jq
-          fi
           # Ensure expect exists for automating Bubblewrap prompts
           if ! command -v expect >/dev/null 2>&1; then
             sudo apt-get update
             sudo apt-get install -y expect
           fi
-          # Fetch manifest and set absolute start_url/scope to avoid interactive domain prompts
+          # Use the remote manifest URL directly (Bubblewrap expects a URL)
           MANIFEST_URL="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/public/manifest.webmanifest"
-          curl -sSL "$MANIFEST_URL" -o manifest.webmanifest
-          jq --arg url "$APP_URL" '.start_url = $url | .scope = $url' manifest.webmanifest > manifest.fixed.webmanifest
-          # Compute domain and path from APP_URL for prompts fallback
+          # Compute domain and path from APP_URL for prompts
           DOMAIN=$(echo "$APP_URL" | sed -E 's#https?://([^/]+)/?.*#\1#')
           PATHPART=$(echo "$APP_URL" | sed -E 's#https?://[^/]+(/.*)#\1#'); PATHPART=${PATHPART:-/}
           echo "Domain: $DOMAIN, Path: $PATHPART"
@@ -89,7 +82,7 @@ jobs:
           set timeout -1
           set domain $env(DOMAIN)
           set pathpart $env(PATHPART)
-          spawn bubblewrap init --manifest=manifest.fixed.webmanifest --directory . --skipPwaValidation
+          spawn bubblewrap init --manifest=$env(MANIFEST_URL) --directory . --skipPwaValidation
           expect {
             -re {Domain.*:} { send -- "$domain\r"; exp_continue }
             -re {URL path.*:} { send -- "$pathpart\r"; exp_continue }
@@ -100,7 +93,7 @@ jobs:
           }
           EOS
           chmod +x run_init.expect
-          DOMAIN="$DOMAIN" PATHPART="$PATHPART" ./run_init.expect
+          DOMAIN="$DOMAIN" PATHPART="$PATHPART" MANIFEST_URL="$MANIFEST_URL" ./run_init.expect
           bubblewrap build
 
       - name: Sign APK (if keystore provided)
