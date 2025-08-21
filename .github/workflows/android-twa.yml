@@ -65,10 +65,42 @@ jobs:
           set -euxo pipefail
           mkdir -p twa
           cd twa
-          # Accept defaults; config.json avoids JDK prompt
-          yes "" | bubblewrap init --manifest=https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/public/manifest.webmanifest --directory . --skipPwaValidation
-          # Update the start URL
-          sed -i "s#\"start_url\": \".\"#\"start_url\": \"${APP_URL}\"#" twa-manifest.json || true
+          # Ensure jq exists
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y jq
+          fi
+          # Ensure expect exists for automating Bubblewrap prompts
+          if ! command -v expect >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y expect
+          fi
+          # Fetch manifest and set absolute start_url/scope to avoid interactive domain prompts
+          MANIFEST_URL="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/public/manifest.webmanifest"
+          curl -sSL "$MANIFEST_URL" -o manifest.webmanifest
+          jq --arg url "$APP_URL" '.start_url = $url | .scope = $url' manifest.webmanifest > manifest.fixed.webmanifest
+          # Compute domain and path from APP_URL for prompts fallback
+          DOMAIN=$(echo "$APP_URL" | sed -E 's#https?://([^/]+)/?.*#\1#')
+          PATHPART=$(echo "$APP_URL" | sed -E 's#https?://[^/]+(/.*)#\1#'); PATHPART=${PATHPART:-/}
+          echo "Domain: $DOMAIN, Path: $PATHPART"
+          # Use expect to answer any remaining prompts non-interactively
+          cat > run_init.expect <<'EOS'
+          #!/usr/bin/expect -f
+          set timeout -1
+          set domain $env(DOMAIN)
+          set pathpart $env(PATHPART)
+          spawn bubblewrap init --manifest=manifest.fixed.webmanifest --directory . --skipPwaValidation
+          expect {
+            -re {Domain.*:} { send -- "$domain\r"; exp_continue }
+            -re {URL path.*:} { send -- "$pathpart\r"; exp_continue }
+            -re {\(Y/n\)} { send -- "\r"; exp_continue }
+            -re {\(y/N\)} { send -- "\r"; exp_continue }
+            -re {: $} { send -- "\r"; exp_continue }
+            eof
+          }
+          EOS
+          chmod +x run_init.expect
+          DOMAIN="$DOMAIN" PATHPART="$PATHPART" ./run_init.expect
           bubblewrap build
 
       - name: Sign APK (if keystore provided)
