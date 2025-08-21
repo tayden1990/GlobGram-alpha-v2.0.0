@@ -19,6 +19,7 @@ import { createRoom, refreshSubscriptions, sendDM } from '../nostr/engine'
 import { useSettingsStore } from './settingsStore'
 import { getLogs, clearLogs, onLog, log, setLogMinLevel, getPersistedLogsText, clearPersistedLogs } from './logger'
 import { useI18n } from '../i18n'
+import { BUILD_INFO } from '../version'
 // Lazy-load QRCode only when needed to reduce initial bundle size
 
 const ChatWindowLazy = lazy(() => import('./ChatWindow').then(m => ({ default: m.ChatWindow })))
@@ -1369,6 +1370,7 @@ export default function App() {
                     ))}
                   </select>
                 </label>
+                <BuildInfoRow />
               </div>
             </details>
           </div>
@@ -1809,6 +1811,33 @@ export default function App() {
       )}
     </div>
     </ToastProvider>
+  )
+}
+
+function BuildInfoRow() {
+  // Show SW version if available via postMessage elsewhere in App
+  const [swVer, setSwVer] = useState<string | null>(null)
+  useEffect(() => {
+    let mounted = true
+    try {
+      navigator.serviceWorker?.getRegistration?.().then(reg => {
+        if (!mounted || !reg) return
+        // Request version from SW if active
+        reg.active?.postMessage?.({ type: 'GET_VERSION' })
+      }).catch(()=>{})
+    } catch {}
+    const onMsg = (e: MessageEvent) => {
+      if (e?.data?.type === 'VERSION') setSwVer(String(e.data.version || ''))
+    }
+    try { navigator.serviceWorker?.addEventListener?.('message', onMsg) } catch {}
+    return () => { mounted = false; try { navigator.serviceWorker?.removeEventListener?.('message', onMsg) } catch {} }
+  }, [])
+  return (
+    <div style={{ marginTop: 6, fontSize: 11, color: 'var(--muted)' }}>
+      <span>Build: {BUILD_INFO.shortSha} {BUILD_INFO.refName} {new Date(BUILD_INFO.date).toLocaleString()}</span>
+      <span> · Mode: {BUILD_INFO.mode} · Base: {BUILD_INFO.base}</span>
+      {swVer ? <span> · SW: {swVer}</span> : null}
+    </div>
   )
 }
 
