@@ -32,7 +32,8 @@ const SUPPORTED_LOCALES = ['en','fa','es','fr','de','pt','ru','ar'] as const
 type LocaleCode = typeof SUPPORTED_LOCALES[number]
 const basePath = (import.meta as any)?.env?.BASE_URL || '/'
 const fetchLocale = async (code: LocaleCode): Promise<{ default: Messages }> => {
-  const url = `${basePath}locales/${code}.json`
+  const devBuster = (import.meta as any)?.env?.DEV ? `?v=${Date.now()}` : ''
+  const url = `${basePath}locales/${code}.json${devBuster}`
   try {
     const r = await fetch(url)
     if (!r.ok) throw new Error(`Failed to load locale ${code}`)
