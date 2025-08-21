@@ -1,0 +1,29 @@
+# NostrApps listing for GlobGram
+# Copy this block into a PR to https://git.fiatjaf.com/nostrapps.com (apps.toml)
+# Replace placeholder values (npub, screenshots, thumb, url) as needed.
+
+[globgram]
+name = "GlobGram"
+categories = [ "direct-message", "group-chat" ]
+description = "Decentralized DMs over Nostr with PWA support"
+features = [
+  "Secure direct messages (NIP-04/NIP-17)",
+  "Relay selection and management",
+  "Media sharing with optional end-to-end encryption",
+  "Installable PWA: offline support and notifications",
+  "Multi-language UI",
+]
+# Your public key (npub) of the app/account maintainer
+npub = "npub1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+platforms = [ "web" ]
+# Main icon/thumb (square, 256–512). Host on a stable CDN or your domain.
+thumb = "https://raw.githubusercontent.com/tayden1990/GlobGram-alpha-v2.0.0/main/public/icons/icon-512.png"
+# Screenshots (optional, 1..n)
+gallery = [
+  "https://raw.githubusercontent.com/tayden1990/GlobGram-alpha-v2.0.0/main/.github/nostrapps/screen-1.png",
+  "https://raw.githubusercontent.com/tayden1990/GlobGram-alpha-v2.0.0/main/.github/nostrapps/screen-2.png",
+]
+# Homepage URL (production). If deploying to GitHub Pages, replace with that URL.
+url = "https://tayden1990.github.io/GlobGram-alpha-v2.0.0/"
+# Optional source repository
+source = "https://github.com/tayden1990/GlobGram-alpha-v2.0.0"
