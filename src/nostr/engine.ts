@@ -1,4 +1,4 @@
-import { getPublicKey, nip04, nip19, finalizeEvent, type Event, type EventTemplate } from 'nostr-tools'
+import { getPublicKey, nip04, nip19, finalizeEvent, validateEvent, verifyEvent, type Event, type EventTemplate } from 'nostr-tools'
 import { getRelayPool, resetRelayPool, trackListener } from './pool'
 import { hexToBytes, bytesToHex, bytesToBase64 } from './utils'
 import { encryptDataURL, type EncryptedMedia } from './media'
@@ -878,10 +878,19 @@ export async function sendDM(
     return { id: 'blocked', acked }
   }
   const body = JSON.stringify({ t: payload.t, a: outA, as: outAs, p: payload.p })
-  const ciphertext = await nip04.encrypt(sk, toHex, body)
+  // Use Uint8Array seckey consistently with our nostr-tools version
+  const ciphertext = await nip04.encrypt(hexToBytes(sk), toHex, body)
 
   const template: EventTemplate = { kind: 4, created_at: now, content: ciphertext, tags: [["p", toHex]] }
   let evt: any = finalizeEvent(template, hexToBytes(sk))
+  // Local validation to aid debugging when relays respond with "invalid-event"
+  try {
+    const isStructValid = validateEvent(evt)
+    const isSigValid = verifyEvent(evt)
+    if (!isStructValid || !isSigValid) {
+      log(`Local event validation failed: struct=${isStructValid} sig=${isSigValid} kind=${evt.kind} ts=${evt.created_at}`, 'warn')
+    }
+  } catch {}
   const pub = JSON.stringify(["EVENT", evt])
   // entering publish stage
   notify('publishing')
@@ -1104,7 +1113,10 @@ export async function sendTyping(sk: string, to: string) {
   const urls = useRelayStore.getState().relays.filter(r => r.enabled).map(r => r.url)
   const pool = getRelayPool(urls)
   const now = Math.floor(Date.now() / 1000)
-  const template: EventTemplate = { kind: 20000, created_at: now, content: '1', tags: [["p", to]] }
+  // Normalize recipient to hex to avoid relay rejections due to npub/nprofile inputs
+  const toHex = normalizeToHexPubkey(to)
+  if (!toHex) { try { log('sendTyping: invalid recipient pubkey', 'warn') } catch {}; return }
+  const template: EventTemplate = { kind: 20000, created_at: now, content: '1', tags: [["p", toHex]] }
   const evt = finalizeEvent(template, hexToBytes(sk))
   const pub = JSON.stringify(["EVENT", evt])
   for (const [url, ws] of pool.entries()) {
