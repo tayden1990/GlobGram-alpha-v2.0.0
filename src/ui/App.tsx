@@ -125,6 +125,17 @@ export default function App() {
   }, [logLevel])
   const [inviteOpen, setInviteOpen] = useState(false)
   const [inviteUrl, setInviteUrl] = useState<string>('')
+  const buildInviteLink = (npub: string, lang: string) => {
+    try {
+      const base = (import.meta as any).env?.BASE_URL || '/'
+      const u = new URL(base, window.location.origin)
+      u.searchParams.set('invite', npub)
+      u.searchParams.set('lang', lang)
+      return u.toString()
+    } catch {
+      return `${window.location.origin}?invite=${encodeURIComponent(npub)}&lang=${encodeURIComponent(lang)}`
+    }
+  }
   // Onboarding state
   const [onboardingOpen, setOnboardingOpen] = useState<boolean>(() => {
     try { return !localStorage.getItem('onboarding_done') } catch { return true }
@@ -1140,8 +1151,7 @@ export default function App() {
             const pk = useChatStore.getState().myPubkey
             if (!pk) return
             const npub = nip19.npubEncode(pk)
-            const base = (import.meta as any).env?.BASE_URL || '/'
-            const link = `${window.location.origin}${base}?invite=${encodeURIComponent(npub)}&lang=${encodeURIComponent(locale)}`
+            const link = buildInviteLink(npub, locale)
             setInviteUrl(link)
             
             // Quick share attempt first, then open modal as fallback
@@ -1381,9 +1391,8 @@ export default function App() {
           {logAuth !== 'granted' ? (
             <div>
               <h3 style={{ marginTop: 0 }}>{t('logs.unlockTitle')}</h3>
-              <p style={{ marginTop: 0 }}>{t('logs.unlockDesc')}</p>
               <input type="password" placeholder={t('common.password')} id="log-pass" />
-              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <div style={{ display: 'inline-flex', gap: 8, marginTop: 8 }}>
                 <button onClick={() => {
                   const inp = (document.getElementById('log-pass') as HTMLInputElement | null)
                   const ok = inp && inp.value === '4522815'
@@ -1391,7 +1400,9 @@ export default function App() {
                 }}>{t('common.unlock')}</button>
                 <button onClick={() => { setLogModalOpen(false); setLogAuth('idle') }}>{t('common.cancel')}</button>
               </div>
-              {logAuth === 'denied' && (<div style={{ color: 'var(--danger, #d32f2f)', marginTop: 8 }}>{t('logs.incorrectPassword')}</div>)}
+              {logAuth === 'denied' && (
+                <div style={{ color: 'var(--danger, #d32f2f)', marginTop: 8 }}>{t('logs.incorrectPassword')}</div>
+              )}
             </div>
           ) : (
             <div>
@@ -1480,10 +1491,10 @@ export default function App() {
       {inviteOpen && (
         <Modal onClose={() => setInviteOpen(false)}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <h3 style={{ margin: 0 }}>{t('modal.invite.title')}</h3>
+            <h3 id="invite-modal-title" style={{ margin: 0 }}>{t('modal.invite.title')}</h3>
             <button onClick={() => setInviteOpen(false)} aria-label={t('common.close')}>✖</button>
           </div>
-          <p style={{ marginTop: 0 }}>{t('modal.invite.desc')}</p>
+          <p id="invite-modal-desc" style={{ marginTop: 0 }}>{t('modal.invite.desc')}</p>
           <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <label style={{ fontSize: 12, color: 'var(--muted)' }}>{t('modal.invite.qrLabel')}</label>
@@ -1505,6 +1516,21 @@ export default function App() {
                     URL.revokeObjectURL(url)
                   } catch {}
                 }}>{t('modal.invite.downloadQR')}</button>
+                <button onClick={async () => {
+                  try {
+                    const canvas = inviteCanvasRef.current
+                    if (!canvas) return
+                    const blob: Blob | null = await new Promise(resolve => { try { canvas.toBlob(b => resolve(b), 'image/png') } catch { resolve(null) } })
+                    if (!blob) return
+                    // @ts-ignore ClipboardItem
+                    if ('ClipboardItem' in window && (navigator.clipboard as any)?.write) {
+                      // @ts-ignore
+                      const item = new (window as any).ClipboardItem({ 'image/png': blob })
+                      await (navigator.clipboard as any).write([item])
+                      alert(t('invite.copied'))
+                    }
+                  } catch {}
+                }}>{(() => { const l = t('modal.invite.copyQR') as string; return l && l !== 'modal.invite.copyQR' ? l : 'Copy QR' })()}</button>
               </div>
             </div>
             <div style={{ minWidth: 280, flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1530,7 +1556,7 @@ export default function App() {
                     }
                     await navigator.clipboard.writeText(text)
                     alert(t('invite.copied'))
-      } catch { try { await navigator.clipboard.writeText(text) } catch {}; alert(t('invite.copied')) }
+                 } catch { try { await navigator.clipboard.writeText(text) } catch {}; alert(t('invite.copied')) }
                 }}>{t('common.copyLink')}</button>
               </div>
               {/* Read-only full caption (message + link) */}
@@ -1545,6 +1571,40 @@ export default function App() {
                   onFocus={(e) => { try { (e.target as HTMLTextAreaElement).select() } catch {} }}
                   style={{ width: '100%', resize: 'vertical' }}
                 />
+              </div>
+              {/* Quick share targets */}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {(() => {
+                  const caption = formatInviteCaption(getInviteMessage(), inviteUrl)
+                  const encodedCaption = encodeURIComponent(caption)
+                  const encodedUrl = encodeURIComponent(inviteUrl)
+                  const subj = encodeURIComponent(String(t('invite.connectTitle') || 'Connect on GlobGram'))
+                  const smsBody = encodedCaption
+                  const links = {
+                    wa: `https://wa.me/?text=${encodedCaption}`,
+                    tg: `https://t.me/share/url?url=${encodedUrl}&text=${encodedCaption}`,
+                    mail: `mailto:?subject=${subj}&body=${encodedCaption}`,
+                    sms: `sms:?&body=${smsBody}`,
+                  }
+                  return (
+                    <>
+                      <a href={links.wa} target="_blank" rel="noopener noreferrer">
+                        <button type="button">{(() => { const l = t('modal.invite.shareWhatsApp') as string; return l && l !== 'modal.invite.shareWhatsApp' ? l : 'Share via WhatsApp' })()}</button>
+                      </a>
+                      <a href={links.tg} target="_blank" rel="noopener noreferrer">
+                        <button type="button">{(() => { const l = t('modal.invite.shareTelegram') as string; return l && l !== 'modal.invite.shareTelegram' ? l : 'Share via Telegram' })()}</button>
+                      </a>
+                      <a href={links.mail} target="_self">
+                        <button type="button">{(() => { const l = t('modal.invite.shareEmail') as string; return l && l !== 'modal.invite.shareEmail' ? l : 'Share via Email' })()}</button>
+                      </a>
+                      {isMobile && (
+                        <a href={links.sms} target="_self">
+                          <button type="button">{(() => { const l = t('modal.invite.shareSMS') as string; return l && l !== 'modal.invite.shareSMS' ? l : 'Share via SMS' })()}</button>
+                        </a>
+                      )}
+                    </>
+                  )
+                })()}
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button onClick={async () => {
