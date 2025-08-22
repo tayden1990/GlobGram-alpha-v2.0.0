@@ -11,11 +11,6 @@ export default defineConfig({
   server: {
     port: 5173,
     open: true,
-    cors: true,
-    headers: {
-      'Cross-Origin-Embedder-Policy': 'credentialless',
-      'Cross-Origin-Opener-Policy': 'same-origin'
-    },
     proxy: {
       // Dev-only proxy to avoid CORS when talking to relay1.matrus.org
       '/_relay': {
@@ -24,18 +19,6 @@ export default defineConfig({
         secure: true,
         // strip the '/_relay' prefix
         rewrite: (path) => path.replace(/^\/_relay/, '')
-      }
-    }
-  },
-  build: {
-    target: 'es2020',
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom'],
-          nostr: ['nostr-tools'],
-          ui: ['@tanstack/react-virtual', 'zustand']
-        }
       }
     }
   }
