@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GlobGram - تست سریع</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            margin: 20px;
+            direction: rtl;
+            text-align: right;
+            line-height: 1.6;
+        }
+        .container { max-width: 800px; margin: 0 auto; }
+        .status { 
+            padding: 15px; 
+            margin: 10px 0; 
+            border-radius: 8px; 
+            border-left: 4px solid;
+        }
+        .success { background: #d4edda; color: #155724; border-left-color: #28a745; }
+        .error { background: #f8d7da; color: #721c24; border-left-color: #dc3545; }
+        .info { background: #d1ecf1; color: #0c5460; border-left-color: #17a2b8; }
+        .warning { background: #fff3cd; color: #856404; border-left-color: #ffc107; }
+        
+        button {
+            background: #1976d2;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 8px;
+            font-size: 14px;
+        }
+        button:hover { background: #1565c0; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        
+        .grid { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+        .card { 
+            background: white; 
+            border: 1px solid #ddd; 
+            border-radius: 8px; 
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .card h3 { margin-top: 0; color: #333; }
+        
+        pre { 
+            background: #f8f9fa; 
+            padding: 15px; 
+            border-radius: 6px; 
+            overflow-x: auto;
+            font-size: 12px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            background: #007bff;
+            color: white;
+            border-radius: 4px;
+            font-size: 12px;
+            margin: 2px;
+        }
+        
+        .rtl-test {
+            background: #f0f8ff;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border: 2px dashed #4a90e2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌟 GlobGram - تست سریع و تشخیص مشکلات</h1>
+        
+        <div class="rtl-test">
+            <h4>🔍 تست RTL و محیط فارسی</h4>
+            <p>این متن باید از راست به چپ نمایش داده شود. عبارت‌های انگلیسی مثل <strong>GlobGram</strong> باید در جهت صحیح قرار گیرند.</p>
+            <p>اعداد: ۱۲۳۴۵۶۷۸۹۰ | تاریخ: ۱۴۰۳/۰۶/۰۱</p>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h3>🔐 بررسی کلیدهای Nostr</h3>
+                <div id="keyStatus"></div>
+                <button onclick="checkNostrKeys()">بررسی کلیدها</button>
+                <button onclick="generateKeys()">تولید کلید جدید</button>
+            </div>
+
+            <div class="card">
+                <h3>🌐 بررسی اتصال شبکه</h3>
+                <div id="networkStatus"></div>
+                <button onclick="testNetwork()">تست اتصال</button>
+                <button onclick="testRelays()">تست رله‌ها</button>
+            </div>
+
+            <div class="card">
+                <h3>📱 بررسی PWA</h3>
+                <div id="pwaStatus"></div>
+                <button onclick="checkPWA()">بررسی PWA</button>
+                <button onclick="testServiceWorker()">تست Service Worker</button>
+            </div>
+
+            <div class="card">
+                <h3>🗂️ بررسی Local Storage</h3>
+                <div id="storageStatus"></div>
+                <button onclick="checkStorage()">بررسی حافظه</button>
+                <button onclick="clearAllData()">پاک کردن همه داده‌ها</button>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top: 20px;">
+            <h3>📋 گزارش کامل</h3>
+            <button onclick="runFullDiagnostic()">اجرای تشخیص کامل</button>
+            <button onclick="exportReport()">صادر کردن گزارش</button>
+            <pre id="fullReport">برای شروع، روی "اجرای تشخیص کامل" کلیک کنید...</pre>
+        </div>
+    </div>
+
+    <script>
+        let diagnosticData = {};
+
+        function updateStatus(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `<div class="${type}">${message}</div>`;
+        }
+
+        function log(message, category = 'general') {
+            const timestamp = new Date().toLocaleString('fa-IR');
+            if (!diagnosticData[category]) diagnosticData[category] = [];
+            diagnosticData[category].push(`[${timestamp}] ${message}`);
+            
+            const reportElement = document.getElementById('fullReport');
+            if (reportElement) {
+                reportElement.textContent = JSON.stringify(diagnosticData, null, 2);
+            }
+        }
+
+        async function checkNostrKeys() {
+            try {
+                const sk = localStorage.getItem('nostr_sk');
+                const onboardingDone = localStorage.getItem('onboarding_done');
+                
+                if (!sk) {
+                    updateStatus('keyStatus', '❌ کلید خصوصی یافت نشد', 'error');
+                    log('کلید خصوصی موجود نیست', 'keys');
+                    return;
+                }
+
+                const hexPattern = /^[0-9a-fA-F]{64}$/;
+                if (!hexPattern.test(sk)) {
+                    updateStatus('keyStatus', '❌ فرمت کلید نامعتبر', 'error');
+                    log('فرمت کلید خصوصی نامعتبر', 'keys');
+                    return;
+                }
+
+                updateStatus('keyStatus', `✅ کلید معتبر (${sk.substring(0, 8)}...)<br>📋 Onboarding: ${onboardingDone ? 'تکمیل شده' : 'ناتمام'}`, 'success');
+                log(`کلید معتبر تأیید شد. Onboarding: ${onboardingDone}`, 'keys');
+
+            } catch (e) {
+                updateStatus('keyStatus', `❌ خطا: ${e.message}`, 'error');
+                log(`خطا در بررسی کلیدها: ${e.message}`, 'keys');
+            }
+        }
+
+        async function generateKeys() {
+            try {
+                // تولید کلید ساده با crypto API
+                const array = new Uint8Array(32);
+                crypto.getRandomValues(array);
+                const secretKey = Array.from(array).map(b => b.toString(16).padStart(2, '0')).join('');
+                
+                localStorage.setItem('nostr_sk', secretKey);
+                localStorage.setItem('onboarding_done', 'true');
+                
+                updateStatus('keyStatus', `✅ کلید جدید تولید شد<br>🔑 ${secretKey.substring(0, 16)}...`, 'success');
+                log('کلید جدید تولید و ذخیره شد', 'keys');
+                
+            } catch (e) {
+                updateStatus('keyStatus', `❌ خطا در تولید کلید: ${e.message}`, 'error');
+                log(`خطا در تولید کلید: ${e.message}`, 'keys');
+            }
+        }
+
+        async function testNetwork() {
+            try {
+                updateStatus('networkStatus', '🔄 در حال تست...', 'info');
+                
+                const results = [];
+                
+                // تست اتصال اساسی
+                const response = await fetch(window.location.origin, { method: 'HEAD' });
+                results.push(`✅ اتصال محلی: ${response.status}`);
+                
+                // تست CORS
+                try {
+                    await fetch('https://httpbin.org/get');
+                    results.push('✅ CORS: فعال');
+                } catch {
+                    results.push('⚠️ CORS: محدود');
+                }
+                
+                updateStatus('networkStatus', results.join('<br>'), 'success');
+                log(`تست شبکه: ${results.join(', ')}`, 'network');
+                
+            } catch (e) {
+                updateStatus('networkStatus', `❌ خطا: ${e.message}`, 'error');
+                log(`خطا در تست شبکه: ${e.message}`, 'network');
+            }
+        }
+
+        async function testRelays() {
+            const relays = ['wss://relay1.matrus.org', 'wss://relay.damus.io'];
+            updateStatus('networkStatus', '🔄 تست رله‌ها...', 'info');
+            
+            const results = [];
+            
+            for (const relay of relays) {
+                try {
+                    const ws = new WebSocket(relay);
+                    
+                    await new Promise((resolve, reject) => {
+                        const timeout = setTimeout(() => {
+                            ws.close();
+                            reject(new Error('timeout'));
+                        }, 3000);
+                        
+                        ws.onopen = () => {
+                            clearTimeout(timeout);
+                            ws.close();
+                            resolve();
+                        };
+                        
+                        ws.onerror = () => {
+                            clearTimeout(timeout);
+                            reject(new Error('connection failed'));
+                        };
+                    });
+                    
+                    results.push(`✅ ${relay.split('//')[1]}`);
+                    
+                } catch (e) {
+                    results.push(`❌ ${relay.split('//')[1]}: ${e.message}`);
+                }
+            }
+            
+            updateStatus('networkStatus', results.join('<br>'), results.every(r => r.includes('✅')) ? 'success' : 'warning');
+            log(`تست رله‌ها: ${results.join(', ')}`, 'relays');
+        }
+
+        async function checkPWA() {
+            const features = [];
+            
+            // Service Worker
+            if ('serviceWorker' in navigator) {
+                try {
+                    const registration = await navigator.serviceWorker.getRegistration();
+                    features.push(registration ? '✅ Service Worker: نصب شده' : '⚠️ Service Worker: ثبت نشده');
+                } catch {
+                    features.push('❌ Service Worker: خطا');
+                }
+            } else {
+                features.push('❌ Service Worker: پشتیبانی نمی‌شود');
+            }
+            
+            // Manifest
+            const manifestLink = document.querySelector('link[rel="manifest"]');
+            features.push(manifestLink ? '✅ Manifest: موجود' : '❌ Manifest: یافت نشد');
+            
+            // Standalone mode
+            const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+            features.push(isStandalone ? '✅ حالت Standalone' : '📱 حالت مرورگر');
+            
+            updateStatus('pwaStatus', features.join('<br>'), 'info');
+            log(`بررسی PWA: ${features.join(', ')}`, 'pwa');
+        }
+
+        async function testServiceWorker() {
+            try {
+                if (!('serviceWorker' in navigator)) {
+                    updateStatus('pwaStatus', '❌ Service Worker پشتیبانی نمی‌شود', 'error');
+                    return;
+                }
+                
+                const registration = await navigator.serviceWorker.register('/sw.js');
+                updateStatus('pwaStatus', '✅ Service Worker ثبت شد', 'success');
+                log('Service Worker با موفقیت ثبت شد', 'pwa');
+                
+            } catch (e) {
+                updateStatus('pwaStatus', `❌ خطا در Service Worker: ${e.message}`, 'error');
+                log(`خطا در Service Worker: ${e.message}`, 'pwa');
+            }
+        }
+
+        function checkStorage() {
+            try {
+                const storage = [];
+                
+                // Local Storage
+                const lsSize = new Blob(Object.values(localStorage)).size;
+                storage.push(`📦 Local Storage: ${lsSize} bytes`);
+                
+                // Session Storage  
+                const ssSize = new Blob(Object.values(sessionStorage)).size;
+                storage.push(`🗃️ Session Storage: ${ssSize} bytes`);
+                
+                // IndexedDB
+                if ('indexedDB' in window) {
+                    storage.push('✅ IndexedDB: پشتیبانی می‌شود');
+                } else {
+                    storage.push('❌ IndexedDB: پشتیبانی نمی‌شود');
+                }
+                
+                const keys = Object.keys(localStorage).filter(k => k.startsWith('globgram') || k.includes('nostr'));
+                storage.push(`🔑 کلیدهای مرتبط: ${keys.length}`);
+                
+                updateStatus('storageStatus', storage.join('<br>'), 'info');
+                log(`بررسی حافظه: ${storage.join(', ')}`, 'storage');
+                
+            } catch (e) {
+                updateStatus('storageStatus', `❌ خطا: ${e.message}`, 'error');
+                log(`خطا در بررسی حافظه: ${e.message}`, 'storage');
+            }
+        }
+
+        function clearAllData() {
+            if (confirm('آیا مطمئن هستید که می‌خواهید همه داده‌ها پاک شوند؟')) {
+                localStorage.clear();
+                sessionStorage.clear();
+                
+                updateStatus('storageStatus', '🗑️ همه داده‌ها پاک شدند', 'info');
+                log('همه داده‌ها پاک شدند', 'storage');
+            }
+        }
+
+        async function runFullDiagnostic() {
+            diagnosticData = {};
+            
+            const reportElement = document.getElementById('fullReport');
+            reportElement.textContent = '🔄 در حال اجرای تشخیص کامل...';
+            
+            await checkNostrKeys();
+            await testNetwork();
+            await testRelays();
+            await checkPWA();
+            checkStorage();
+            
+            // اطلاعات سیستم
+            log(`User Agent: ${navigator.userAgent}`, 'system');
+            log(`Platform: ${navigator.platform}`, 'system');
+            log(`Language: ${navigator.language}`, 'system');
+            log(`URL: ${window.location.href}`, 'system');
+            log(`Screen: ${screen.width}x${screen.height}`, 'system');
+            
+            reportElement.textContent = JSON.stringify(diagnosticData, null, 2);
+        }
+
+        function exportReport() {
+            const report = JSON.stringify(diagnosticData, null, 2);
+            const blob = new Blob([report], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `globgram-diagnostic-${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            
+            URL.revokeObjectURL(url);
+        }
+
+        // اجرای تست اولیه
+        document.addEventListener('DOMContentLoaded', () => {
+            log('صفحه تست سریع GlobGram بارگذاری شد', 'system');
+            
+            // تست خودکار ابتدایی
+            setTimeout(() => {
+                checkNostrKeys();
+                checkPWA();
+                checkStorage();
+            }, 500);
+        });
+    </script>
+</body>
+</html>

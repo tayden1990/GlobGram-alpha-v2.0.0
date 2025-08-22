@@ -1,6 +1,15 @@
 /* Base reset */
 * { box-sizing: border-box }
 html, body, #root { height: 100% }
+
+/* RTL Support */
+html[dir="rtl"] {
+	direction: rtl;
+}
+html[dir="rtl"] .rtl-flip {
+	transform: scaleX(-1);
+}
+
 :root {
 	color-scheme: light dark;
 	--bg: #fafafa; --fg: #222; --card: #fff; --muted: #666; --border: #eee; --accent: #1976d2;
