@@ -9,4 +9,12 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-my-release-key.txt
+my-release-key.JKS
+dist-desktop
+twa/
+my-release-key copy.txt
+GlobGram-win32-x64
+release-keystore.jks
+*.jks
+*.keystore
+.secrets-signing.ps1
