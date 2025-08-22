@@ -1,0 +1,27 @@
+# Add proper headers for GitHub Pages
+/*.html
+  Cross-Origin-Embedder-Policy: credentialless
+  Cross-Origin-Opener-Policy: same-origin
+  Access-Control-Allow-Origin: *
+  Access-Control-Allow-Methods: GET, POST, OPTIONS
+  Access-Control-Allow-Headers: Content-Type
+
+/*.js
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=31536000
+
+/*.css  
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=31536000
+
+/*.json
+  Access-Control-Allow-Origin: *
+  Content-Type: application/json
+
+/manifest.webmanifest
+  Access-Control-Allow-Origin: *
+  Content-Type: application/manifest+json
+
+/sw.js
+  Access-Control-Allow-Origin: *
+  Service-Worker-Allowed: /
