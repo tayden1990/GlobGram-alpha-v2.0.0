@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GlobGram - همگام‌سازی کلیدها</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            margin: 20px;
+            direction: rtl;
+            text-align: right;
+            line-height: 1.6;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: white;
+        }
+        .container { 
+            max-width: 600px; 
+            margin: 0 auto; 
+            background: rgba(255,255,255,0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            color: #333;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #eee;
+        }
+        .status { 
+            padding: 15px; 
+            margin: 15px 0; 
+            border-radius: 12px; 
+            border-right: 4px solid;
+            font-weight: 500;
+        }
+        .success { background: #d4edda; color: #155724; border-right-color: #28a745; }
+        .error { background: #f8d7da; color: #721c24; border-right-color: #dc3545; }
+        .info { background: #d1ecf1; color: #0c5460; border-right-color: #17a2b8; }
+        .warning { background: #fff3cd; color: #856404; border-right-color: #ffc107; }
+        
+        button {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            margin: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        button:hover { 
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+        button:disabled { 
+            background: #ccc; 
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .sync-section {
+            background: #f8f9fa;
+            border: 2px dashed #007bff;
+            border-radius: 15px;
+            padding: 25px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .key-display {
+            background: #2d3748;
+            color: #e2e8f0;
+            border-radius: 8px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            word-break: break-all;
+            margin: 15px 0;
+            max-height: 120px;
+            overflow-y: auto;
+            border: 2px solid #4a5568;
+        }
+        
+        .device-card {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 15px 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .device-card.current {
+            border-color: #667eea;
+            background: linear-gradient(to right, #667eea15, #764ba215);
+        }
+        
+        .qr-code {
+            text-align: center;
+            margin: 20px 0;
+            padding: 20px;
+            background: white;
+            border-radius: 12px;
+            border: 2px solid #e2e8f0;
+        }
+        
+        textarea {
+            width: 100%;
+            height: 80px;
+            padding: 15px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            resize: vertical;
+            direction: ltr;
+            text-align: left;
+        }
+        
+        .step {
+            display: flex;
+            align-items: center;
+            margin: 15px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-right: 4px solid #007bff;
+        }
+        
+        .step-number {
+            background: #007bff;
+            color: white;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-left: 15px;
+            flex-shrink: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔄 همگام‌سازی کلیدهای GlobGram</h1>
+            <p>انتقال کلیدهای Nostr بین دستگاه‌ها</p>
+        </div>
+
+        <div class="device-card current">
+            <h3>📱 دستگاه فعلی</h3>
+            <div id="currentDevice">در حال بررسی...</div>
+            <div id="currentKeys"></div>
+        </div>
+
+        <div class="sync-section">
+            <h3>🔄 روش‌های همگام‌سازی</h3>
+            
+            <div class="step">
+                <div class="step-number">1</div>
+                <div>
+                    <strong>تولید کلید جدید</strong><br>
+                    <small>ایجاد شناسه جدید برای این دستگاه</small>
+                </div>
+            </div>
+            
+            <button onclick="generateNewKey()">🆕 تولید کلید جدید</button>
+            
+            <div class="step">
+                <div class="step-number">2</div>
+                <div>
+                    <strong>وارد کردن کلید موجود</strong><br>
+                    <small>استفاده از کلید دستگاه دیگر</small>
+                </div>
+            </div>
+            
+            <textarea id="importKey" placeholder="کلید خصوصی 64 کاراکتری را اینجا بچسبانید..."></textarea>
+            <button onclick="importKey()">📥 وارد کردن کلید</button>
+            
+            <div class="step">
+                <div class="step-number">3</div>
+                <div>
+                    <strong>اسکن QR Code</strong><br>
+                    <small>برای انتقال سریع از گوشی</small>
+                </div>
+            </div>
+            
+            <button onclick="generateQR()">📱 تولید QR Code</button>
+            <button onclick="scanQR()">📷 اسکن QR Code</button>
+            
+            <div id="qrDisplay" class="qr-code" style="display: none;"></div>
+        </div>
+
+        <div class="device-card">
+            <h3>📋 صادرات کلیدها</h3>
+            <div id="exportKeys"></div>
+            <button onclick="exportToFile()">💾 ذخیره در فایل</button>
+            <button onclick="copyToClipboard()">📋 کپی کردن</button>
+        </div>
+
+        <div id="status"></div>
+    </div>
+
+    <script>
+        let currentPrivateKey = null;
+        let currentPublicKey = null;
+
+        function updateStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = `<div class="${type}">${message}</div>`;
+        }
+
+        async function checkCurrentDevice() {
+            try {
+                const sk = localStorage.getItem('nostr_sk');
+                const onboarding = localStorage.getItem('onboarding_done');
+                
+                const deviceInfo = {
+                    platform: navigator.platform,
+                    userAgent: navigator.userAgent.split(' ').slice(-2).join(' '),
+                    language: navigator.language,
+                    isMobile: /Mobile|Android|iPhone|iPad/.test(navigator.userAgent)
+                };
+                
+                document.getElementById('currentDevice').innerHTML = `
+                    <div><strong>نوع:</strong> ${deviceInfo.isMobile ? 'موبایل' : 'دسکتاپ'}</div>
+                    <div><strong>سیستم‌عامل:</strong> ${deviceInfo.platform}</div>
+                    <div><strong>مرورگر:</strong> ${deviceInfo.userAgent}</div>
+                    <div><strong>زبان:</strong> ${deviceInfo.language}</div>
+                `;
+                
+                if (sk) {
+                    currentPrivateKey = sk;
+                    
+                    try {
+                        const { getPublicKey } = await import('https://unpkg.com/nostr-tools@2.7.1/lib/esm/index.js');
+                        const privateKeyBytes = new Uint8Array(sk.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+                        currentPublicKey = getPublicKey(privateKeyBytes);
+                        
+                        document.getElementById('currentKeys').innerHTML = `
+                            <div class="status success">✅ کلیدها موجود</div>
+                            <div class="key-display">🔑 خصوصی: ${sk}</div>
+                            <div class="key-display">🗝️ عمومی: ${currentPublicKey}</div>
+                        `;
+                        
+                        document.getElementById('exportKeys').innerHTML = `
+                            <div class="key-display">کلید خصوصی برای انتقال:<br>${sk}</div>
+                        `;
+                        
+                    } catch (e) {
+                        document.getElementById('currentKeys').innerHTML = `
+                            <div class="status warning">⚠️ کلید موجود اما مشکلدار</div>
+                            <div class="key-display">🔑 خصوصی: ${sk}</div>
+                        `;
+                    }
+                } else {
+                    document.getElementById('currentKeys').innerHTML = `
+                        <div class="status error">❌ کلید یافت نشد</div>
+                        <p>برای استفاده از GlobGram نیاز به کلید دارید.</p>
+                    `;
+                }
+                
+            } catch (e) {
+                updateStatus(`خطا در بررسی دستگاه: ${e.message}`, 'error');
+            }
+        }
+
+        async function generateNewKey() {
+            try {
+                updateStatus('🔄 در حال تولید کلید جدید...', 'info');
+                
+                const { generateSecretKey, getPublicKey } = await import('https://unpkg.com/nostr-tools@2.7.1/lib/esm/index.js');
+                
+                const sk = generateSecretKey();
+                const skHex = Array.from(sk).map(b => b.toString(16).padStart(2, '0')).join('');
+                const pk = getPublicKey(sk);
+                
+                localStorage.setItem('nostr_sk', skHex);
+                localStorage.setItem('onboarding_done', 'true');
+                
+                currentPrivateKey = skHex;
+                currentPublicKey = pk;
+                
+                updateStatus(`✅ کلید جدید تولید شد`, 'success');
+                
+                await checkCurrentDevice();
+                
+            } catch (e) {
+                updateStatus(`❌ خطا در تولید کلید: ${e.message}`, 'error');
+            }
+        }
+
+        async function importKey() {
+            try {
+                const keyInput = document.getElementById('importKey').value.trim();
+                
+                if (!keyInput) {
+                    updateStatus('❌ لطفاً کلید خصوصی را وارد کنید', 'error');
+                    return;
+                }
+                
+                // بررسی فرمت
+                const hexPattern = /^[0-9a-fA-F]{64}$/;
+                if (!hexPattern.test(keyInput)) {
+                    updateStatus('❌ فرمت کلید نامعتبر است (باید 64 کاراکتر هگزادسیمال باشد)', 'error');
+                    return;
+                }
+                
+                updateStatus('🔄 در حال وارد کردن کلید...', 'info');
+                
+                // تست کلید با تولید کلید عمومی
+                const { getPublicKey } = await import('https://unpkg.com/nostr-tools@2.7.1/lib/esm/index.js');
+                const privateKeyBytes = new Uint8Array(keyInput.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+                const pk = getPublicKey(privateKeyBytes);
+                
+                localStorage.setItem('nostr_sk', keyInput);
+                localStorage.setItem('onboarding_done', 'true');
+                
+                currentPrivateKey = keyInput;
+                currentPublicKey = pk;
+                
+                updateStatus(`✅ کلید با موفقیت وارد شد`, 'success');
+                document.getElementById('importKey').value = '';
+                
+                await checkCurrentDevice();
+                
+            } catch (e) {
+                updateStatus(`❌ خطا در وارد کردن کلید: ${e.message}`, 'error');
+            }
+        }
+
+        function generateQR() {
+            if (!currentPrivateKey) {
+                updateStatus('❌ ابتدا کلیدی تولید یا وارد کنید', 'error');
+                return;
+            }
+            
+            const qrData = JSON.stringify({
+                type: 'nostr_key',
+                private_key: currentPrivateKey,
+                public_key: currentPublicKey,
+                timestamp: Date.now()
+            });
+            
+            // برای سادگی، URL QR code استفاده می‌کنیم
+            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrData)}`;
+            
+            document.getElementById('qrDisplay').innerHTML = `
+                <h4>📱 QR Code برای انتقال کلید</h4>
+                <img src="${qrUrl}" alt="QR Code" style="max-width: 300px;">
+                <p><small>این QR Code را با دستگاه دیگر اسکن کنید</small></p>
+            `;
+            document.getElementById('qrDisplay').style.display = 'block';
+            
+            updateStatus('✅ QR Code تولید شد', 'success');
+        }
+
+        function scanQR() {
+            // برای سادگی، فعلاً پیام راهنما نمایش می‌دهیم
+            updateStatus('📷 برای اسکن QR Code، از اپلیکیشن دوربین گوشی استفاده کنید و داده‌ها را در فیلد "وارد کردن کلید" بچسبانید', 'info');
+        }
+
+        function exportToFile() {
+            if (!currentPrivateKey) {
+                updateStatus('❌ کلیدی برای صادرات وجود ندارد', 'error');
+                return;
+            }
+            
+            const exportData = {
+                private_key: currentPrivateKey,
+                public_key: currentPublicKey,
+                exported_at: new Date().toISOString(),
+                device: navigator.platform,
+                app: 'GlobGram'
+            };
+            
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `globgram-keys-${Date.now()}.json`;
+            a.click();
+            
+            URL.revokeObjectURL(url);
+            updateStatus('✅ کلیدها در فایل ذخیره شدند', 'success');
+        }
+
+        async function copyToClipboard() {
+            if (!currentPrivateKey) {
+                updateStatus('❌ کلیدی برای کپی وجود ندارد', 'error');
+                return;
+            }
+            
+            try {
+                await navigator.clipboard.writeText(currentPrivateKey);
+                updateStatus('✅ کلید خصوصی کپی شد', 'success');
+            } catch (e) {
+                // Fallback برای مرورگرهای قدیمی
+                const textArea = document.createElement('textarea');
+                textArea.value = currentPrivateKey;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                updateStatus('✅ کلید خصوصی کپی شد', 'success');
+            }
+        }
+
+        // شروع خودکار
+        document.addEventListener('DOMContentLoaded', () => {
+            checkCurrentDevice();
+        });
+
+        // تعریف توابع global
+        window.generateNewKey = generateNewKey;
+        window.importKey = importKey;
+        window.generateQR = generateQR;
+        window.scanQR = scanQR;
+        window.exportToFile = exportToFile;
+        window.copyToClipboard = copyToClipboard;
+    </script>
+</body>
+</html>
