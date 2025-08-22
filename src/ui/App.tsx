@@ -6,6 +6,7 @@ import { RoomList } from './RoomList'
 import { ToastProvider, emitToast } from './Toast'
 import Logo from './Logo'
 import Splash from './Splash'
+import { WhatsAppRouter } from './WhatsAppRouter'
 import { useState, useEffect, useRef, lazy, Suspense, useMemo } from 'react'
 import { loadPreparedAds, extractFirstUrl as extractAdUrl, stripUrls as stripAdUrls, PreparedAd } from './ads'
 import { useIsMobile } from './useIsMobile'
@@ -149,6 +150,7 @@ export default function App() {
   const [roomListOpen, setRoomListOpen] = useState(() => isMobile ? false : true)
   const [chatDrawerOpen, setChatDrawerOpen] = useState(false)
   const [roomDrawerOpen, setRoomDrawerOpen] = useState(false)
+  const [qrOpen, setQrOpen] = useState(false)
   const [closing, setClosing] = useState<'none'|'chat'|'room'>('none')
   const chatButtonRef = useRef<HTMLButtonElement | null>(null)
   const roomButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -1721,129 +1723,21 @@ export default function App() {
           </div>
         </Modal>
       )}
-      {/* Mobile-first single-pane with tabs and list drawers */}
-      {isMobile ? (
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', padding: 16, gap: 10 }}>
-          <NostrEngine />
-          <div role="tablist" aria-label={t('tabs.main')} style={{ display: 'flex', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 999, padding: 4 }}>
-            <button role="tab" aria-selected={activeTab==='chats'} onClick={() => { setActiveTab('chats'); setRoomDrawerOpen(false) }} style={{ flex: 1, borderRadius: 999, padding: '8px 12px', background: activeTab==='chats'? 'var(--accent)' : 'transparent', color: activeTab==='chats'? '#fff':'var(--fg)', border: 'none' }}>{t('tabs.chats')}</button>
-            <button role="tab" aria-selected={activeTab==='rooms'} onClick={() => { setActiveTab('rooms'); setChatDrawerOpen(false) }} style={{ flex: 1, borderRadius: 999, padding: '8px 12px', background: activeTab==='rooms'? 'var(--accent)' : 'transparent', color: activeTab==='rooms'? '#fff':'var(--fg)', border: 'none' }}>{t('tabs.rooms')}</button>
-          </div>
-          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', border: '1px solid var(--border)', background: 'var(--card)', borderRadius: 8, overflow: 'hidden', position: 'relative', height: 0 }}>
-            {activeTab === 'chats' ? (
-              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%' }}>
-                <div className="sticky-top" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 8px', borderBottom: '1px solid var(--border)', background: 'var(--card)' }}>
-                  <button ref={chatButtonRef} title={t('tabs.showChats')} aria-label={t('tabs.showChatsList')} onClick={() => setChatDrawerOpen(true)}>☰</button>
-                  <div style={{ color: 'var(--muted)', fontSize: 12 }}>{t('tabs.chats')}</div>
-                </div>
-                <div style={{ flex: 1, minHeight: 0, height: 0 }}>
-                  <Suspense fallback={<div className="app-loading" style={{ padding: 16, textAlign: 'center' }}><Logo size={56} animated /><div className="hint">{t('loading.chat')}</div></div>}>
-                    <ChatWindowLazy />
-                  </Suspense>
-                </div>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%' }}>
-                <div className="sticky-top" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 8px', borderBottom: '1px solid var(--border)', background: 'var(--card)' }}>
-                  <button ref={roomButtonRef} title={t('tabs.showRooms')} aria-label={t('tabs.showRoomsList')} onClick={() => setRoomDrawerOpen(true)}>☰</button>
-                  <div style={{ color: 'var(--muted)', fontSize: 12 }}>{t('tabs.rooms')}</div>
-                </div>
-                <div style={{ flex: 1, minHeight: 0, height: 0 }}>
-                  <Suspense fallback={<div className="app-loading" style={{ padding: 16, textAlign: 'center' }}><Logo size={56} animated /><div className="hint">{t('loading.room')}</div></div>}>
-                    <RoomWindowLazy />
-                  </Suspense>
-                </div>
-              </div>
-            )}
-            {/* Chat drawer */}
-            {chatDrawerOpen && (
-              <div role="dialog" aria-label={t('tabs.chats')} onClick={() => { setClosing('chat'); setTimeout(() => { setChatDrawerOpen(false); setClosing('none'); chatButtonRef.current?.focus() }, 160) }} className={`drawer-overlay ${closing==='chat' ? 'closing' : ''}`} style={{ position: 'absolute', inset: 0, display: 'flex' }}>
-                <div
-                  onClick={(e) => e.stopPropagation()}
-                  onTouchStart={(e) => { const t = e.touches[0]; chatSwipeRef.current = { x: t.clientX, y: t.clientY, active: true } }}
-                  onTouchMove={(e) => {
-                    if (!chatSwipeRef.current.active) return
-                    const t = e.touches[0]
-                    const dx = t.clientX - chatSwipeRef.current.x
-                    const dy = t.clientY - chatSwipeRef.current.y
-                    if (dx > 70 && Math.abs(dy) < 50) {
-                      chatSwipeRef.current.active = false
-                      setClosing('chat')
-                      setTimeout(() => { setChatDrawerOpen(false); setClosing('none'); chatButtonRef.current?.focus() }, 160)
-                    }
-                  }}
-                  className={`drawer-panel ${closing==='chat' ? 'closing' : ''}`}
-                  style={{ width: '82vw', maxWidth: 360, height: '100%', background: 'var(--card)', borderRight: '1px solid var(--border)', boxShadow: '2px 0 12px rgba(0,0,0,0.2)' }}
-                >
-                  <ChatList onCollapse={() => setChatDrawerOpen(false)} />
-                </div>
-              </div>
-            )}
-            {/* Room drawer */}
-            {roomDrawerOpen && (
-              <div role="dialog" aria-label={t('tabs.rooms')} onClick={() => { setClosing('room'); setTimeout(() => { setRoomDrawerOpen(false); setClosing('none'); roomButtonRef.current?.focus() }, 160) }} className={`drawer-overlay ${closing==='room' ? 'closing' : ''}`} style={{ position: 'absolute', inset: 0, display: 'flex' }}>
-                <div
-                  onClick={(e) => e.stopPropagation()}
-                  onTouchStart={(e) => { const t = e.touches[0]; roomSwipeRef.current = { x: t.clientX, y: t.clientY, active: true } }}
-                  onTouchMove={(e) => {
-                    if (!roomSwipeRef.current.active) return
-                    const t = e.touches[0]
-                    const dx = t.clientX - roomSwipeRef.current.x
-                    const dy = t.clientY - roomSwipeRef.current.y
-                    if (dx > 70 && Math.abs(dy) < 50) {
-                      roomSwipeRef.current.active = false
-                      setClosing('room')
-                      setTimeout(() => { setRoomDrawerOpen(false); setClosing('none'); roomButtonRef.current?.focus() }, 160)
-                    }
-                  }}
-                  className={`drawer-panel ${closing==='room' ? 'closing' : ''}`}
-                  style={{ width: '82vw', maxWidth: 360, height: '100%', background: 'var(--card)', borderRight: '1px solid var(--border)', boxShadow: '2px 0 12px rgba(0,0,0,0.2)' }}
-                >
-                  <RoomList onCollapse={() => setRoomDrawerOpen(false)} />
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      ) : (
-        // Desktop/tablet split view
-        <div style={{ display: 'flex', flex: 1, border: '1px solid var(--border)', background: 'var(--card)', borderRadius: 8, overflow: 'hidden', margin: 16, minHeight: 0 }}>
-          <NostrEngine />
-          <div style={{ display: 'flex', flex: 1, minWidth: 0, minHeight: 0 }}>
-            <div style={{ display: 'flex', flex: 1, minWidth: 0, minHeight: 0 }}>
-              {chatListOpen ? (
-                <ChatList onCollapse={() => { setChatListOpen(false); setTimeout(() => chatHandleRef.current?.focus(), 0) }} />
-              ) : (
-                <div style={{ width: 44, borderRight: '1px solid var(--border)', background: 'var(--card)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-                  <button ref={chatHandleRef} title={`${t('tabs.showChats')} (Alt+1)`} aria-keyshortcuts="Alt+1" aria-label={t('tabs.showChatsList')} aria-controls="chatListNav" aria-expanded={false} onClick={() => { setChatListOpen(true); setTimeout(() => (document.querySelector('#chatListNav input') as HTMLInputElement | null)?.focus(), 0) }}>☰</button>
-                  <span style={{ fontSize: 10, color: 'var(--muted)' }}>Alt+1</span>
-                </div>
-              )}
-              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-                <Suspense fallback={<div className="app-loading" style={{ padding: 16, textAlign: 'center' }}><Logo size={64} animated /><div className="hint">{t('loading.chat')}</div></div>}>
-                  <ChatWindowLazy />
-                </Suspense>
-              </div>
-            </div>
-            <div style={{ width: 1, background: 'var(--border)' }} />
-            <div style={{ display: 'flex', flex: 1, minWidth: 0, minHeight: 0 }}>
-              {roomListOpen ? (
-                <RoomList onCollapse={() => { setRoomListOpen(false); setTimeout(() => roomHandleRef.current?.focus(), 0) }} />
-              ) : (
-                <div style={{ width: 44, borderRight: '1px solid var(--border)', background: 'var(--card)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-                  <button ref={roomHandleRef} title={`${t('tabs.showRooms')} (Alt+2)`} aria-keyshortcuts="Alt+2" aria-label={t('tabs.showRoomsList')} aria-controls="roomListNav" aria-expanded={false} onClick={() => { setRoomListOpen(true); setTimeout(() => (document.querySelector('#roomListNav input') as HTMLInputElement | null)?.focus(), 0) }}>☰</button>
-                  <span style={{ fontSize: 10, color: 'var(--muted)' }}>Alt+2</span>
-                </div>
-              )}
-              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-                <Suspense fallback={<div className="app-loading" style={{ padding: 16, textAlign: 'center' }}><Logo size={64} animated /><div className="hint">{t('loading.room')}</div></div>}>
-                  <RoomWindowLazy />
-                </Suspense>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* WhatsApp-style interface for both mobile and desktop */}
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh' }}>
+        <NostrEngine />
+        <WhatsAppRouter
+          onSettingsOpen={() => setSettingsOpen(true)}
+          onNewChatOpen={() => {
+            const input = (prompt(t('fab.newChatPrompt')!) || '').trim()
+            if (!input) return
+            const hex = parseInviteInput(input)
+            if (!hex) { alert(t('errors.invalidPubkey')); return }
+            selectPeer(hex)
+          }}
+          onQRScanOpen={() => setQrOpen(true)}
+        />
+      </div>
     {isMobile && (
         <div style={{ position: 'fixed', right: 16, bottom: 16, zIndex: 50 }}>
       <div className={`fab-menu ${fabOpen ? '' : 'hidden'}`} style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8, alignItems: 'flex-end' }}>
