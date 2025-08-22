@@ -96,6 +96,26 @@ function normalizeDataUrlMime(dataUrl: string): string {
 }
 
 export function startNostrEngine(sk: string) {
+  // DEBUG: Validate private key before starting
+  try {
+    const testBytes = hexToBytes(sk)
+    const testPk = getPublicKey(testBytes)
+    log(`🔍 Engine starting with PK: ${testPk.slice(0,12)}...`)
+    
+    // Test event creation capability
+    const testTemplate: EventTemplate = { kind: 1, created_at: Math.floor(Date.now()/1000), content: 'test', tags: [] }
+    const testEvt = finalizeEvent(testTemplate, testBytes)
+    log(`🔍 Test event validation: ID=${testEvt.id?.slice(0,12)}..., PK_match=${testEvt.pubkey === testPk}`)
+    
+    if (!testEvt.id || !testEvt.pubkey || !testEvt.sig) {
+      log(`❌ Critical: Cannot create valid events with current key`, 'error')
+      throw new Error('Invalid key - cannot create events')
+    }
+  } catch (error) {
+    log(`❌ Engine startup validation failed: ${error}`, 'error')
+    throw error
+  }
+  
   const pk = getPublicKey(hexToBytes(sk))
   const urls = useRelayStore.getState().relays.filter(r => r.enabled).map(r => r.url)
   const pool = getRelayPool(urls)
@@ -882,6 +902,19 @@ export async function sendDM(
 
   const template: EventTemplate = { kind: 4, created_at: now, content: ciphertext, tags: [["p", toHex]] }
   let evt: any = finalizeEvent(template, hexToBytes(sk))
+  
+  // DEBUG: Log event details for debugging "invalid-event" issues
+  log(`🔍 Event created: kind=${evt.kind}, id=${evt.id?.slice(0,12)}..., pubkey=${evt.pubkey?.slice(0,12)}..., sig_len=${evt.sig?.length}`)
+  if (!evt.id || evt.id.length !== 64) {
+    log(`❌ Invalid event ID: ${evt.id}`, 'error')
+  }
+  if (!evt.pubkey || evt.pubkey.length !== 64) {
+    log(`❌ Invalid event pubkey: ${evt.pubkey}`, 'error')
+  }
+  if (!evt.sig || evt.sig.length !== 128) {
+    log(`❌ Invalid event signature: length=${evt.sig?.length}`, 'error')
+  }
+  
   const pub = JSON.stringify(["EVENT", evt])
   // entering publish stage
   notify('publishing')
@@ -955,10 +988,22 @@ export async function sendDM(
               }
             } else {
               const reason = typeof data[3] === 'string' ? data[3] : undefined
+              // DEBUG: Log detailed rejection info
+              log(`❌ Event REJECTED by ${url}: ${reason || 'no reason given'}`, 'error')
+              log(`🔍 Rejected event details: kind=${evt.kind}, id=${evt.id?.slice(0,12)}...`, 'warn')
               if (reason) {
                 lastReason = reason
                 const m = /(pow)\s*:\s*(\d+)\s*bits/i.exec(reason)
                 if (m) { powBitsRequired = parseInt(m[2], 10); log(`PoW required @ ${url}: ${powBitsRequired} bits`,'warn') }
+                // Check for specific "invalid" errors
+                if (reason.toLowerCase().includes('invalid')) {
+                  log(`🚨 INVALID-EVENT detected: ${reason}`, 'error')
+                  console.error('Invalid event details:', {
+                    event: evt,
+                    reason: reason,
+                    relay: url
+                  })
+                }
                 log(`OK false @ ${url}: ${reason}`, 'warn')
               }
             }

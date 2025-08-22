@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تست سریع GlobGram</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
+        .container { max-width: 600px; margin: 0 auto; background: rgba(255,255,255,0.95); padding: 30px; border-radius: 15px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); }
+        .title { color: #333; text-align: center; margin-bottom: 30px; font-size: 24px; }
+        .btn { display: inline-block; padding: 12px 24px; margin: 8px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; text-decoration: none; transition: all 0.3s; }
+        .btn-primary { background: #4CAF50; color: white; }
+        .btn-secondary { background: #2196F3; color: white; }
+        .btn-danger { background: #f44336; color: white; }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+        .status { padding: 15px; margin: 15px 0; border-radius: 8px; font-size: 16px; }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .warning { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+        .info { background: #d1ecf1; color: #0c5460; border: 1px solid #b8daff; }
+        .card { background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 15px 0; border-left: 4px solid #007bff; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="title">🚀 تست سریع GlobGram</h1>
+        
+        <div class="card">
+            <h3>📋 راهنمای استفاده:</h3>
+            <ol>
+                <li>ابتدا "تست کلیدها" را کلیک کنید</li>
+                <li>اگر مشکلی بود، "پاک کردن و شروع دوباره" را امتحان کنید</li>
+                <li>سپس "باز کردن GlobGram" را کلیک کنید</li>
+                <li>در صفحه اصلی پیام بفرستید و console را بررسی کنید</li>
+            </ol>
+        </div>
+
+        <div>
+            <button class="btn btn-primary" onclick="testKeys()">🔍 تست کلیدها</button>
+            <button class="btn btn-secondary" onclick="window.open('http://localhost:5174/', '_blank')">🌐 باز کردن GlobGram</button>
+            <button class="btn btn-danger" onclick="clearAll()">🗑️ پاک کردن و شروع دوباره</button>
+        </div>
+
+        <div id="results"></div>
+    </div>
+
+    <script type="module">
+        const results = document.getElementById('results');
+        
+        function showResult(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `status ${type}`;
+            div.innerHTML = message;
+            results.appendChild(div);
+            
+            // Auto-remove after 10 seconds
+            setTimeout(() => {
+                if (div.parentNode) {
+                    div.parentNode.removeChild(div);
+                }
+            }, 10000);
+        }
+        
+        window.testKeys = async function() {
+            results.innerHTML = '';
+            showResult('⏳ در حال تست کلیدها...', 'info');
+            
+            try {
+                const sk = localStorage.getItem('nostr_sk');
+                
+                if (!sk) {
+                    showResult('❌ کلید خصوصی یافت نشد. ابتدا یک identity در GlobGram ایجاد کنید.', 'error');
+                    return;
+                }
+                
+                if (!/^[0-9a-f]{64}$/i.test(sk)) {
+                    showResult('❌ کلید خصوصی فرمت نامعتبر دارد. کلید جدید ایجاد کنید.', 'error');
+                    return;
+                }
+                
+                // Test nostr-tools
+                const nostrTools = await import('nostr-tools');
+                const hexToBytes = (hex) => {
+                    const bytes = new Uint8Array(hex.length / 2);
+                    for (let i = 0; i < hex.length; i += 2) {
+                        bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
+                    }
+                    return bytes;
+                };
+                
+                const skBytes = hexToBytes(sk);
+                const pk = nostrTools.getPublicKey(skBytes);
+                
+                // Create test event
+                const template = {
+                    kind: 1,
+                    created_at: Math.floor(Date.now() / 1000),
+                    content: 'تست از GlobGram',
+                    tags: []
+                };
+                
+                const event = nostrTools.finalizeEvent(template, skBytes);
+                
+                // Validate
+                const valid = event.id && event.pubkey && event.sig && 
+                             event.id.length === 64 && 
+                             event.pubkey.length === 64 && 
+                             event.sig.length === 128 &&
+                             event.pubkey === pk;
+                
+                if (valid) {
+                    showResult(`✅ همه چیز درست است!<br>🔑 کلید عمومی: ${pk.slice(0,20)}...<br>📄 Event ID: ${event.id.slice(0,20)}...`, 'success');
+                } else {
+                    showResult('❌ مشکل در validation event', 'error');
+                    console.error('Event validation failed:', {event, pk});
+                }
+                
+            } catch (error) {
+                showResult(`❌ خطا در تست: ${error.message}`, 'error');
+                console.error('Test error:', error);
+            }
+        };
+        
+        window.clearAll = function() {
+            if (confirm('آیا مطمئن هستید که می‌خواهید همه داده‌ها را پاک کنید؟')) {
+                results.innerHTML = '';
+                showResult('🗑️ در حال پاک کردن...', 'warning');
+                
+                // Clear all localStorage
+                localStorage.clear();
+                
+                showResult('✅ همه داده‌ها پاک شدند. حالا GlobGram را باز کنید و identity جدید ایجاد کنید.', 'success');
+            }
+        };
+        
+        // Auto test on load
+        setTimeout(() => {
+            testKeys();
+        }, 1000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Invalid Event</title>
+</head>
+<body>
+    <h1>Debug Invalid Event Issue</h1>
+    <div id="output"></div>
+    
+    <script type="module">
+        const output = document.getElementById('output');
+        
+        function log(msg) {
+            console.log(msg);
+            output.innerHTML += `<div>${msg}</div>`;
+        }
+        
+        async function debugKeys() {
+            try {
+                log('=== Debugging Keys and Events ===');
+                
+                // Check localStorage
+                const sk = localStorage.getItem('nostr_sk');
+                log(`SK exists: ${!!sk}`);
+                log(`SK length: ${sk?.length}`);
+                log(`SK valid hex: ${/^[0-9a-f]{64}$/i.test(sk||'')}`);
+                
+                if (!sk) {
+                    log('❌ No private key found in localStorage');
+                    return;
+                }
+                
+                // Test basic hex conversion first
+                const hexToBytes = (hex) => {
+                    if (hex.length % 2 !== 0) throw new Error('Invalid hex length');
+                    const bytes = new Uint8Array(hex.length / 2);
+                    for (let i = 0; i < hex.length; i += 2) {
+                        bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
+                    }
+                    return bytes;
+                };
+                
+                try {
+                    const skBytes = hexToBytes(sk);
+                    log(`✅ Hex to bytes conversion successful: ${skBytes.length} bytes`);
+                    
+                    // Import nostr-tools with error handling
+                    try {
+                        const nostrTools = await import('nostr-tools');
+                        log(`✅ nostr-tools imported: ${Object.keys(nostrTools).slice(0, 5).join(', ')}...`);
+                        
+                        const { getPublicKey, finalizeEvent } = nostrTools;
+                        
+                        // Test public key generation
+                        const pk = getPublicKey(skBytes);
+                        log(`✅ Public key generated: ${pk.slice(0, 16)}...`);
+                        
+                        // Test simple event creation
+                        const now = Math.floor(Date.now() / 1000);
+                        const template = {
+                            kind: 1,
+                            created_at: now,
+                            content: 'test message',
+                            tags: []
+                        };
+                        
+                        const event = finalizeEvent(template, skBytes);
+                        log(`✅ Event created: ID=${event.id?.slice(0, 16)}...`);
+                        log(`  Event pubkey: ${event.pubkey?.slice(0, 16)}...`);
+                        log(`  Event sig length: ${event.sig?.length}`);
+                        log(`  Event kind: ${event.kind}`);
+                        
+                        // Check for potential issues
+                        if (event.pubkey !== pk) {
+                            log(`❌ Pubkey mismatch! Generated: ${pk.slice(0, 16)}, Event: ${event.pubkey?.slice(0, 16)}`);
+                        }
+                        
+                        if (!event.id || event.id.length !== 64) {
+                            log(`❌ Invalid event ID: ${event.id}`);
+                        }
+                        
+                        if (!event.sig || event.sig.length !== 128) {
+                            log(`❌ Invalid signature length: ${event.sig?.length}`);
+                        }
+                        
+                    } catch (importError) {
+                        log(`❌ nostr-tools import failed: ${importError.message}`);
+                        console.error('Import error:', importError);
+                    }
+                    
+                } catch (conversionError) {
+                    log(`❌ Hex conversion failed: ${conversionError.message}`);
+                    console.error('Conversion error:', conversionError);
+                }
+                
+            } catch (error) {
+                log(`❌ Debug error: ${error.message}`);
+                console.error('Full error:', error);
+            }
+        }
+        
+        // Run debug when page loads
+        debugKeys();
+        
+        // Also expose debug function globally
+        window.debugKeys = debugKeys;
+        
+        // Add button to clear localStorage and regenerate keys
+        window.clearAndRegenerate = async () => {
+            try {
+                localStorage.removeItem('nostr_sk');
+                log('🗑️ localStorage cleared');
+                
+                // Import and generate new key
+                const nostrTools = await import('nostr-tools');
+                const { generateSecretKey, getPublicKey } = nostrTools;
+                
+                const secret = generateSecretKey();
+                const hexSecretKey = Array.from(secret).map(b => b.toString(16).padStart(2, '0')).join('');
+                const publicKey = getPublicKey(secret);
+                
+                localStorage.setItem('nostr_sk', hexSecretKey);
+                log(`🔑 New key generated: ${publicKey.slice(0, 16)}...`);
+                
+                // Re-run debug
+                setTimeout(debugKeys, 100);
+                
+            } catch (error) {
+                log(`❌ Key regeneration failed: ${error.message}`);
+            }
+        };
+    </script>
+    
+    <button onclick="clearAndRegenerate()" style="margin: 10px; padding: 10px; background: #ff6b6b; color: white; border: none; border-radius: 5px;">
+        Clear localStorage & Generate New Key
+    </button>
+    <button onclick="debugKeys()" style="margin: 10px; padding: 10px; background: #4ecdc4; color: white; border: none; border-radius: 5px;">
+        Re-run Debug
+    </button>
+</body>
+</html>
