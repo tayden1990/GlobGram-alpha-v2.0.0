@@ -160,8 +160,19 @@
                     return;
                 }
 
-                updateStatus('keyStatus', `✅ کلید معتبر (${sk.substring(0, 8)}...)<br>📋 Onboarding: ${onboardingDone ? 'تکمیل شده' : 'ناتمام'}`, 'success');
-                log(`کلید معتبر تأیید شد. Onboarding: ${onboardingDone}`, 'keys');
+                // تولید کلید عمومی
+                try {
+                    const { getPublicKey } = await import('https://unpkg.com/nostr-tools@2.7.1/lib/esm/index.js');
+                    const privateKeyBytes = new Uint8Array(sk.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+                    const publicKey = getPublicKey(privateKeyBytes);
+                    
+                    updateStatus('keyStatus', `✅ کلیدها معتبر<br>🔑 خصوصی: ${sk.substring(0, 8)}...<br>🗝️ عمومی: ${publicKey.substring(0, 8)}...<br>📋 Onboarding: ${onboardingDone ? 'تکمیل شده' : 'ناتمام'}`, 'success');
+                    log(`کلیدها معتبر - خصوصی: ${sk.length} کاراکتر، عمومی: ${publicKey.length} کاراکتر. Onboarding: ${onboardingDone}`, 'keys');
+                    
+                } catch (importError) {
+                    updateStatus('keyStatus', `⚠️ کلید خصوصی معتبر<br>🔑 ${sk.substring(0, 8)}...<br>❌ تولید کلید عمومی: ${importError.message}<br>📋 Onboarding: ${onboardingDone ? 'تکمیل شده' : 'ناتمام'}`, 'warning');
+                    log(`کلید خصوصی معتبر، خطا در تولید کلید عمومی: ${importError.message}. Onboarding: ${onboardingDone}`, 'keys');
+                }
 
             } catch (e) {
                 updateStatus('keyStatus', `❌ خطا: ${e.message}`, 'error');
@@ -171,16 +182,31 @@
 
         async function generateKeys() {
             try {
-                // تولید کلید ساده با crypto API
+                // استفاده از Web Crypto API
                 const array = new Uint8Array(32);
                 crypto.getRandomValues(array);
                 const secretKey = Array.from(array).map(b => b.toString(16).padStart(2, '0')).join('');
                 
-                localStorage.setItem('nostr_sk', secretKey);
-                localStorage.setItem('onboarding_done', 'true');
-                
-                updateStatus('keyStatus', `✅ کلید جدید تولید شد<br>🔑 ${secretKey.substring(0, 16)}...`, 'success');
-                log('کلید جدید تولید و ذخیره شد', 'keys');
+                // تولید کلید عمومی با nostr-tools از CDN
+                try {
+                    const { getPublicKey } = await import('https://unpkg.com/nostr-tools@2.7.1/lib/esm/index.js');
+                    const privateKeyBytes = new Uint8Array(secretKey.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+                    const publicKey = getPublicKey(privateKeyBytes);
+                    
+                    localStorage.setItem('nostr_sk', secretKey);
+                    localStorage.setItem('onboarding_done', 'true');
+                    
+                    updateStatus('keyStatus', `✅ کلید جدید تولید شد<br>🔑 خصوصی: ${secretKey.substring(0, 8)}...<br>🗝️ عمومی: ${publicKey.substring(0, 8)}...`, 'success');
+                    log(`کلید جدید تولید شد - خصوصی: ${secretKey.length} کاراکتر، عمومی: ${publicKey.length} کاراکتر`, 'keys');
+                    
+                } catch (importError) {
+                    // اگر import ناموفق بود، فقط کلید خصوصی را ذخیره کن
+                    localStorage.setItem('nostr_sk', secretKey);
+                    localStorage.setItem('onboarding_done', 'true');
+                    
+                    updateStatus('keyStatus', `⚠️ کلید خصوصی تولید شد<br>🔑 ${secretKey.substring(0, 8)}...<br>❌ کلید عمومی: ${importError.message}`, 'warning');
+                    log(`کلید خصوصی تولید شد، خطا در تولید کلید عمومی: ${importError.message}`, 'keys');
+                }
                 
             } catch (e) {
                 updateStatus('keyStatus', `❌ خطا در تولید کلید: ${e.message}`, 'error');
