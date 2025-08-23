@@ -1,5 +1,7 @@
 import { KeyManager } from '../wallet'
 import { ChatList } from './ChatList'
+import { ChatListPage } from './ChatListPage'
+import { ChatWindowPage } from './ChatWindowPage'
 import { NostrEngine } from './NostrEngine'
 import { RelayManager } from './RelayManager'
 import { RoomList } from './RoomList'
@@ -12,6 +14,7 @@ import { useIsMobile } from './useIsMobile'
 import { useChatStore } from '../state/chatStore'
 import { useRoomStore } from '../state/roomStore'
 import { useRelayStore } from '../state/relayStore'
+import { useNavigationStore, Page } from '../state/navigationStore'
 import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools'
 import { hexToBytes } from '../nostr/utils'
 import { bytesToHex } from '../nostr/utils'
@@ -106,6 +109,7 @@ export default function App() {
   const selectPeer = useChatStore(s => s.selectPeer)
   const selectedRoom = useRoomStore(s => s.selectedRoom)
   const selectRoom = useRoomStore(s => s.selectRoom)
+  const { currentPage, navigateTo } = useNavigationStore()
   const [activeTab, setActiveTab] = useState<'chats'|'rooms'>(() => (localStorage.getItem('activeTab') as 'chats'|'rooms') || 'chats')
   const [theme, setTheme] = useState<'system'|'light'|'dark'>(() => (localStorage.getItem('theme') as any) || 'system')
   const [fabOpen, setFabOpen] = useState(false)
