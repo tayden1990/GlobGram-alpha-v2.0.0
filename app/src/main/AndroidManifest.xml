@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Optional but harmless: if a WebView fallback is ever selected, INTERNET is needed -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Package visibility: allow discovery of browsers supporting Custom Tabs/TWA on Android 11+ -->
+    <queries>
+        <intent>
+            <action android:name="android.support.customtabs.action.CustomTabsService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
+
+    <application
+        android:label="@string/appName"
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="true"
+        android:usesCleartextTraffic="false"
+        android:theme="@style/Theme.Twa">
+
+        <activity
+            android:name="com.google.androidbrowserhelper.trusted.LauncherActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Twa.Launcher">
+            <meta-data
+                android:name="android.support.customtabs.trusted.DEFAULT_URL"
+                android:value="https://tayden1990.github.io/GlobGram-alpha-v2.0.0/" />
+            <meta-data
+                android:name="com.google.androidbrowserhelper.trusted.DEFAULT_URL"
+                android:value="https://tayden1990.github.io/GlobGram-alpha-v2.0.0/" />
+            <!-- Ensure we fall back instead of closing if verification fails or no TWA support -->
+            <meta-data
+                android:name="android.support.customtabs.trusted.FALLBACK_STRATEGY"
+                android:value="@string/fallbackType" />
+            <meta-data
+                android:name="com.google.androidbrowserhelper.trusted.FALLBACK_STRATEGY"
+                android:value="@string/fallbackType" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="@string/providerAuthority"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+    </application>
+
+</manifest>

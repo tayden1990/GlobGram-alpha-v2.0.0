@@ -1,0 +1,174 @@
+/* Android app module for TWA */
+
+import groovy.xml.MarkupBuilder
+
+apply plugin: 'com.android.application'
+
+def twaManifest = [
+	applicationId: 'io.github.tayden1990.twa',
+	hostName: 'tayden1990.github.io',
+	launchUrl: '/GlobGram-alpha-v2.0.0/',
+	name: 'GlobGram Alpha',
+	launcherName: 'GlobGram',
+	themeColor: '#1976D2',
+	themeColorDark: '#000000',
+	navigationColor: '#000000',
+	navigationColorDark: '#000000',
+	navigationDividerColor: '#000000',
+	navigationDividerColorDark: '#000000',
+	backgroundColor: '#0F1115',
+	enableNotifications: true,
+	shortcuts: [],
+	splashScreenFadeOutDuration: 300,
+	generatorApp: 'bubblewrap-cli',
+	fallbackType: 'customtabs',
+	enableSiteSettingsShortcut: 'true',
+	orientation: 'default',
+]
+
+android {
+	compileSdkVersion 36
+	namespace "io.github.tayden1990.twa"
+
+	defaultConfig {
+		applicationId "io.github.tayden1990.twa"
+		minSdkVersion 21
+	targetSdkVersion 34
+		versionCode 1
+		versionName "1"
+
+		resValue "string", "appName", twaManifest.name
+		resValue "string", "launcherName", twaManifest.launcherName
+
+		def launchUrl = "https://" + twaManifest.hostName + twaManifest.launchUrl
+		resValue "string", "launchUrl", launchUrl
+
+		resValue "string", "webManifestUrl", 'https://tayden1990.github.io/GlobGram-alpha-v2.0.0/manifest.webmanifest'
+		resValue "string", "fullScopeUrl", 'https://tayden1990.github.io/GlobGram-alpha-v2.0.0/'
+
+		resValue "string", "hostName", twaManifest.hostName
+		resValue "color", "colorPrimary", twaManifest.themeColor
+		resValue "color", "colorPrimaryDark", twaManifest.themeColorDark
+		resValue "color", "navigationColor", twaManifest.navigationColor
+		resValue "color", "navigationColorDark", twaManifest.navigationColorDark
+		resValue "color", "navigationDividerColor", twaManifest.navigationDividerColor
+		resValue "color", "navigationDividerColorDark", twaManifest.navigationDividerColorDark
+		resValue "color", "backgroundColor", twaManifest.backgroundColor
+		resValue "string", "providerAuthority", twaManifest.applicationId + '.fileprovider'
+		resValue "bool", "enableNotification", twaManifest.enableNotifications.toString()
+
+		twaManifest.shortcuts.eachWithIndex { shortcut, index ->
+			resValue "string", "shortcut_name_$index", "$shortcut.name"
+			resValue "string", "shortcut_short_name_$index", "$shortcut.short_name"
+		}
+
+		resValue "integer", "splashScreenFadeOutDuration", twaManifest.splashScreenFadeOutDuration.toString()
+		resValue "string", "generatorApp", twaManifest.generatorApp
+		resValue "string", "fallbackType", twaManifest.fallbackType
+		resValue "bool", "enableSiteSettingsShortcut", twaManifest.enableSiteSettingsShortcut
+		resValue "string", "orientation", twaManifest.orientation
+	}
+
+	signingConfigs {
+		release {
+			def ksPath = System.getenv('ANDROID_KEYSTORE_PATH')
+			if (ksPath == null || ksPath.trim().isEmpty()) {
+				ksPath = file("${rootDir}/my-release-key.JKS").absolutePath
+			}
+			storeFile file(ksPath)
+			def lower = ksPath.toLowerCase()
+			if (lower.endsWith('.p12') || lower.endsWith('.pfx')) {
+				storeType "pkcs12"
+			}
+			storePassword System.getenv('ANDROID_STORE_PASSWORD') ?: "4522815"
+			keyAlias System.getenv('ANDROID_KEY_ALIAS') ?: "Tayden1990"
+			keyPassword System.getenv('ANDROID_KEY_PASSWORD') ?: "4522815"
+		}
+	}
+
+	buildTypes {
+		debug {
+			// More robust debug experience: open in WebView if TWA verification fails
+			resValue "string", "fallbackType", "webview"
+		}
+		release {
+			minifyEnabled true
+			// Prefer Custom Tabs fallback in release; full TWA will engage when asset links verify
+			resValue "string", "fallbackType", "customtabs"
+			def skipSigning = (System.getenv('SKIP_RELEASE_SIGNING') ?: 'false').toBoolean()
+			def ksPathCandidate = System.getenv('ANDROID_KEYSTORE_PATH')
+			if (ksPathCandidate == null || ksPathCandidate.trim().isEmpty()) {
+				ksPathCandidate = file("${rootDir}/my-release-key.JKS").absolutePath
+			}
+			if (!skipSigning && file(ksPathCandidate).exists()) {
+				signingConfig signingConfigs.release
+			} else {
+				println("Release signingConfig skipped (skipSigning=" + skipSigning + ", keystoreExists=" + file(ksPathCandidate).exists() + ") for path: " + ksPathCandidate)
+			}
+		}
+	}
+
+	compileOptions {
+		sourceCompatibility JavaVersion.VERSION_17
+		targetCompatibility JavaVersion.VERSION_17
+	}
+
+	lint {
+		checkReleaseBuilds false
+	}
+}
+
+task generateShorcutsFile {
+	assert twaManifest.shortcuts.size() < 5, "You can have at most 4 shortcuts."
+	twaManifest.shortcuts.eachWithIndex { s, i ->
+		assert s.name != null, 'Missing `name` in shortcut #' + i
+		assert s.short_name != null, 'Missing `short_name` in shortcut #' + i
+		assert s.url != null, 'Missing `icon` in shortcut #' + i
+		assert s.icon != null, 'Missing `url` in shortcut #' + i
+	}
+
+	def xmlDir = new File("$projectDir/src/main/res/xml")
+	if (!xmlDir.exists()) {
+		xmlDir.mkdirs()
+	}
+	def shortcutsFile = new File(xmlDir, "shortcuts.xml")
+
+	def xmlWriter = new StringWriter()
+	def xmlMarkup = new MarkupBuilder(new IndentPrinter(xmlWriter, "    ", true))
+
+	xmlMarkup
+		.'shortcuts'('xmlns:android': 'http://schemas.android.com/apk/res/android') {
+			twaManifest.shortcuts.eachWithIndex { s, i ->
+				'shortcut'(
+						'android:shortcutId': 'shortcut' + i,
+						'android:enabled': 'true',
+						'android:icon': '@drawable/' + s.icon,
+						'android:shortcutShortLabel': '@string/shortcut_short_name_' + i,
+						'android:shortcutLongLabel': '@string/shortcut_name_' + i) {
+					'intent'(
+							'android:action': 'android.intent.action.MAIN',
+							'android:targetPackage': twaManifest.applicationId,
+							'android:targetClass': twaManifest.applicationId + '.LauncherActivity',
+							'android:data': s.url)
+					'categories'('android:name': 'android.intent.category.LAUNCHER')
+				}
+			}
+		}
+	shortcutsFile.text = xmlWriter.toString() + '\n'
+}
+
+preBuild.dependsOn(generateShorcutsFile)
+
+// Repositories are provided by settings.gradle
+
+dependencies {
+	implementation fileTree(include: ['*.jar'], dir: 'libs')
+	implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.6.2'
+	// Ensure a browser version that includes TrustedWebActivityIntentBuilder#setLaunchHandlerClientMode
+	implementation('androidx.browser:browser:1.9.0') {
+		version { strictly '1.9.0' }
+	}
+	// Needed for Theme.MaterialComponents.* used by Theme.Twa styles
+	implementation 'com.google.android.material:material:1.12.0'
+}
+

@@ -17,4 +17,49 @@ GlobGram-win32-x64
 release-keystore.jks
 *.jks
 *.keystore
+.p12
+*.p12
+*.pfx
 .secrets-signing.ps1
+/.gradle
+/app/build
+/build
+answers.txt
+manifest-checksum.txt
+.idea/
+
+
+build/reports/problems/problems-report.html
+local.properties
+.gradle-cache/
+.gradle-user/
+.git/
+
+# --- Requested ignores (outputs, caches, local files) ---
+# Desktop outputs
+dist/
+dist-desktop/
+GlobGram-win32-x64/
+
+# Gradle caches
+.gradle/
+.gradle-cache/
+.gradle-user/
+
+# Generic build output
+build/
+
+# Temp/notes and local machine files
+answers.txt
+my-release-key copy.txt
+decoded-keystore.p12
+local.properties
+
+
+
+deps.txt
+rel_build.log
+temp-manifest.webmanifest
+decoded-keystore.p12 (if present)
+my-release-key copy.txt
+local.properties

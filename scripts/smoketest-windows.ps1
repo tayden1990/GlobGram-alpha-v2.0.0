@@ -373,15 +373,28 @@ if (-not $skipTwa -and -not $skipAllTwa) {
     if (-not $path.EndsWith('/')) { $path = $path + '/' }
     # Debug the derived values
     Write-Host "DEBUG: APP_URL=$AppUrl, domain=$domain, path=$path"
-    Write-Host "Initializing bubblewrap from remote manifest: $manifestUrl"
+    
+    # Create a corrected local manifest file for Bubblewrap
+    $localManifest = Join-Path (Get-Location) "temp-manifest.webmanifest"
+    try {
+      $originalManifest = Get-Content "public/manifest.webmanifest" -Raw -ErrorAction Stop
+      $correctedManifest = $originalManifest -replace '"start_url"\s*:\s*"[^"]*"', ('"start_url": "' + $path + '"') -replace '"scope"\s*:\s*"[^"]*"', ('"scope": "' + $path + '"') -replace '"id"\s*:\s*"[^"]*"', ('"id": "' + $path + '"')
+      Set-Content -Path $localManifest -Value $correctedManifest -Encoding UTF8
+      Write-Host "Created corrected local manifest at: $localManifest"
+    } catch {
+      Write-Host "Failed to create local manifest, using remote: $manifestUrl"
+      $localManifest = $manifestUrl
+    }
+    
+    Write-Host "Initializing bubblewrap from manifest: $localManifest"
   $answers = "${domain}`r`n${path}`r`n" + ("`r`n" * 40)
   # Use npx when only a PowerShell wrapper is present to ensure STDIN answers are read correctly
   $useNpxForInit = $bwrapInfo.UseNpx -or ($bwrapInfo.Path -and $bwrapInfo.Path.ToLower().EndsWith('.ps1'))
   if ($useNpxForInit) {
-      # Prefer explicit package invocation to avoid npx prompt
-      $answers | & $bwrapInfo.Path -y @bubblewrap/cli init --manifest "$manifestUrl" --directory . --skipPwaValidation
+      # Use npx to run bubblewrap init with proper syntax
+      $answers | npx @bubblewrap/cli init --manifest "$localManifest" --directory . --skipPwaValidation
     } else {
-      $answers | & $bwrapInfo.Path init --manifest "$manifestUrl" --directory . --skipPwaValidation
+      $answers | & $bwrapInfo.Path init --manifest "$localManifest" --directory . --skipPwaValidation
     }
 
     if (Test-Path "twa-manifest.json") {
