@@ -1,7 +1,5 @@
-# GlobGram (Alpha)
-
-[![Deploy to GitHub Pages](https://github.com/tayden1990/GlobGram-alpha-v2.0.0/actions/workflows/deploy.yml/badge.svg)](https://github.com/tayden1990/GlobGram-alpha-v2.0.0/actions/workflows/deploy.yml)
-[![Create Release](https://github.com/tayden1990/GlobGram-alpha-v2.0.0/actions/workflows/release.yml/badge.svg)](https://github.com/tayden1990/GlobGram-alpha-v2.0.0/actions/workflows/release.yml)
+[![Deploy](https://github.com/tayden1990/GlobGram-alpha-v2.0.0/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/tayden1990/GlobGram-alpha-v2.0.0/actions/workflows/deploy.yml)
+[![Release](https://github.com/tayden1990/GlobGram-alpha-v2.0.0/actions/workflows/release.yml/badge.svg)](https://github.com/tayden1990/GlobGram-alpha-v2.0.0/actions/workflows/release.yml)
 [![Desktop Apps](https://github.com/tayden1990/GlobGram-alpha-v2.0.0/actions/workflows/desktop-nativefier.yml/badge.svg)](https://github.com/tayden1990/GlobGram-alpha-v2.0.0/actions/workflows/desktop-nativefier.yml)
 [![Android TWA](https://github.com/tayden1990/GlobGram-alpha-v2.0.0/actions/workflows/android-twa.yml/badge.svg)](https://github.com/tayden1990/GlobGram-alpha-v2.0.0/actions/workflows/android-twa.yml)
 
