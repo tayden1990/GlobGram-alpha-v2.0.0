@@ -91,14 +91,14 @@ jobs:
             *) ARCH=x64 ;;
           esac
           echo "Building Nativefier app for platform=$PLATFORM arch=$ARCH URL=$APP_URL"
-          nativefier "$APP_URL" \
+          nativefier "$APP_URL" "$OUT_DIR" \
             --name "GlobGram" \
             --internal-urls ".*" \
             --disable-dev-tools \
             --single-instance \
             --platform "$PLATFORM" \
             --arch "$ARCH" \
-            --out "$OUT_DIR"
+            --verbose
           echo "Built contents (dist-desktop root):" && ls -la "$OUT_DIR" || true
           echo "Tree (2 levels):" && find "$OUT_DIR" -maxdepth 2 -print | sed 's/^/  /' || true
       - name: Detect Nativefier output dir
@@ -107,7 +107,10 @@ jobs:
         run: |
           set -euxo pipefail
           OUT_DIR="dist-desktop"
-          APP_DIR=$(find "$OUT_DIR" -mindepth 1 -maxdepth 1 -type d | head -n 1 || true)
+          APP_DIR=$(find "$OUT_DIR" -mindepth 1 -maxdepth 2 -type d \( -name 'GlobGram*' -o -name '*.app' \) | head -n 1 || true)
+          if [ -z "$APP_DIR" ]; then
+            APP_DIR=$(find "$OUT_DIR" -mindepth 1 -maxdepth 2 -type d | head -n 1 || true)
+          fi
           echo "Detected app dir: ${APP_DIR:-<none>}"
           if [ -z "$APP_DIR" ]; then
             echo "No app directory found in $OUT_DIR" >&2
