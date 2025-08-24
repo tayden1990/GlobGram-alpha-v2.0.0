@@ -161,15 +161,15 @@ jobs:
             zip -r release-desktop/GlobGram-macos.zip "$APP_DIR"
           fi
 
-    - name: Archive desktop app (Linux)
+      - name: Archive desktop app (Linux)
         if: runner.os == 'Linux'
         shell: bash
         run: |
           set -euxo pipefail
           mkdir -p release-desktop
-      APP_DIR='${{ steps.detect.outputs.appdir }}'
-      [ -d "$APP_DIR" ] || { echo "App dir not found: $APP_DIR" >&2; exit 1; }
-      zip -r release-desktop/GlobGram-linux.zip "$APP_DIR"
+          APP_DIR='${{ steps.detect.outputs.appdir }}'
+          [ -d "$APP_DIR" ] || { echo "App dir not found: $APP_DIR" >&2; exit 1; }
+          zip -r release-desktop/GlobGram-linux.zip "$APP_DIR"
       - name: Upload Desktop artifact
         uses: actions/upload-artifact@v4
         with:
