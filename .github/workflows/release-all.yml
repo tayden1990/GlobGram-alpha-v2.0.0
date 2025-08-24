@@ -109,10 +109,11 @@ jobs:
           New-Item -ItemType Directory -Force -Path release-desktop | Out-Null
           if (-not (Test-Path 'dist-desktop')) { throw 'dist-desktop not found' }
           Get-ChildItem -Recurse dist-desktop | Write-Host
-          $zip = "release-desktop/GlobGram-windows.zip"
+          $zip = Join-Path -Path (Get-Location).Path -ChildPath 'release-desktop\GlobGram-windows.zip'
           if (Test-Path $zip) { Remove-Item $zip -Force }
-          Compress-Archive -Path dist-desktop\* -DestinationPath $zip -Force
-          Get-Item $zip | Format-List *
+          Write-Host "Creating archive at: $zip"
+          Compress-Archive -Path (Join-Path -Path (Get-Location).Path -ChildPath 'dist-desktop\*') -DestinationPath $zip -Force -CompressionLevel Optimal
+          Write-Host "Archive size (bytes):" (Get-Item $zip).Length
 
       - name: Archive desktop app (macOS)
         if: runner.os == 'macOS'
