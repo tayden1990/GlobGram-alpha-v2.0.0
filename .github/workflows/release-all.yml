@@ -67,7 +67,10 @@ jobs:
         with:
           node-version: '20'
       - name: Install Nativefier
-        run: npm i -g nativefier
+        run: |
+          npm i -g nativefier
+          nativefier --version || true
+          which nativefier || true
       - name: Build
         shell: bash
         run: |
@@ -75,13 +78,36 @@ jobs:
           APP_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/"
           OUT_DIR="dist-desktop"
           mkdir -p "$OUT_DIR"
-          nativefier "$APP_URL" --name "GlobGram" --internal-urls ".*" --disable-dev-tools --single-instance --out "$OUT_DIR"
-          ls -la "$OUT_DIR" || true
+          nativefier "$APP_URL" \
+            --name "GlobGram" \
+            --internal-urls ".*" \
+            --disable-dev-tools \
+            --single-instance \
+            --out "$OUT_DIR"
+          echo "Built contents (dist-desktop):"
+          find "$OUT_DIR" -maxdepth 3 -type f -print | sed 's/^/  /' || true
+      - name: Archive desktop app
+        shell: bash
+        run: |
+          set -euxo pipefail
+          OUT_DIR="dist-desktop"
+          case "${{ runner.os }}" in
+            Windows)
+              pwsh -NoProfile -Command "Compress-Archive -Path ${OUT_DIR}/* -DestinationPath GlobGram-windows.zip -Force" ;;
+            macOS)
+              zip -r GlobGram-macos.zip "$OUT_DIR" ;;
+            Linux)
+              zip -r GlobGram-linux.zip "$OUT_DIR" ;;
+          esac
       - name: Upload Desktop artifact
         uses: actions/upload-artifact@v4
         with:
           name: desktop-${{ runner.os }}
-          path: dist-desktop/**
+          path: |
+            GlobGram-windows.zip
+            GlobGram-macos.zip
+            GlobGram-linux.zip
+          if-no-files-found: error
 
   publish:
     name: Publish Release assets
