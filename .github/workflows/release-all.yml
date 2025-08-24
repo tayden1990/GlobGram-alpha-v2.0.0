@@ -101,25 +101,48 @@ jobs:
             --out "$OUT_DIR"
           echo "Built contents (dist-desktop root):" && ls -la "$OUT_DIR" || true
           echo "Tree (2 levels):" && find "$OUT_DIR" -maxdepth 2 -print | sed 's/^/  /' || true
+      - name: Detect Nativefier output dir
+        id: detect
+        shell: bash
+        run: |
+          set -euxo pipefail
+          OUT_DIR="dist-desktop"
+          APP_DIR=$(find "$OUT_DIR" -mindepth 1 -maxdepth 1 -type d | head -n 1 || true)
+          echo "Detected app dir: ${APP_DIR:-<none>}"
+          if [ -z "$APP_DIR" ]; then
+            echo "No app directory found in $OUT_DIR" >&2
+            exit 1
+          fi
+          # Ensure directory is not empty
+          if [ -z "$(find "$APP_DIR" -type f | head -n 1)" ]; then
+            echo "App directory $APP_DIR is empty" >&2
+            exit 1
+          fi
+          echo "appdir=$APP_DIR" >> "$GITHUB_OUTPUT"
       - name: Archive desktop app (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force -Path release-desktop | Out-Null
-          if (-not (Test-Path 'dist-desktop')) { throw 'dist-desktop not found' }
-          Get-ChildItem -Recurse dist-desktop | Write-Host
+          $AppDir = "${{ steps.detect.outputs.appdir }}"
+          if ([string]::IsNullOrWhiteSpace($AppDir)) { throw 'APP_DIR not provided' }
+          $AppDirFs = (Resolve-Path $AppDir).Path
+          Write-Host "Zipping from app dir: $AppDirFs"
+          Get-ChildItem -Recurse $AppDirFs | Write-Host
           $zip = Join-Path -Path (Get-Location).Path -ChildPath 'release-desktop\GlobGram-windows.zip'
           if (Test-Path $zip) { Remove-Item $zip -Force }
           Write-Host "Creating archive at: $zip"
           try {
-            Compress-Archive -Path 'dist-desktop' -DestinationPath $zip -Force -CompressionLevel Optimal
+            Set-Location $AppDirFs
+            Compress-Archive -Path * -DestinationPath $zip -Force -CompressionLevel Optimal
+            Set-Location -
           } catch {
             Write-Warning "Compress-Archive failed: $($_.Exception.Message)"
           }
           if (-not (Test-Path $zip)) {
             Write-Warning "Zip not found after Compress-Archive; retrying with tar"
-            tar -a -c -f $zip dist-desktop
+            tar -a -c -f $zip -C $AppDirFs .
           }
           if (-not (Test-Path $zip)) { throw "Failed to create zip at $zip" }
           Write-Host "Archive size (bytes):" (Get-Item $zip).Length
@@ -130,19 +153,23 @@ jobs:
         run: |
           set -euxo pipefail
           mkdir -p release-desktop
+          APP_DIR='${{ steps.detect.outputs.appdir }}'
+          [ -d "$APP_DIR" ] || { echo "App dir not found: $APP_DIR" >&2; exit 1; }
           if command -v ditto >/dev/null 2>&1; then
-            ditto -c -k --sequesterRsrc --keepParent dist-desktop release-desktop/GlobGram-macos.zip
+            ditto -c -k --sequesterRsrc --keepParent "$APP_DIR" release-desktop/GlobGram-macos.zip
           else
-            zip -r release-desktop/GlobGram-macos.zip dist-desktop
+            zip -r release-desktop/GlobGram-macos.zip "$APP_DIR"
           fi
 
-      - name: Archive desktop app (Linux)
+    - name: Archive desktop app (Linux)
         if: runner.os == 'Linux'
         shell: bash
         run: |
           set -euxo pipefail
           mkdir -p release-desktop
-          zip -r release-desktop/GlobGram-linux.zip dist-desktop
+      APP_DIR='${{ steps.detect.outputs.appdir }}'
+      [ -d "$APP_DIR" ] || { echo "App dir not found: $APP_DIR" >&2; exit 1; }
+      zip -r release-desktop/GlobGram-linux.zip "$APP_DIR"
       - name: Upload Desktop artifact
         uses: actions/upload-artifact@v4
         with:
