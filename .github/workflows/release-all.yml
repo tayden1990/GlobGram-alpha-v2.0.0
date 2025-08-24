@@ -82,7 +82,7 @@ jobs:
           # Select platform/arch explicitly for consistent outputs
           case "${{ runner.os }}" in
             Windows) PLATFORM=windows ;;
-            macOS)   PLATFORM=macos ;;
+            macOS)   PLATFORM=darwin ;;
             Linux)   PLATFORM=linux ;;
           esac
           MACHINE_ARCH=$(uname -m || echo x86_64)
@@ -101,25 +101,38 @@ jobs:
             --out "$OUT_DIR"
           echo "Built contents (dist-desktop root):" && ls -la "$OUT_DIR" || true
           echo "Tree (2 levels):" && find "$OUT_DIR" -maxdepth 2 -print | sed 's/^/  /' || true
-      - name: Archive desktop app
+      - name: Archive desktop app (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path release-desktop | Out-Null
+          if (-not (Test-Path 'dist-desktop')) { throw 'dist-desktop not found' }
+          Get-ChildItem -Recurse dist-desktop | Write-Host
+          $zip = "release-desktop/GlobGram-windows.zip"
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          Compress-Archive -Path dist-desktop\* -DestinationPath $zip -Force
+          Get-Item $zip | Format-List *
+
+      - name: Archive desktop app (macOS)
+        if: runner.os == 'macOS'
         shell: bash
         run: |
           set -euxo pipefail
-          OUT_DIR="dist-desktop"
-          echo "Archiving contents of $OUT_DIR:"; ls -la "$OUT_DIR" || true
           mkdir -p release-desktop
-          case "${{ runner.os }}" in
-            Windows)
-              powershell -NoProfile -Command "if (-not (Test-Path 'dist-desktop')) { throw 'dist-desktop not found' } ; Compress-Archive -Path 'dist-desktop/*' -DestinationPath 'release-desktop/GlobGram-windows.zip' -Force" ;;
-            macOS)
-              if command -v ditto >/dev/null 2>&1; then
-                ditto -c -k --sequesterRsrc --keepParent "$OUT_DIR" "release-desktop/GlobGram-macos.zip"
-              else
-                zip -r "release-desktop/GlobGram-macos.zip" "$OUT_DIR"
-              fi ;;
-            Linux)
-              zip -r "release-desktop/GlobGram-linux.zip" "$OUT_DIR" ;;
-          esac
+          if command -v ditto >/dev/null 2>&1; then
+            ditto -c -k --sequesterRsrc --keepParent dist-desktop release-desktop/GlobGram-macos.zip
+          else
+            zip -r release-desktop/GlobGram-macos.zip dist-desktop
+          fi
+
+      - name: Archive desktop app (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p release-desktop
+          zip -r release-desktop/GlobGram-linux.zip dist-desktop
       - name: Upload Desktop artifact
         uses: actions/upload-artifact@v4
         with:
