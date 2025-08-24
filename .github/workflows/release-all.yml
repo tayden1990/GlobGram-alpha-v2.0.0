@@ -67,6 +67,7 @@ jobs:
         with:
           node-version: '20'
       - name: Install Nativefier
+        shell: bash
         run: |
           npm i -g nativefier
           nativefier --version || true
@@ -91,22 +92,31 @@ jobs:
         run: |
           set -euxo pipefail
           OUT_DIR="dist-desktop"
+          APP_DIR=$(find "$OUT_DIR" -mindepth 1 -maxdepth 1 -type d -name 'GlobGram*' | head -n 1 || true)
+          echo "Detected app dir: ${APP_DIR:-<none>}"
+          mkdir -p release-desktop
+          if [ -z "$APP_DIR" ]; then
+            echo "No Nativefier output found to archive" >&2
+            exit 1
+          fi
           case "${{ runner.os }}" in
             Windows)
-              pwsh -NoProfile -Command "Compress-Archive -Path ${OUT_DIR}/* -DestinationPath GlobGram-windows.zip -Force" ;;
+              powershell -NoProfile -Command "Compress-Archive -Path '${APP_DIR}/*' -DestinationPath 'release-desktop/GlobGram-windows.zip' -Force" ;;
             macOS)
-              zip -r GlobGram-macos.zip "$OUT_DIR" ;;
+              # Preserve macOS app bundle metadata when present
+              if command -v ditto >/dev/null 2>&1; then
+                ditto -c -k --sequesterRsrc --keepParent "$APP_DIR" "release-desktop/GlobGram-macos.zip"
+              else
+                zip -r "release-desktop/GlobGram-macos.zip" "$APP_DIR"
+              fi ;;
             Linux)
-              zip -r GlobGram-linux.zip "$OUT_DIR" ;;
+              zip -r "release-desktop/GlobGram-linux.zip" "$APP_DIR" ;;
           esac
       - name: Upload Desktop artifact
         uses: actions/upload-artifact@v4
         with:
           name: desktop-${{ runner.os }}
-          path: |
-            GlobGram-windows.zip
-            GlobGram-macos.zip
-            GlobGram-linux.zip
+          path: release-desktop/*.zip
           if-no-files-found: error
 
   publish:
