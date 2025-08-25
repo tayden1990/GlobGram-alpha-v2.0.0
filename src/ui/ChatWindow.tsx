@@ -9,7 +9,10 @@ import { THUMB_SIZE, PRELOAD_ROOT_MARGIN } from './constants'
 import { log } from './logger'
 import { useI18n } from '../i18n'
 import { CONFIG } from '../config'
+import { CallPanel } from './CallPanel'
 import { useIsMobile } from './useIsMobile'
+import { generateSecretKey, getPublicKey } from 'nostr-tools'
+import { bytesToHex } from '../nostr/utils'
 
 export function ChatWindow() {
   const { t } = useI18n()
@@ -17,6 +20,7 @@ export function ChatWindow() {
   const selectedPeer = useChatStore(s => s.selectedPeer)
   const conversations = useChatStore(s => s.conversations)
   const myPubkey = useChatStore(s => s.myPubkey)
+  const setMyPubkey = useChatStore(s => s.setMyPubkey)
   const removeMessage = useChatStore(s => s.removeMessage)
   const updateMessage = useChatStore(s => s.updateMessage)
   const clearConversation = useChatStore(s => s.clearConversation)
@@ -117,6 +121,42 @@ export function ChatWindow() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
+
+  // LiveKit call state for 1:1 DMs
+  const [callOpen, setCallOpen] = useState(false)
+  const [incomingCall, setIncomingCall] = useState<null | { from: string; room: string; evtId: string }>(null)
+  const dmRoomName = useMemo(() => {
+    if (!selectedPeer || !myPubkey) return null
+    const a = myPubkey.toLowerCase()
+    const b = selectedPeer.toLowerCase()
+    const [x, y] = a < b ? [a, b] : [b, a]
+    return `dm-${x.slice(0, 12)}-${y.slice(0, 12)}`
+  }, [selectedPeer, myPubkey])
+
+  // Listen for incoming call events from engine
+  useEffect(() => {
+    const handler = (e: any) => {
+      try {
+        const d = e?.detail
+        if (!d || !selectedPeer) return
+        // only show banner for current DM convo
+        if (d.from?.toLowerCase() === selectedPeer.toLowerCase()) {
+          if (!dmRoomName || d.room === dmRoomName) {
+            setIncomingCall({ from: d.from, room: d.room, evtId: d.evtId })
+          }
+        }
+      } catch {}
+    }
+    window.addEventListener('incoming-call', handler as any)
+    return () => window.removeEventListener('incoming-call', handler as any)
+  }, [selectedPeer, dmRoomName])
+
+  // Auto-dismiss incoming call after 45s
+  useEffect(() => {
+    if (!incomingCall) return
+    const to = setTimeout(() => setIncomingCall(null), 45000)
+    return () => clearTimeout(to)
+  }, [incomingCall])
 
   // Track footer height (desktop) and update spacer to prevent overlap
   useEffect(() => {
@@ -430,9 +470,14 @@ export function ChatWindow() {
               >
                 <div style={{ display: 'flex', justifyContent: m.from === myPubkey ? 'flex-end' : 'flex-start' }}>
                   <div className="msg-grid" style={{ maxWidth: 520, display: 'grid', gridTemplateColumns: '1fr', gridAutoFlow: 'row', gridAutoRows: 'max-content', rowGap: 12, alignItems: 'start' }}>
-                    {m.text && (
+                    {m.text && !m.system && (
                       <div style={{ background: 'var(--bubble)', color: 'var(--bubble-fg)', borderRadius: 12, padding: '8px 10px' }}>
                         {renderTextWithLinks(m.text)}
+                      </div>
+                    )}
+                    {m.text && m.system && (
+                      <div style={{ alignSelf: 'center', justifySelf: 'center', maxWidth: 420, textAlign: 'center', fontSize: 12, color: 'var(--muted)' }}>
+                        {m.text}
                       </div>
                     )}
                     {/* Render single legacy attachment */}
@@ -747,6 +792,32 @@ export function ChatWindow() {
             try { (e.target as HTMLInputElement).value = '' } catch {}
           }} />
           <button title={t('chat.attachFiles')!} onClick={() => (document.getElementById('cw-file') as HTMLInputElement)?.click()} style={{ padding: '6px 10px' }}>📎</button>
+          <button
+            title={CONFIG.LIVEKIT_ENABLED ? (t('chat.startCall') || 'Start call') : 'Calls not configured'}
+            onClick={async () => {
+              if (!CONFIG.LIVEKIT_ENABLED) { show('Calls not configured', 'error'); return }
+              if (!selectedPeer) { show('No peer selected', 'error'); return }
+              let sk = localStorage.getItem('nostr_sk')
+              if (!sk) {
+                const secret = generateSecretKey()
+                const hexd = bytesToHex(secret)
+                const pub = getPublicKey(secret)
+                try { localStorage.setItem('nostr_sk', hexd) } catch {}
+                setMyPubkey(pub)
+              }
+              // Create deterministic 1:1 room id and ring peer via DM envelope
+              const room = dmRoomName
+              if (!room) { setCallOpen(true); return }
+              setCallOpen(true)
+              // Send a call_invite DM so the other side gets a ring banner
+              const body = { type: 'call_invite', room }
+              try {
+                const mySk = localStorage.getItem('nostr_sk')
+                if (mySk) await sendDM(mySk, selectedPeer, { t: JSON.stringify(body) })
+              } catch {}
+            }}
+            style={{ padding: '6px 10px' }}
+          >📞</button>
           {/* camera photo capture */}
           {!cameraOn ? (
             <button title={t('chat.takePhoto')!} onClick={async () => {
@@ -966,6 +1037,62 @@ function formatBytes(bytes: number): string {
           </div>
         </div>
       </footer>
+      {CONFIG.LIVEKIT_ENABLED && callOpen && dmRoomName && (
+        <CallPanel
+          open={callOpen}
+          roomName={dmRoomName}
+          identity={myPubkey || (localStorage.getItem('anon_id') || (() => { const v = 'guest-' + Math.random().toString(36).slice(2, 8); try { localStorage.setItem('anon_id', v) } catch {} return v })())}
+          onClose={() => setCallOpen(false)}
+      onEnded={async (info) => {
+            try {
+              const peer = selectedPeer
+              if (!peer) return
+              const sk = localStorage.getItem('nostr_sk')
+        if (!sk || !info.hadConnected || info.iAmLeader === false) return
+              // Compose a concise, localized-ish summary
+              const start = info.startedAt ? new Date(info.startedAt) : null
+              const end = info.endedAt ? new Date(info.endedAt) : new Date()
+              const durMs = info.durationMs ?? (start ? (end.getTime() - start.getTime()) : undefined)
+              const durSec = durMs != null ? Math.round(durMs / 1000) : undefined
+              const durFmt = durSec != null ? (
+                durSec >= 3600 ? `${Math.floor(durSec/3600)}h ${Math.floor((durSec%3600)/60)}m ${durSec%60}s` : durSec >= 60 ? `${Math.floor(durSec/60)}m ${durSec%60}s` : `${durSec}s`
+              ) : 'unknown'
+              const me = myPubkey || 'me'
+              const who = `${me.slice(0, 8)}… → ${peer.slice(0, 8)}…`
+              const startedS = start ? start.toLocaleString() : 'n/a'
+              const endedS = end.toLocaleString()
+              const reason = info.reason ? ` (${info.reason})` : ''
+              const body = `📞 Call summary${reason}\nWho: ${who}\nRoom: ${info.room}\nStarted: ${startedS}\nEnded: ${endedS}\nDuration: ${durFmt}`
+              await sendDM(sk, peer, { t: body })
+            } catch (e) {
+              try { log(`Call summary DM failed: ${String(e)}`) } catch {}
+            }
+          }}
+        />
+      )}
+      {/* Incoming call banner */}
+      {incomingCall && (
+        <div role="dialog" aria-live="assertive" style={{ position:'fixed', left: 16, bottom: 88, zIndex: 2000, background: 'var(--card)', color: 'var(--fg)', border: '1px solid var(--border)', borderRadius: 10, padding: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+            <span>📞 {t('call.incoming') || 'Incoming call'}</span>
+            <span style={{ fontSize:12, color:'var(--muted)' }}>{incomingCall.from.slice(0,8)}…</span>
+            <div style={{ marginLeft:'auto', display:'inline-flex', gap:8 }}>
+              <button onClick={async () => { 
+                const sk = localStorage.getItem('nostr_sk')
+                const peer = incomingCall.from
+                setIncomingCall(null); setCallOpen(true)
+                try { if (sk) await sendDM(sk, peer, { t: JSON.stringify({ type:'call_accept', room: dmRoomName }) }) } catch {}
+              }}>{t('call.accept') || 'Accept'}</button>
+              <button onClick={async () => {
+                const sk = localStorage.getItem('nostr_sk')
+                const peer = incomingCall.from
+                setIncomingCall(null)
+                try { if (sk) await sendDM(sk, peer, { t: JSON.stringify({ type:'call_reject', room: dmRoomName }) }) } catch {}
+              }}>{t('call.reject') || 'Reject'}</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Upload configuration banner */}
       {uploadBannerMsg && (
         <div role="status" aria-live="polite" style={{ position: 'sticky', bottom: 0, padding: '6px 10px', fontSize: 12, color: 'var(--muted)', background: 'var(--bg)', borderTop: '1px dashed var(--border)' }}>

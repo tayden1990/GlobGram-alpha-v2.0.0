@@ -20,6 +20,10 @@ import { useSettingsStore } from './settingsStore'
 import { getLogs, clearLogs, onLog, log, setLogMinLevel, getPersistedLogsText, clearPersistedLogs } from './logger'
 import { useI18n } from '../i18n'
 import { BUILD_INFO } from '../version'
+import { CallPanel } from './CallPanel'
+import { CONFIG } from '../config'
+import { IconInvite, IconLink } from './icons'
+import { useContactStore } from '../state/contactStore'
 // Lazy-load QRCode only when needed to reduce initial bundle size
 
 const ChatWindowLazy = lazy(() => import('./ChatWindow').then(m => ({ default: m.ChatWindow })))
@@ -27,6 +31,7 @@ const RoomWindowLazy = lazy(() => import('./RoomWindow').then(m => ({ default: m
 
 export default function App() {
   const { t, locale, setLocale, availableLocales } = useI18n()
+  const aliases = useContactStore(s => s.aliases)
   // Helper: safely get a localized invite caption/message without leaking raw keys
   const getInviteMessage = () => {
     const cap = t('invite.caption') as string
@@ -158,6 +163,7 @@ export default function App() {
   const roomHandleRef = useRef<HTMLButtonElement | null>(null)
   const inviteCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const setMyPubkey = useChatStore(s => s.setMyPubkey)
+  const myPubkey = useChatStore(s => s.myPubkey)
   const powMining = useSettingsStore(s => s.powMining)
   const setPowMining = useSettingsStore(s => s.setPowMining)
   const keyFileRef = useRef<HTMLInputElement | null>(null)
@@ -178,6 +184,42 @@ export default function App() {
   const [adsDisabled, setAdsDisabled] = useState<boolean>(() => {
     try { return localStorage.getItem('ads_disabled') === '1' } catch { return false }
   })
+
+  // Global CallPanel state (for deep-links and FAB-created calls)
+  const [globalCallOpen, setGlobalCallOpen] = useState(false)
+  const [globalCallRoom, setGlobalCallRoom] = useState<string | null>(null)
+  const [incomingGlobalCall, setIncomingGlobalCall] = useState<null | { from: string; room: string; evtId: string }>(null)
+  const ringtoneRef = useRef<HTMLAudioElement | null>(null)
+  // Preload ringtone on first user interaction to satisfy autoplay policies
+  useEffect(() => {
+    const onFirstGesture = () => {
+      try {
+        if (localStorage.getItem('ringtone_preloaded') === '1') return
+        const a = new Audio('/sounds/ringtone-soft.mp3')
+        a.loop = false
+        a.volume = 0.001
+        a.play().then(() => { a.pause(); try { a.currentTime = 0 } catch {}; localStorage.setItem('ringtone_preloaded', '1') }).catch(() => {
+          // even if it fails, set the flag to avoid spamming
+          try { localStorage.setItem('ringtone_preloaded', '1') } catch {}
+        })
+      } catch {}
+      try {
+        window.removeEventListener('pointerdown', onFirstGesture as any)
+        window.removeEventListener('keydown', onFirstGesture as any)
+        window.removeEventListener('touchstart', onFirstGesture as any)
+      } catch {}
+    }
+    window.addEventListener('pointerdown', onFirstGesture as any, { once: true } as any)
+    window.addEventListener('keydown', onFirstGesture as any, { once: true } as any)
+    window.addEventListener('touchstart', onFirstGesture as any, { once: true } as any)
+    return () => {
+      try {
+        window.removeEventListener('pointerdown', onFirstGesture as any)
+        window.removeEventListener('keydown', onFirstGesture as any)
+        window.removeEventListener('touchstart', onFirstGesture as any)
+      } catch {}
+    }
+  }, [])
   // Per-ad visibility overrides (persisted)
   const [adDisabledIds, setAdDisabledIds] = useState<Set<string>>(() => {
     try {
@@ -356,6 +398,26 @@ export default function App() {
   // Handle invite links: ?invite=<npub|hex>&lang=<locale>
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
+    // Handle call deep-link first: ?call=<roomId>
+    const call = params.get('call') || ''
+    if (call && CONFIG.LIVEKIT_ENABLED) {
+      try { log(`DeepLink.call: ${call}`) } catch {}
+      // Ensure account exists so identity is stable
+      let sk = localStorage.getItem('nostr_sk')
+      if (!sk) {
+        const secret = generateSecretKey()
+        const hexd = bytesToHex(secret)
+        const pub = getPublicKey(secret)
+        try { localStorage.setItem('nostr_sk', hexd) } catch {}
+        setMyPubkey(pub)
+        sk = hexd
+      }
+      setGlobalCallRoom(call)
+      setGlobalCallOpen(true)
+      // Clean URL of query params to avoid re-triggering
+      try { window.history.replaceState({}, '', window.location.pathname + window.location.hash) } catch {}
+      return
+    }
     // Accept alternate param names just in case
     const invite = params.get('invite') || params.get('inviter') || ''
     // If language override present, apply it immediately so translations load before sending first message
@@ -388,6 +450,40 @@ export default function App() {
       // If no key, it will be created during onboarding
     }
   }, [])
+
+  // Global incoming call banner + soft ringtone
+  useEffect(() => {
+    const handler = (e: any) => {
+      const d = e?.detail
+      if (!d || !d.from || !d.room) return
+      setIncomingGlobalCall({ from: d.from, room: d.room, evtId: d.evtId })
+      // try to play a soft ringtone (best-effort; may require prior gesture on iOS)
+      try {
+        if (!ringtoneRef.current) {
+          const audio = new Audio('/sounds/ringtone-soft.mp3')
+          audio.loop = true
+          audio.volume = 0.25
+          ringtoneRef.current = audio
+        }
+        ringtoneRef.current?.play().catch(()=>{})
+      } catch {}
+    }
+    window.addEventListener('incoming-call', handler as any)
+    return () => window.removeEventListener('incoming-call', handler as any)
+  }, [])
+
+  // Stop ringtone when banner dismissed or call starts
+  useEffect(() => {
+    if (!incomingGlobalCall && !globalCallOpen) {
+      try { ringtoneRef.current?.pause(); if (ringtoneRef.current) ringtoneRef.current.currentTime = 0 } catch {}
+    }
+  }, [incomingGlobalCall, globalCallOpen])
+  // Auto-dismiss global call banner after 45s
+  useEffect(() => {
+    if (!incomingGlobalCall) return
+    const to = setTimeout(() => setIncomingGlobalCall(null), 45000)
+    return () => clearTimeout(to)
+  }, [incomingGlobalCall])
 
   // Function to process invite greeting
   const processInviteGreeting = async (inviterHex: string, urlLang?: string) => {
@@ -1280,7 +1376,49 @@ export default function App() {
               // On any error, open modal as fallback
               setInviteOpen(true)
             }
-            }}>{t('actions.invite')}</button>
+            }} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <IconInvite size={18} /> {t('actions.invite')}
+            </button>
+            {CONFIG.LIVEKIT_ENABLED && (
+              <button
+                title={(t('actions.instantMeeting') as string) || 'Instant meeting link'}
+                aria-label={(t('actions.instantMeeting') as string) || 'Instant meeting link'}
+                onClick={async () => {
+                  // Ensure we have an account so identity is stable
+                  let sk = localStorage.getItem('nostr_sk')
+                  if (!sk) {
+                    const secret = generateSecretKey()
+                    const hexd = bytesToHex(secret)
+                    const pub = getPublicKey(secret)
+                    localStorage.setItem('nostr_sk', hexd)
+                    setMyPubkey(pub)
+                    sk = hexd
+                  }
+                  const callId = `call-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+                  let link = ''
+                  try {
+                    const base = (import.meta as any).env?.BASE_URL || '/'
+                    const u = new URL(base, window.location.origin)
+                    u.searchParams.set('call', callId)
+                    link = u.toString()
+                  } catch {
+                    link = `${window.location.origin}?call=${encodeURIComponent(callId)}`
+                  }
+                  try {
+                    await navigator.clipboard.writeText(link)
+                    emitToast(t('common.copied') || 'Copied link to clipboard', 'success')
+                  } catch {
+                    prompt(t('common.copyLink') || 'Copy this link', link)
+                  }
+                  // Optionally open the call immediately
+                  setGlobalCallRoom(callId)
+                  setGlobalCallOpen(true)
+                }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                <IconLink size={18} /> {(t('actions.instantMeeting') as string) || 'Instant meeting'}
+              </button>
+            )}
           <label style={{ fontSize: 8, color: 'var(--muted)' }}>{t('actions.theme')}</label>
           <select value={theme} onChange={(e) => applyTheme(e.target.value as any)}>
             <option value="system">{t('theme.system')}</option>
@@ -1348,6 +1486,43 @@ export default function App() {
                           type="checkbox"
                           checked={!adDisabledIds.has(a.id)}
                           onChange={(e) => {
+              {/* Global incoming call banner */}
+              {incomingGlobalCall && (
+                <div role="dialog" aria-live="assertive" style={{ position:'fixed', left: 16, right: 16, bottom: 24, zIndex: 3000, background: 'var(--card)', color: 'var(--fg)', border: '1px solid var(--border)', borderRadius: 12, padding: 12, boxShadow: '0 10px 28px rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ fontSize: 18 }}>📞</div>
+                  <div style={{ display:'grid' }}>
+                    <div style={{ fontWeight: 600 }}>{t('call.incoming') || 'Incoming call'}</div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                      {(() => {
+                        const from = incomingGlobalCall.from
+                        const name = aliases[from]
+                        return name ? `${name} (${from.slice(0,8)}…)` : `${from.slice(0,8)}…`
+                      })()}
+                    </div>
+                  </div>
+                  <div style={{ marginLeft:'auto', display:'inline-flex', gap:8 }}>
+                    <button onClick={async () => {
+                      const sk = localStorage.getItem('nostr_sk')
+                      const peer = incomingGlobalCall.from
+                      setIncomingGlobalCall(null)
+                      // stop ringtone
+                      try { ringtoneRef.current?.pause(); if (ringtoneRef.current) ringtoneRef.current.currentTime = 0 } catch {}
+                      // Send call_accept so caller gets feedback
+                      try { if (sk) await sendDM(sk, peer, { t: JSON.stringify({ type:'call_accept', room: incomingGlobalCall.room }) }) } catch {}
+                      // Open call panel for provided room
+                      setGlobalCallRoom(incomingGlobalCall.room)
+                      setGlobalCallOpen(true)
+                    }}>{t('call.accept') || 'Accept'}</button>
+                    <button onClick={async () => {
+                      const sk = localStorage.getItem('nostr_sk')
+                      const peer = incomingGlobalCall.from
+                      setIncomingGlobalCall(null)
+                      try { ringtoneRef.current?.pause(); if (ringtoneRef.current) ringtoneRef.current.currentTime = 0 } catch {}
+                      try { if (sk) await sendDM(sk, peer, { t: JSON.stringify({ type:'call_reject', room: incomingGlobalCall.room }) }) } catch {}
+                    }}>{t('call.reject') || 'Reject'}</button>
+                  </div>
+                </div>
+              )}
                             setAdDisabledIds(prev => {
                               const next = new Set(prev)
                               if (e.target.checked) next.delete(a.id); else next.add(a.id)
@@ -1855,6 +2030,31 @@ export default function App() {
                 if (!hex) { alert(t('errors.invalidPubkey')); return }
                 selectPeer(hex)
               }} aria-label={t('fab.startNewChat')} style={{ background: 'var(--accent)', color: '#fff' }}>+ {t('fab.newChat')}</button>
+              {CONFIG.LIVEKIT_ENABLED && (
+                <button onClick={async () => {
+                  setFabOpen(false)
+                  // Generate a shareable call id and link
+                  const callId = `call-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+                  let link = ''
+                  try {
+                    const base = (import.meta as any).env?.BASE_URL || '/'
+                    const u = new URL(base, window.location.origin)
+                    u.searchParams.set('call', callId)
+                    link = u.toString()
+                  } catch {
+                    link = `${window.location.origin}?call=${encodeURIComponent(callId)}`
+                  }
+                  try {
+                    await navigator.clipboard.writeText(link)
+                    emitToast(t('common.copied') || 'Copied link to clipboard', 'success')
+                  } catch {
+                    prompt(t('common.copyLink') || 'Copy this link', link)
+                  }
+                  // Optionally start the call now
+                  setGlobalCallRoom(callId)
+                  setGlobalCallOpen(true)
+                }} aria-label={t('fab.createCall') || 'Create call'} style={{ background: 'var(--accent)', color: '#fff' }}>+ {(t('fab.createCall') || 'New call')}</button>
+              )}
               <button onClick={async () => {
                 setFabOpen(false)
                 const name = prompt(t('fab.roomNameOptional')!) || undefined
@@ -1869,6 +2069,45 @@ export default function App() {
           <button aria-label={t('fab.openActions')} onClick={() => { if (navigator.vibrate) try { navigator.vibrate(10) } catch {}; setFabOpen(v => !v) }} style={{ width: 56, height: 56, borderRadius: 999, background: 'var(--accent)', color: '#fff', border: 'none', boxShadow: '0 6px 16px rgba(0,0,0,0.2)', fontSize: 22 }}>＋</button>
         </div>
       )}
+    {/* Global CallPanel overlay (deep-link / FAB) */}
+    {CONFIG.LIVEKIT_ENABLED && (
+      <CallPanel
+        open={globalCallOpen}
+        roomName={globalCallRoom || 'call'}
+        identity={myPubkey || (localStorage.getItem('anon_id') || (() => { const v = 'guest-' + Math.random().toString(36).slice(2, 8); try { localStorage.setItem('anon_id', v) } catch {} return v })())}
+        onClose={() => { setGlobalCallOpen(false); setGlobalCallRoom(null) }}
+    onEnded={async (info) => {
+          try {
+      if (!info.hadConnected || info.iAmLeader === false) return
+            const start = info.startedAt ? new Date(info.startedAt) : null
+            const end = info.endedAt ? new Date(info.endedAt) : new Date()
+            const durMs = info.durationMs ?? (start ? (end.getTime() - start.getTime()) : undefined)
+            const durSec = durMs != null ? Math.round(durMs / 1000) : undefined
+            const durFmt = durSec != null ? (
+              durSec >= 3600 ? `${Math.floor(durSec/3600)}h ${Math.floor((durSec%3600)/60)}m ${durSec%60}s` : durSec >= 60 ? `${Math.floor(durSec/60)}m ${durSec%60}s` : `${durSec}s`
+            ) : 'unknown'
+            const reason = info.reason ? ` (${info.reason})` : ''
+            const plist = (info.participants || []).map(p => (String(p).slice(0,8) + '…')).join(', ')
+            const body = `📞 Call summary${reason}\nRoom: ${info.room}\nParticipants: ${plist || 'n/a'}\nStarted: ${start ? start.toLocaleString() : 'n/a'}\nEnded: ${end.toLocaleString()}\nDuration: ${durFmt}`
+            const sk = localStorage.getItem('nostr_sk')
+            if (sk) {
+              const sent = new Set<string>()
+              // If the global call corresponds to currently selected DM peer, DM them
+              const peer = useChatStore.getState().selectedPeer
+              if (peer) { await sendDM(sk, peer, { t: body }).catch(()=>{}); sent.add(peer) }
+              // DM all other participants (exclude self)
+              const mine = myPubkey || ''
+              for (const p of (info.participants || [])) {
+                const to = String(p || '')
+                if (!to || to === mine || sent.has(to)) continue
+                await sendDM(sk, to, { t: body }).catch(()=>{})
+                sent.add(to)
+              }
+            }
+          } catch {}
+        }}
+      />
+    )}
     </div>
     </ToastProvider>
   )

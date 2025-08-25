@@ -30,4 +30,15 @@ export const CONFIG = {
   // NIP-98 debug verbosity: when true, try many header permutations and log more.
   // Set to false to keep dev console cleaner (minimal attempts, no second-wave matrix).
   NIP98_VERBOSE: false,
+
+  // LiveKit Cloud configuration (used for voice/video calls)
+    LIVEKIT_ENABLED: true,
+  // Example: 'wss://your-livekit-host' (without trailing slash)
+  LIVEKIT_WS_URL: 'wss://globgram-aobll9kx.livekit.cloud',
+  // Public URL of your token service (we'll scaffold a Cloudflare Worker endpoint)
+    // Public URL of your token service (Cloudflare Worker) ending with /token
+    // Example: 'https://globgram-livekit-token.yourname.workers.dev/token'
+    LIVEKIT_TOKEN_ENDPOINT: 'https://globgram-livekit-token.t-ak-sa.workers.dev/token',
+  // Optional: room name prefix to avoid collisions across environments
+  LIVEKIT_ROOM_PREFIX: 'globgram',
 }

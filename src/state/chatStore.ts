@@ -8,6 +8,7 @@ export type ChatMessage = {
   to: string // pubkey hex
   ts: number
   text?: string
+  system?: boolean // system/local note (status)
   attachment?: string // data URL (legacy single)
   attachments?: string[] // data URLs (new multi)
   name?: string // suggested filename for single attachment

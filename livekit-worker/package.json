@@ -1,0 +1,17 @@
+{
+  "name": "globgram-livekit-token",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "wrangler": "^4.32.0",
+    "typescript": "^5.5.4"
+  },
+  "dependencies": {
+    "livekit-server-sdk": "^2.4.6"
+  },
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  }
+}

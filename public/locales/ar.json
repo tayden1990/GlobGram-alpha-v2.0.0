@@ -215,5 +215,11 @@
 	"chat.kind.audio": "صوت",
 	"chat.kind.file": "ملف",
 	"chat.empty": "لا توجد دردشات بعد",
-	"input.placeholder": "اكتب رسالة"
+		"input.placeholder": "اكتب رسالة"
+		,
+		"call.incoming": "مكالمة واردة",
+		"call.accept": "قبول",
+		"call.reject": "رفض",
+		"call.acceptedNote": "تم قبول المكالمة",
+		"call.declinedNote": "تم رفض المكالمة"
 }

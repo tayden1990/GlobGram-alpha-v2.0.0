@@ -215,5 +215,11 @@
 	"chat.kind.audio": "áudio",
 	"chat.kind.file": "arquivo",
 	"chat.empty": "Ainda não há chats",
-	"input.placeholder": "Digite uma mensagem"
+		"input.placeholder": "Digite uma mensagem"
+		,
+		"call.incoming": "Chamada recebida",
+		"call.accept": "Atender",
+		"call.reject": "Recusar",
+		"call.acceptedNote": "Chamada aceita",
+		"call.declinedNote": "Chamada recusada"
 }

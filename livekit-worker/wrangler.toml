@@ -1,0 +1,9 @@
+name = "globgram-livekit-token"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+workers_dev = true
+account_id = "5495e3d654926da275f24c99e7c5edfb"
+compatibility_flags = ["nodejs_compat"]
+[vars]
+# LIVEKIT_WS_URL will be used only for sanity checks/responses; JWT is signed with API key/secret
+LIVEKIT_WS_URL = "wss://globgram-aobll9kx.livekit.cloud"

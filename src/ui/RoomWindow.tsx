@@ -9,6 +9,7 @@ import { THUMB_SIZE, PRELOAD_ROOT_MARGIN } from './constants'
 import { useIsMobile } from './useIsMobile'
 import { useI18n } from '../i18n'
 import { CONFIG } from '../config'
+import { CallPanel } from './CallPanel'
 
 export function RoomWindow() {
 	const { t } = useI18n()
@@ -36,6 +37,8 @@ export function RoomWindow() {
 	const videoChunksRef = useRef<Blob[]>([])
 	const videoStreamRef = useRef<MediaStream | null>(null)
 	const { show } = useToast()
+	// call UI
+	const [callOpen, setCallOpen] = useState(false)
 		// media encryption
 		const [encOn, setEncOn] = useState(false)
 		const [encPass, setEncPass] = useState('')
@@ -349,6 +352,34 @@ export function RoomWindow() {
 				</div>
 			)}
 
+			{/* LiveKit Call Panel overlay */}
+			{CONFIG.LIVEKIT_ENABLED && (
+				<CallPanel
+					open={callOpen}
+					roomName={roomId}
+					identity={myPubkey || (localStorage.getItem('anon_id') || (() => { const v = 'guest-' + Math.random().toString(36).slice(2, 8); try { localStorage.setItem('anon_id', v) } catch {} return v })())}
+					onClose={() => setCallOpen(false)}
+		    onEnded={async (info) => {
+						try {
+							const sk = localStorage.getItem('nostr_sk')
+			    if (!sk || !roomId || !info.hadConnected || info.iAmLeader === false) return
+							const start = info.startedAt ? new Date(info.startedAt) : null
+							const end = info.endedAt ? new Date(info.endedAt) : new Date()
+							const durMs = info.durationMs ?? (start ? (end.getTime() - start.getTime()) : undefined)
+							const durSec = durMs != null ? Math.round(durMs / 1000) : undefined
+							const durFmt = durSec != null ? (
+								durSec >= 3600 ? `${Math.floor(durSec/3600)}h ${Math.floor((durSec%3600)/60)}m ${durSec%60}s` : durSec >= 60 ? `${Math.floor(durSec/60)}m ${durSec%60}s` : `${durSec}s`
+							) : 'unknown'
+							const starter = (myPubkey || 'me').slice(0, 8) + '…'
+							const plist = (info.participants || []).map(p => (String(p).slice(0,8) + '…')).join(', ')
+							const reason = info.reason ? ` (${info.reason})` : ''
+							const body = `📞 Call summary${reason}\nStarter: ${starter}\nRoom: ${info.room}\nParticipants: ${plist || 'n/a'}\nStarted: ${start ? start.toLocaleString() : 'n/a'}\nEnded: ${end.toLocaleString()}\nDuration: ${durFmt}`
+							await sendRoom(sk, roomId, body)
+						} catch {}
+					}}
+				/>
+			)}
+
 			<footer ref={footerRef as any} className="sticky-footer">
 				<div style={{ width: '100%' }}>
 				<textarea rows={5} placeholder={t('input.placeholder')!} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={async (e) => {
@@ -528,6 +559,16 @@ export function RoomWindow() {
 					{t('chat.autoLoadMedia') || 'Auto-load media'}
 				</label>
 				<div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+					<button
+						title={CONFIG.LIVEKIT_ENABLED ? (t('chat.startCall') || 'Start call') : 'Calls not configured'}
+						onClick={() => {
+							if (!CONFIG.LIVEKIT_ENABLED) { show('Calls not configured', 'error'); return }
+							setCallOpen(true)
+						}}
+						style={{ padding: '6px 10px' }}
+					>
+						📞
+					</button>
 					{sending && (
 						<span style={{ fontSize: 12, color: 'var(--muted)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
 							<span style={{ width: 120, height: 6, background: 'var(--border)', borderRadius: 4, overflow: 'hidden', display: 'inline-block' }}>

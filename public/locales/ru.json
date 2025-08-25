@@ -228,5 +228,11 @@
 	"chat.kind.audio": "аудио",
 	"chat.kind.file": "файл",
 	"chat.empty": "Пока нет чатов",
-	"input.placeholder": "Введите сообщение"
+		"input.placeholder": "Введите сообщение"
+		,
+		"call.incoming": "Входящий звонок",
+		"call.accept": "Принять",
+		"call.reject": "Отклонить",
+		"call.acceptedNote": "Звонок принят",
+		"call.declinedNote": "Звонок отклонён"
 }

@@ -4,12 +4,12 @@ import { hexToBytes, bytesToHex, bytesToBase64 } from './utils'
 import { encryptDataURL, type EncryptedMedia } from './media'
 import { putObject, getObject, parseMemUrl } from '../services/upload'
 import { useChatStore, type ChatMessage } from '../state/chatStore'
+import { tGlobal } from '../i18n'
 import { useRelayStore } from '../state/relayStore'
 import { useRoomStore } from '../state/roomStore'
 import { useSettingsStore } from '../ui/settingsStore'
 import { log } from '../ui/logger'
 import { emitToast } from '../ui/Toast'
-import { tGlobal } from '../i18n'
 import { CONFIG } from '../config'
 
 // Helper to generate filename from data URL MIME
@@ -333,6 +333,53 @@ export function startNostrEngine(sk: string) {
             } catch {
               text = txt
             }
+            // Handle signaling envelopes embedded in DM text: call_invite / call_reject / call_accept
+            try {
+              if (typeof text === 'string') {
+                const sig = JSON.parse(text)
+                if (sig && sig.type === 'call_invite' && typeof sig.room === 'string') {
+                  try {
+                    const ev = new CustomEvent('incoming-call', { detail: { from: evt.pubkey, room: sig.room, evtId: evt.id } })
+                    window.dispatchEvent(ev)
+                  } catch {}
+                  // optional toast
+                  try { emitToast('Incoming call…', 'info') } catch {}
+                  return
+                }
+                if (sig && sig.type === 'call_reject') {
+                  try { emitToast('Call declined', 'info') } catch {}
+                  try {
+                    const note: ChatMessage = {
+                      id: `${evt.id}:note:declined`,
+                      from: evt.pubkey,
+                      to: peerPk === evt.pubkey ? pk : peerPk,
+                      ts: evt.created_at ?? Math.floor(Date.now() / 1000),
+                      text: tGlobal('call.declinedNote'),
+                      system: true,
+                    }
+                    const isBlocked = !!useChatStore.getState().blocked[peerPk]
+                    if (!isBlocked) useChatStore.getState().addMessage(peerPk, note)
+                  } catch {}
+                  return
+                }
+                if (sig && sig.type === 'call_accept') {
+                  try { emitToast('Call accepted', 'success') } catch {}
+                  try {
+                    const note: ChatMessage = {
+                      id: `${evt.id}:note:accepted`,
+                      from: evt.pubkey,
+                      to: peerPk === evt.pubkey ? pk : peerPk,
+                      ts: evt.created_at ?? Math.floor(Date.now() / 1000),
+                      text: tGlobal('call.acceptedNote'),
+                      system: true,
+                    }
+                    const isBlocked = !!useChatStore.getState().blocked[peerPk]
+                    if (!isBlocked) useChatStore.getState().addMessage(peerPk, note)
+                  } catch {}
+                  return
+                }
+              }
+            } catch {}
             const { addMessage } = useChatStore.getState()
             const isBlocked = !!useChatStore.getState().blocked[peerPk]
             

@@ -229,4 +229,10 @@
 	"chat.kind.file": "file",
 	"chat.empty": "No chats yet",
 	"input.placeholder": "Type a message"
+		,
+		"call.incoming": "Incoming call",
+		"call.accept": "Accept",
+		"call.reject": "Reject",
+		"call.acceptedNote": "Call accepted",
+		"call.declinedNote": "Call declined"
 }

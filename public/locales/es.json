@@ -216,4 +216,10 @@
 	"chat.kind.file": "archivo",
 	"chat.empty": "Aún no hay chats",
 	"input.placeholder": "Escribe un mensaje"
+	,
+	"call.incoming": "Llamada entrante",
+	"call.accept": "Aceptar",
+	"call.reject": "Rechazar",
+	"call.acceptedNote": "Llamada aceptada",
+	"call.declinedNote": "Llamada rechazada"
 }

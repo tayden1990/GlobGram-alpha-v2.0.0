@@ -64,3 +64,4 @@ decoded-keystore.p12 (if present)
 my-release-key copy.txt
 local.properties
 publish-command.txt
+livekit-worker/API.txt

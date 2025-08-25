@@ -217,5 +217,11 @@
 	"chat.kind.audio": "صوت",
 	"chat.kind.file": "فایل",
 	"chat.empty": "هنوز گفتگویی وجود ندارد",
-	"input.placeholder": "یک پیام بنویسید"
+		"input.placeholder": "یک پیام بنویسید"
+		,
+		"call.incoming": "تماس ورودی",
+		"call.accept": "پاسخ",
+		"call.reject": "رد",
+		"call.acceptedNote": "تماس پذیرفته شد",
+		"call.declinedNote": "تماس رد شد"
 }

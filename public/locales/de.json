@@ -215,5 +215,11 @@
 	"chat.kind.audio": "audio",
 	"chat.kind.file": "datei",
 	"chat.empty": "Noch keine Chats",
-	"input.placeholder": "Nachricht eingeben"
+		"input.placeholder": "Nachricht eingeben"
+		,
+		"call.incoming": "Eingehender Anruf",
+		"call.accept": "Annehmen",
+		"call.reject": "Ablehnen",
+		"call.acceptedNote": "Anruf angenommen",
+		"call.declinedNote": "Anruf abgelehnt"
 }
