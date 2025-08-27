@@ -214,4 +214,15 @@
   "chat.kind.file": "فایل",
   "chat.empty": "هنوز گفتگویی وجود ندارد",
   "input.placeholder": "یک پیام بنویسید"
+  ,
+  "call.inviteOthersToJoin": "دعوت دیگران برای پیوستن به این تماس",
+  "call.room": "اتاق",
+  "call.participants": "شرکت‌کنندگان",
+  "common.copied": "کپی شد!",
+  "call.joinCallInvite": "برای تماس ویدیویی با من در",
+  "call.clickToJoin": "برای پیوستن کلیک کنید",
+  "call.shareMessage": "GlobGram - تماس‌های ویدیویی امن و غیرمتمرکز",
+  "call.copyinvite": "کپی دعوت‌نامه",
+  "call.shareDisclaimer": "هر کسی که این لینک را دارد می‌تواند به تماس بپیوندد. با مسئولیت‌پذیری به اشتراک بگذارید.",
+  "tab.createcall": "ایجاد تماس"
 }

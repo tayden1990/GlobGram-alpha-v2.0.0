@@ -213,5 +213,15 @@
   "chat.kind.audio": "аудио",
   "chat.kind.file": "файл",
   "chat.empty": "Пока нет чатов",
-  "input.placeholder": "Введите сообщение"
+  "input.placeholder": "Введите сообщение",
+  "call.inviteOthersToJoin": "Пригласить других присоединиться к звонку",
+  "call.room": "Комната",
+  "call.participants": "Участники",
+  "common.copied": "Скопировано!",
+  "call.joinCallInvite": "Присоединись ко мне к видеозвонку на",
+  "call.clickToJoin": "Нажмите, чтобы присоединиться",
+  "call.shareMessage": "GlobGram — безопасные, децентрализованные видеозвонки",
+  "call.copyinvite": "Копировать приглашение",
+  "call.shareDisclaimer": "Любой, у кого есть эта ссылка, может присоединиться к звонку. Делитесь ответственно.",
+  "tab.createcall": "Создать звонок"
 }

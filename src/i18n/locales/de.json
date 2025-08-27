@@ -214,4 +214,15 @@
   "chat.kind.file": "datei",
   "chat.empty": "Noch keine Chats",
   "input.placeholder": "Nachricht eingeben"
+  ,
+  "call.inviteOthersToJoin": "Andere zur Teilnahme an diesem Anruf einladen",
+  "call.room": "Raum",
+  "call.participants": "Teilnehmer",
+  "common.copied": "Kopiert!",
+  "call.joinCallInvite": "Begleite mich zu einem Videoanruf auf",
+  "call.clickToJoin": "Zum Beitreten klicken",
+  "call.shareMessage": "GlobGram – Sichere, dezentrale Videoanrufe",
+  "call.copyinvite": "Einladung kopieren",
+  "call.shareDisclaimer": "Jeder mit diesem Link kann dem Anruf beitreten. Teile ihn verantwortungsvoll.",
+  "tab.createcall": "Anruf erstellen"
 }

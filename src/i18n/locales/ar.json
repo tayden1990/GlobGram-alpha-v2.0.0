@@ -214,4 +214,15 @@
   "chat.kind.file": "ملف",
   "chat.empty": "لا توجد دردشات بعد",
   "input.placeholder": "اكتب رسالة"
+  ,
+  "call.inviteOthersToJoin": "دعوة آخرين للانضمام إلى هذه المكالمة",
+  "call.room": "الغرفة",
+  "call.participants": "المشاركون",
+  "common.copied": "تم النسخ!",
+  "call.joinCallInvite": "انضم إليّ لإجراء مكالمة فيديو على",
+  "call.clickToJoin": "انقر للانضمام",
+  "call.shareMessage": "GlobGram - مكالمات فيديو آمنة ولامركزية",
+  "call.copyinvite": "نسخ الدعوة",
+  "call.shareDisclaimer": "يمكن لأي شخص لديه هذا الرابط الانضمام إلى المكالمة. شاركه بمسؤولية.",
+  "tab.createcall": "إنشاء مكالمة"
 }

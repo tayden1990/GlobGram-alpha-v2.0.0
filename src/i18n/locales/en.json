@@ -256,5 +256,7 @@
   "room.join": "Join",
   "room.joinActiveRoom": "Join Active Room",
   "room.activeUsers": "{count} users active",
-  "common.copied": "Copied!"
+  "common.copied": "Copied!",
+  "call.copyinvite": "Copy Invite",
+  "tab.createcall": "Create call"
 }

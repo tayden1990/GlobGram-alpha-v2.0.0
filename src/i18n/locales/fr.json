@@ -214,4 +214,15 @@
   "chat.kind.file": "fichier",
   "chat.empty": "Pas encore de discussions",
   "input.placeholder": "Écrire un message"
+  ,
+  "call.inviteOthersToJoin": "Inviter d’autres à rejoindre cet appel",
+  "call.room": "Salon",
+  "call.participants": "Participants",
+  "common.copied": "Copié !",
+  "call.joinCallInvite": "Rejoins-moi pour un appel vidéo sur",
+  "call.clickToJoin": "Cliquer pour rejoindre",
+  "call.shareMessage": "GlobGram - Appels vidéo sécurisés et décentralisés",
+  "call.copyinvite": "Copier l’invitation",
+  "call.shareDisclaimer": "Toute personne disposant de ce lien peut rejoindre l’appel. Partagez-le de manière responsable.",
+  "tab.createcall": "Créer un appel"
 }
