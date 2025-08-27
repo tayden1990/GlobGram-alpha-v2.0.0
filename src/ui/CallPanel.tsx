@@ -382,7 +382,7 @@ export function CallPanel({ roomName, identity, open, onClose, onEnded }: Props)
               }}
               options={{
                 adaptiveStream: true,
-                dynacast: true,
+                dynacast: false,
                 videoCaptureDefaults: {
                   resolution: { width: 1280, height: 720 },
                   facingMode: 'user',
@@ -390,10 +390,13 @@ export function CallPanel({ roomName, identity, open, onClose, onEnded }: Props)
                 audioCaptureDefaults: {
                   echoCancellation: true,
                   noiseSuppression: true,
+                  autoGainControl: true, // Disable AGC to prevent audio affecting video
                 },
                 publishDefaults: {
                   red: false, // Disable redundancy encoding to prevent track errors
                   dtx: false, // Disable discontinuous transmission
+                  simulcast: true, // Disable simulcast to prevent video quality switching
+                  videoCodec: 'vp8', // Force consistent codec
                 },
               }}
               audio={true}
