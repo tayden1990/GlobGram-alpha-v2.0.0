@@ -54,7 +54,7 @@ jobs:
           export SKIP_RELEASE_SIGNING=false
           ./gradlew :app:assembleRelease :app:bundleRelease --stacktrace
       - name: Upload Android artifact
-  uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4
         with:
           name: android-apk
           path: |
@@ -181,7 +181,7 @@ jobs:
           [ -d "$APP_DIR" ] || { echo "App dir not found: $APP_DIR" >&2; exit 1; }
           zip -r release-desktop/GlobGram-linux.zip "$APP_DIR"
       - name: Upload Desktop artifact
-  uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4
         with:
           name: desktop-${{ runner.os }}
           path: release-desktop/*.zip
