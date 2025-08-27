@@ -20,6 +20,7 @@ import { useSettingsStore } from './settingsStore'
 import { getLogs, clearLogs, onLog, log, setLogMinLevel, getPersistedLogsText, clearPersistedLogs } from './logger'
 import { useI18n } from '../i18n'
 import { BUILD_INFO } from '../version'
+import { buildCallUrl, buildInviteNpubUrl } from '../services/url'
 import { checkLatestRelease, semverGreater, type GithubRelease, type GithubAsset } from '../services'
 import { CallPanel } from './CallPanel'
 import { CONFIG } from '../config'
@@ -156,17 +157,7 @@ export default function App() {
   }, [logLevel])
   const [inviteOpen, setInviteOpen] = useState(false)
   const [inviteUrl, setInviteUrl] = useState<string>('')
-  const buildInviteLink = (npub: string, lang: string) => {
-    try {
-      const base = (import.meta as any).env?.BASE_URL || '/'
-      const u = new URL(base, window.location.origin)
-      u.searchParams.set('invite', npub)
-      u.searchParams.set('lang', lang)
-      return u.toString()
-    } catch {
-      return `${window.location.origin}?invite=${encodeURIComponent(npub)}&lang=${encodeURIComponent(lang)}`
-    }
-  }
+  const buildInviteLink = (npub: string, lang: string) => buildInviteNpubUrl(npub, lang)
   // Onboarding state
   const [onboardingOpen, setOnboardingOpen] = useState<boolean>(() => {
     try { return !localStorage.getItem('onboarding_done') } catch { return true }
@@ -1434,15 +1425,7 @@ export default function App() {
                     sk = hexd
                   }
                   const callId = `call-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-                  let link = ''
-                  try {
-                    const base = (import.meta as any).env?.BASE_URL || '/'
-                    const u = new URL(base, window.location.origin)
-                    u.searchParams.set('call', callId)
-                    link = u.toString()
-                  } catch {
-                    link = `${window.location.origin}?call=${encodeURIComponent(callId)}`
-                  }
+                  const link = buildCallUrl(callId)
                   try {
                     await navigator.clipboard.writeText(link)
                     emitToast(t('common.copied') || 'Copied link to clipboard', 'success')
@@ -2088,15 +2071,7 @@ export default function App() {
                   setFabOpen(false)
                   // Generate a shareable call id and link
                   const callId = `call-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-                  let link = ''
-                  try {
-                    const base = (import.meta as any).env?.BASE_URL || '/'
-                    const u = new URL(base, window.location.origin)
-                    u.searchParams.set('call', callId)
-                    link = u.toString()
-                  } catch {
-                    link = `${window.location.origin}?call=${encodeURIComponent(callId)}`
-                  }
+                  const link = buildCallUrl(callId)
                   try {
                     await navigator.clipboard.writeText(link)
                     emitToast(t('common.copied') || 'Copied link to clipboard', 'success')

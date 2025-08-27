@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { buildInviteUrl } from '../services/url'
 import { persist } from 'zustand/middleware'
 
 export type RoomPresence = {
@@ -399,8 +400,7 @@ export const usePresenceStore = create<State & Actions>()(
       },
       
       generateShareableLink: (roomId) => {
-        const baseUrl = window.location.origin
-        const inviteUrl = `${baseUrl}?room=${encodeURIComponent(roomId)}&action=join-call`
+        const inviteUrl = buildInviteUrl(roomId)
         
         set((state) => {
           const call = state.activeCalls[roomId]
@@ -417,7 +417,7 @@ export const usePresenceStore = create<State & Actions>()(
           }
         })
         
-        return inviteUrl
+  return inviteUrl
       },
       
       getCurrentCall: () => {
