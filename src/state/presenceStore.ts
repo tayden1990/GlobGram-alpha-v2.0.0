@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { buildJoinCallUrl } from '../services/url'
 import { persist } from 'zustand/middleware'
 
 export type RoomPresence = {
@@ -400,7 +401,6 @@ export const usePresenceStore = create<State & Actions>()(
       
       generateShareableLink: (roomId) => {
         // Build URL that respects BASE_URL (e.g., GitHub Pages subpath)
-        const { buildJoinCallUrl } = require('../services/url') as typeof import('../services/url')
         const inviteUrl = buildJoinCallUrl(roomId)
         
         set((state) => {

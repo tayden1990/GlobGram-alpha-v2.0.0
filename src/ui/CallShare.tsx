@@ -28,15 +28,12 @@ export function CallShareModal({ roomId, onClose }: Props) {
   
   // Generate share link in useEffect to avoid state updates during render
   useEffect(() => {
-    if (call?.shareableLink) {
-      setShareLink(call.shareableLink);
-    } else {
-      const link = generateShareableLink 
-        ? generateShareableLink(roomId) 
-        : buildJoinCallUrl(roomId)
-      setShareLink(link);
-    }
-  }, [call?.shareableLink, generateShareableLink, roomId]);
+    // Always compute fresh link to respect current BASE_URL
+    const link = generateShareableLink 
+      ? generateShareableLink(roomId) 
+      : buildJoinCallUrl(roomId)
+    setShareLink(link);
+  }, [generateShareableLink, roomId]);
   
   const inviteMessage = `🎥 ${t('call.joinCallInvite')} GlobGram!\n\n${t('call.clickToJoin')}:\n${shareLink}\n\n${t('call.shareMessage')}`;
   
