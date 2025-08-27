@@ -20,7 +20,6 @@ import { useSettingsStore } from './settingsStore'
 import { getLogs, clearLogs, onLog, log, setLogMinLevel, getPersistedLogsText, clearPersistedLogs } from './logger'
 import { useI18n } from '../i18n'
 import { BUILD_INFO } from '../version'
-import { buildCallUrl, buildInviteNpubUrl } from '../services/url'
 import { checkLatestRelease, semverGreater, type GithubRelease, type GithubAsset } from '../services'
 import { CallPanel } from './CallPanel'
 import { CONFIG } from '../config'
@@ -157,7 +156,17 @@ export default function App() {
   }, [logLevel])
   const [inviteOpen, setInviteOpen] = useState(false)
   const [inviteUrl, setInviteUrl] = useState<string>('')
-  const buildInviteLink = (npub: string, lang: string) => buildInviteNpubUrl(npub, lang)
+  const buildInviteLink = (npub: string, lang: string) => {
+    try {
+      const base = (import.meta as any).env?.BASE_URL || '/'
+      const u = new URL(base, window.location.origin)
+      u.searchParams.set('invite', npub)
+      u.searchParams.set('lang', lang)
+      return u.toString()
+    } catch {
+      return `${window.location.origin}?invite=${encodeURIComponent(npub)}&lang=${encodeURIComponent(lang)}`
+    }
+  }
   // Onboarding state
   const [onboardingOpen, setOnboardingOpen] = useState<boolean>(() => {
     try { return !localStorage.getItem('onboarding_done') } catch { return true }
@@ -1414,6 +1423,7 @@ export default function App() {
                 title={(t('actions.instantMeeting') as string) || 'Instant meeting link'}
                 aria-label={(t('actions.instantMeeting') as string) || 'Instant meeting link'}
                 onClick={async () => {
+                  const { buildAppUrl } = await import('../services/url')
                   // Ensure we have an account so identity is stable
                   let sk = localStorage.getItem('nostr_sk')
                   if (!sk) {
@@ -1425,7 +1435,7 @@ export default function App() {
                     sk = hexd
                   }
                   const callId = `call-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-                  const link = buildCallUrl(callId)
+                  const link = buildAppUrl('', { call: callId })
                   try {
                     await navigator.clipboard.writeText(link)
                     emitToast(t('common.copied') || 'Copied link to clipboard', 'success')
@@ -2066,12 +2076,13 @@ export default function App() {
                 if (!hex) { alert(t('errors.invalidPubkey')); return }
                 selectPeer(hex)
               }} aria-label={t('fab.startNewChat')} style={{ background: 'var(--accent)', color: '#fff' }}>+ {t('fab.newChat')}</button>
-              {CONFIG.LIVEKIT_ENABLED && (
+        {CONFIG.LIVEKIT_ENABLED && (
                 <button onClick={async () => {
                   setFabOpen(false)
                   // Generate a shareable call id and link
                   const callId = `call-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-                  const link = buildCallUrl(callId)
+          const { buildAppUrl } = await import('../services/url')
+          const link = buildAppUrl('', { call: callId })
                   try {
                     await navigator.clipboard.writeText(link)
                     emitToast(t('common.copied') || 'Copied link to clipboard', 'success')

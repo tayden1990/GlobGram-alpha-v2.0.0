@@ -1,42 +1,37 @@
-// URL helpers for constructing links that respect the app base path (GitHub Pages, etc.)
+// URL utilities for building links that respect Vite base (e.g., GitHub Pages /<repo>/)
 
-/**
- * Returns the absolute base URL of the app, including the Vite base path.
- * Example: https://user.github.io/GlobGram-alpha-v2.0.0/
- */
+export function getBasePath(): string {
+	// Vite injects import.meta.env.BASE_URL at build time; default to '/'
+	const base = (import.meta as any)?.env?.BASE_URL || '/'
+	// Ensure it ends with a slash
+	if (typeof base === 'string') return base.endsWith('/') ? base : base + '/'
+	return '/'
+}
+
 export function getAppBaseUrl(): string {
-  const origin = window.location.origin
-  // Vite injects BASE_URL at build time; defaults to '/'
-  const base = (import.meta as any)?.env?.BASE_URL ?? '/'
-  try {
-    const url = new URL(base, origin).toString()
-    // Ensure it ends with a trailing slash (URL() should already do this for path-only)
-    return url
-  } catch {
-    // Fallback concatenation
-    const normalizedBase = base.startsWith('/') ? base : `/${base}`
-    return origin + (normalizedBase.endsWith('/') ? normalizedBase : normalizedBase + '/')
-  }
+	// Compose absolute base URL: origin + BASE_URL
+	try {
+		const base = getBasePath()
+		const u = new URL(base, window.location.origin)
+		return u.toString()
+	} catch {
+		return window.location.origin + getBasePath()
+	}
 }
 
-/**
- * Build an invite URL for a given room that works under subpath deployments.
- */
-export function buildInviteUrl(roomId: string): string {
-  const baseUrl = getAppBaseUrl() // has trailing slash
-  // We want .../<base>/?room=...&action=join-call
-  return `${baseUrl}?room=${encodeURIComponent(roomId)}&action=join-call`
+export function buildAppUrl(pathname = '', params?: Record<string, string | number | boolean | undefined>): string {
+	const base = getAppBaseUrl()
+	const url = new URL(pathname || '.', base)
+	if (params) {
+		for (const [k, v] of Object.entries(params)) {
+			if (v === undefined || v === null) continue
+			url.searchParams.set(k, String(v))
+		}
+	}
+	return url.toString()
 }
 
-/** Build a call link like .../<base>/?call=<id> */
-export function buildCallUrl(callId: string): string {
-  const baseUrl = getAppBaseUrl()
-  return `${baseUrl}?call=${encodeURIComponent(callId)}`
+export function buildJoinCallUrl(roomId: string): string {
+	return buildAppUrl('', { room: roomId, action: 'join-call' })
 }
 
-/** Build an npub invite link like .../<base>/?invite=<npub>&lang=<code> */
-export function buildInviteNpubUrl(npub: string, lang: string): string {
-  const baseUrl = getAppBaseUrl()
-  const l = lang || 'en'
-  return `${baseUrl}?invite=${encodeURIComponent(npub)}&lang=${encodeURIComponent(l)}`
-}

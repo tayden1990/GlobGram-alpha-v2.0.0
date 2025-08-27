@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { usePresenceStore } from '../state/presenceStore';
-import { buildInviteUrl } from '../services/url';
+import { buildJoinCallUrl } from '../services';
 import { useI18n } from '../i18n';
 import { IconShare, IconLink, IconInvite, IconUser } from './icons';
 
@@ -33,7 +33,7 @@ export function CallShareModal({ roomId, onClose }: Props) {
     } else {
       const link = generateShareableLink 
         ? generateShareableLink(roomId) 
-        : buildInviteUrl(roomId);
+        : buildJoinCallUrl(roomId)
       setShareLink(link);
     }
   }, [call?.shareableLink, generateShareableLink, roomId]);
