@@ -1,27 +1,41 @@
-// URL utilities for building links that respect Vite base (e.g., GitHub Pages /<repo>/)
+// URL utilities for building links that respect the app base (e.g., GitHub Pages /<repo>/)
 
-export function getBasePath(): string {
-	// Vite injects import.meta.env.BASE_URL at build time; default to '/'
-	const base = (import.meta as any)?.env?.BASE_URL || '/'
-	// Ensure it ends with a slash
-	if (typeof base === 'string') return base.endsWith('/') ? base : base + '/'
-	return '/'
-}
-
-export function getAppBaseUrl(): string {
-	// Compose absolute base URL: origin + BASE_URL
+function getRuntimeBaseUrl(): string {
+	// Prefer the document's base URI at runtime (most robust on GitHub Pages)
 	try {
-		const base = getBasePath()
+		// new URL('.', base) yields an absolute URL ending with a slash
+		const u = new URL('.', document.baseURI)
+		return u.toString()
+	} catch {}
+	// Fallback to Vite BASE_URL at build time
+	try {
+		const base = (import.meta as any)?.env?.BASE_URL || '/'
 		const u = new URL(base, window.location.origin)
 		return u.toString()
+	} catch {}
+	// Last resort: origin root
+	return window.location.origin + '/'
+}
+
+export function getBasePath(): string {
+	try {
+		const abs = getRuntimeBaseUrl()
+		const url = new URL(abs)
+		let path = url.pathname || '/'
+		if (!path.endsWith('/')) path += '/'
+		return path
 	} catch {
-		return window.location.origin + getBasePath()
+		return '/'
 	}
 }
 
+export function getAppBaseUrl(): string {
+	return getRuntimeBaseUrl()
+}
+
 export function buildAppUrl(pathname = '', params?: Record<string, string | number | boolean | undefined>): string {
-	const base = getAppBaseUrl()
-	const url = new URL(pathname || '.', base)
+	const baseAbs = getRuntimeBaseUrl()
+	const url = new URL(pathname || '.', baseAbs)
 	if (params) {
 		for (const [k, v] of Object.entries(params)) {
 			if (v === undefined || v === null) continue

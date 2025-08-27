@@ -401,7 +401,7 @@ export const usePresenceStore = create<State & Actions>()(
       
       generateShareableLink: (roomId) => {
         // Build URL that respects BASE_URL (e.g., GitHub Pages subpath)
-        const inviteUrl = buildJoinCallUrl(roomId)
+  const inviteUrl = buildJoinCallUrl(roomId)
         
         set((state) => {
           const call = state.activeCalls[roomId]
@@ -410,10 +410,7 @@ export const usePresenceStore = create<State & Actions>()(
           return {
             activeCalls: {
               ...state.activeCalls,
-              [roomId]: {
-                ...call,
-                shareableLink: inviteUrl
-              }
+              [roomId]: { ...call, shareableLink: inviteUrl }
             }
           }
         })
