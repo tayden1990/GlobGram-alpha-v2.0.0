@@ -1,153 +1,370 @@
-/* Fullscreen-first calling layout (Zoom-like) */
+/* Enhanced conferencing layout inspired by palerdot/video-conferencing-ui */
 .gg-root{position:relative;inset:0;display:flex;flex-direction:column;height:100vh;height:100dvh;min-height:100svh;width:100%;background:#0b0b0d;z-index:0}
 .gg-stage{flex:1;min-height:0;display:flex}
-.gg-cams{flex:1;display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));padding:8px}
-.density-cozy .gg-cams{gap:12px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
-.density-compact .gg-cams{gap:6px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
-.gg-split{flex:1;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:8px;padding:8px}
-.gg-rail{display:flex;flex-direction:column;gap:8px;overflow:auto}
-.gg-primary{position:relative;min-height:0;border-radius:10px;overflow:hidden;background:#111}
-.gg-primary.screen .lk-participant-tile video{object-fit:contain!important}
-.gg-primary.cam .lk-participant-tile video{object-fit:cover}
-.gg-empty{display:grid;place-items:center;color:#aaa;background:#111;border-radius:10px}
 
-/* Universal tile visuals */
-.gg-tile{position:relative;border-radius:10px;overflow:hidden;background:#111;isolation:isolate}
-.gg-tile>*{pointer-events:none}
-.gg-tile .gg-label,.gg-tile .gg-pin-btn{pointer-events:auto}
-.gg-label{position:absolute;left:8px;bottom:8px;background:rgba(0,0,0,.45);color:#fff;padding:3px 8px;border-radius:6px;font-size:12px;backdrop-filter:blur(2px)}
-.gg-pin-btn{position:absolute;right:8px;top:8px;background:rgba(0,0,0,.45);color:#fff;border:1px solid #444;border-radius:6px;padding:4px 8px;cursor:pointer;opacity:.0;transition:opacity .15s ease, background .15s ease}
-.gg-tile:hover .gg-pin-btn{opacity:1}
-.gg-pin-btn:hover{background:rgba(0,0,0,.6)}
+/* Mobile viewport optimization */
 @media (max-width:520px){
-  .gg-pin-btn{padding:3px 6px;font-size:12px;border-radius:5px}
+  .gg-root{
+    height:100vh;
+    height:100dvh;
+    min-height:100svh;
+    /* Ensure no overflow on mobile */
+    overflow:hidden;
+  }
+  
+  .gg-stage{
+    /* Use remaining space after toolbar on mobile */
+    height:calc(100vh - 96px);
+    height:calc(100dvh - 96px);
+    min-height:calc(100svh - 96px);
+  }
 }
-.gg-tile.speaking{box-shadow:0 0 0 2px #7dd3fc,inset 0 0 0 2px rgba(125,211,252,.25)}
 
-/* Overlay toolbar */
-.gg-toolbar{--tool-h:56px;position:absolute;left:0;right:0;bottom:0;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:10px max(12px, env(safe-area-inset-right,12px)) calc(10px + env(safe-area-inset-bottom,0px)) max(12px, env(safe-area-inset-left,12px));background:linear-gradient(180deg,rgba(0,0,0,.05) 0%, rgba(0,0,0,.5) 50%, rgba(0,0,0,.85) 100%);z-index:1000;color:#fff;pointer-events:auto;border-top:1px solid rgba(255,255,255,.08);min-height:var(--tool-h)}
-.gg-root.hide-ui .gg-toolbar{opacity:0;pointer-events:none;transition:opacity .25s ease}
+/* Enhanced participant tiles with smooth animations */
+.gg-tile{
+  position:relative;
+  border-radius:10px;
+  overflow:hidden;
+  background:#111;
+  isolation:isolate;
+  aspect-ratio:auto!important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: scale(1);
+  opacity: 1;
+  animation: fadeInScale 0.3s ease-out forwards;
+}
+
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.gg-tile:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* Ensure ParticipantTile fills its parent and video scales with contain */
+.lk-participant-tile{
+  width:100%;
+  height:100%;
+  display:block;
+  aspect-ratio:auto !important;
+  border-radius: inherit;
+}
+
+.lk-participant-tile video{
+  width:100%!important;
+  height:100%!important;
+  max-width:100%!important;
+  max-height:100%!important;
+  object-fit:contain!important;
+  object-position:center center!important;
+  background:#0b0b0d;
+  aspect-ratio:auto!important;
+  border-radius: inherit;
+}
+
+/* Hide built-in LiveKit labels/indicators to avoid double text & overflow */
+.lk-participant-tile [class*="label"],
+.lk-participant-name,
+.lk-participant-metadata,
+.lk-audio-signal{display:none!important}
+
+/* Hide miscellaneous LiveKit overlays/icons for a cleaner tile */
+.lk-participant-tile [class*="icon"],
+.lk-participant-tile [class*="camera"],
+.lk-participant-tile [class*="controls"],
+.lk-participant-tile [class*="menu"],
+.lk-participant-tile [class*="actions"],
+.lk-participant-tile [data-lk-overlay]{ display:none !important; }
+
+/* Remove any forced cover/crop behavior from library wrappers */
+.lk-participant-tile *[style*="object-fit: cover"],
+.lk-participant-tile video[style*="object-fit: cover"]{ object-fit: contain !important; }
+.lk-participant-tile [style*="aspect-ratio"]{ aspect-ratio: auto !important; }
+
+/* Enhanced placeholder styling */
+.gg-placeholder{
+  display:grid;
+  place-items:center;
+  background:#0f0f10;
+  border-radius: inherit;
+  transition: all 0.3s ease;
+}
+
+.gg-placeholder:hover {
+  background:#1a1a1b;
+}
+
+/* Enhanced tile labels */
+.gg-label{
+  position:absolute;
+  left:8px;
+  bottom:8px;
+  background:rgba(0,0,0,.6);
+  color:#fff;
+  padding:4px 8px;
+  border-radius:6px;
+  font-size:12px;
+  font-weight: 500;
+  backdrop-filter:blur(4px);
+  max-width:70%;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.2s ease;
+}
+
+.gg-tile:hover .gg-label {
+  background:rgba(0,0,0,.8);
+  backdrop-filter:blur(6px);
+}
+
+/* Enhanced toolbar */
+.gg-toolbar{
+  --tool-h:56px;
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:0;
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:10px max(12px, env(safe-area-inset-right,12px)) calc(10px + env(safe-area-inset-bottom,0px)) max(12px, env(safe-area-inset-left,12px));
+  background:linear-gradient(180deg,rgba(0,0,0,.05) 0%, rgba(0,0,0,.5) 50%, rgba(0,0,0,.85) 100%);
+  z-index:1000;
+  color:#fff;
+  pointer-events:auto;
+  border-top:1px solid rgba(255,255,255,.08);
+  min-height:var(--tool-h);
+  backdrop-filter: blur(8px);
+}
+
+.gg-root.hide-ui .gg-toolbar{
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .25s ease;
+}
+
 .gg-toolbar{transition:opacity .2s ease}
-.gg-btn{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:10px;padding:10px 14px;cursor:pointer;backdrop-filter:blur(4px)}
-.gg-btn:hover{background:rgba(255,255,255,.15)}
-.gg-btn[aria-pressed="true"]{outline:2px solid #5ad}
-.gg-btn.danger{background:#b3261e;border-color:#d13a31}
+
+/* Enhanced buttons */
+.gg-btn{
+  background:rgba(255,255,255,.12);
+  border:1px solid rgba(255,255,255,.2);
+  color:#fff;
+  border-radius:10px;
+  padding:10px 14px;
+  cursor:pointer;
+  backdrop-filter:blur(4px);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  font-weight: 500;
+  position: relative;
+  overflow: hidden;
+}
+
+.gg-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+  transition: left 0.5s;
+}
+
+.gg-btn:hover::before {
+  left: 100%;
+}
+
+.gg-btn:hover{
+  background:rgba(255,255,255,.18);
+  border-color:rgba(255,255,255,.3);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,.3);
+}
+
+.gg-btn[aria-pressed="true"]{
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  border-color: #2563eb;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+.gg-btn.danger{
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  border-color: #dc2626;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+.gg-btn.danger:hover{
+  background: linear-gradient(135deg, #f87171, #ef4444);
+  border-color: #ef4444;
+}
+
 .gg-left,.gg-center,.gg-right{display:flex;gap:8px;align-items:center}
 .gg-center{flex:1;justify-content:center;min-width:0}
 .gg-center .gg-btn{min-width:40px}
-.gg-btn.icon{font-size:18px;line-height:1}
-.gg-badge{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);padding:6px 10px;border-radius:999px;font-size:12px}
+.gg-btn.icon{font-size:18px;line-height:1;padding:12px;}
+
+/* Enhanced badge */
+.gg-badge{
+  background:rgba(255,255,255,.15);
+  border:1px solid rgba(255,255,255,.25);
+  padding:6px 12px;
+  border-radius:999px;
+  font-size:12px;
+  font-weight: 600;
+  backdrop-filter: blur(4px);
+  transition: all 0.2s ease;
+}
+
+.gg-badge:hover {
+  background:rgba(255,255,255,.2);
+  border-color:rgba(255,255,255,.35);
+}
+
+/* Enhanced mobile responsiveness */
 @media (max-width:520px){
   .gg-btn{padding:8px 10px;font-size:12px;border-radius:8px}
   .gg-left,.gg-center,.gg-right{gap:6px}
-  .gg-toolbar{--tool-h:96px;display:grid;grid-template-columns:1fr 1fr;grid-template-areas:"left right" "center center";align-items:center}
+  .gg-toolbar{
+    --tool-h:96px;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    grid-template-areas:"left right" "center center";
+    align-items:center;
+    gap: 8px;
+  }
   .gg-left{grid-area:left;justify-content:flex-start}
   .gg-center{grid-area:center;justify-content:center}
   .gg-right{grid-area:right;justify-content:flex-end}
-  /* keep pin visible on touch devices */
-  .gg-pin-btn{opacity:1}
+  
+  /* Mobile video optimization: maximize screen usage */
+  .gg-grid{
+    padding: 4px !important;
+    gap: 4px !important;
+    /* Ensure grid uses full available height minus toolbar */
+    height: calc(100vh - 96px) !important;
+    height: calc(100dvh - 96px) !important;
+  }
+  
+  /* Mobile video tiles: fill available space better */
+  .gg-tile{
+    /* Remove artificial size constraints on mobile */
+    max-width: none !important;
+    max-height: none !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    /* Allow tiles to grow and fill available space */
+    flex: 1 1 auto !important;
+    width: 100% !important;
+    height: 100% !important;
+  }
+  
+  /* For single participant: use most of the screen */
+  .gg-grid:has(.gg-tile:only-child) .gg-tile {
+    width: 95vw !important;
+    height: calc(85vh - 96px) !important;
+    height: calc(85dvh - 96px) !important;
+    max-width: 95vw !important;
+    max-height: calc(85vh - 96px) !important;
+  }
+  
+  /* For two participants: split screen vertically */
+  .gg-grid:has(.gg-tile:nth-child(2):last-child) {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  
+  .gg-grid:has(.gg-tile:nth-child(2):last-child) .gg-tile {
+    width: 95vw !important;
+    height: calc(42vh - 48px) !important;
+    height: calc(42dvh - 48px) !important;
+    max-width: 95vw !important;
+    max-height: calc(42vh - 48px) !important;
+    flex: 1 !important;
+  }
+  
+  /* For 3-4 participants: 2x2 grid that fills screen */
+  .gg-grid:has(.gg-tile:nth-child(3)) .gg-tile,
+  .gg-grid:has(.gg-tile:nth-child(4)) .gg-tile {
+    width: calc(47vw - 2px) !important;
+    height: calc(40vh - 48px) !important;
+    height: calc(40dvh - 48px) !important;
+    max-width: calc(47vw - 2px) !important;
+    max-height: calc(40vh - 48px) !important;
+  }
+  
+  /* For 5+ participants: smaller tiles in grid */
+  .gg-grid:has(.gg-tile:nth-child(5)) .gg-tile {
+    width: calc(32vw - 3px) !important;
+    height: calc(25vh - 32px) !important;
+    height: calc(25dvh - 32px) !important;
+    max-width: calc(32vw - 3px) !important;
+    max-height: calc(25vh - 32px) !important;
+  }
+  
+  /* Video inside tiles should fill completely */
+  .lk-participant-tile{
+    width: 100% !important;
+    height: 100% !important;
+  }
+  
+  .lk-participant-tile video{
+    width: 100% !important;
+    height: 100% !important;
+    /* Use cover for mobile to fill the space */
+    object-fit: cover !important;
+  }
+  
+  /* Mobile placeholder adjustments */
+  .gg-placeholder{
+    width: 100% !important;
+    height: 100% !important;
+  }
 }
 
-/* Devices/settings popover */
-.gg-popover{position:absolute;right:12px;bottom:64px;z-index:1100;background:rgba(18,18,18,.95);color:#fff;border:1px solid #2a2a2a;border-radius:10px;min-width:260px;max-width:320px;box-shadow:0 8px 24px rgba(0,0,0,.45);padding:10px}
-.gg-pop-section{margin-bottom:10px}
-.gg-pop-section h4{margin:6px 4px 8px;font-size:12px;font-weight:600;opacity:.9}
-.gg-list{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto}
-.gg-list-item{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#fff;border-radius:8px;padding:8px 10px;text-align:left}
-.gg-list-item:hover{background:rgba(255,255,255,.13)}
-
-/* Responsive tweaks */
-@media (max-width:920px){
-  .gg-split{grid-template-columns:minmax(0,1fr) 240px}
-}
-@media (max-width:720px){
-  .gg-split{grid-template-columns:1fr}
-  .gg-rail{flex-direction:row;overflow:auto}
+/* Enhanced grid container */
+.gg-grid{
+  padding-bottom:calc(var(--tool-h,56px) + env(safe-area-inset-bottom,0px));
+  transition: all 0.3s ease;
 }
 
-/* Mobile-specific adjustments */
-@media (max-width:640px){
-  .call-topbar,.call-statusbar,.call-controls{display:none!important}
-  /* Leave extra space for toolbar above OS bars */
-  .gg-root{padding-bottom:calc(56px + env(safe-area-inset-bottom,0px))}
-  /* Hide tile labels on small screens to reduce clutter */
-  .gg-label{display:none}
+/* Speaking indicator */
+.gg-tile.speaking{
+  box-shadow:0 0 0 3px #3b82f6, 0 0 20px rgba(59, 130, 246, 0.4);
+  animation: pulse 2s infinite;
 }
 
-/* Filmstrip for mobile */
-.gg-filmstrip{position:absolute;left:0;right:0;bottom:calc(var(--tool-h,56px) + env(safe-area-inset-bottom,0px));padding:6px;z-index:980;display:none;pointer-events:none;transition:opacity .2s ease}
-.gg-root.hide-ui .gg-filmstrip{opacity:0}
-.gg-film-inner{display:flex;gap:6px;overflow:auto;padding:2px 6px;pointer-events:auto}
-.gg-film-thumb{width:100px;min-width:100px;height:60px;border-radius:8px;overflow:hidden;background:#111;position:relative;pointer-events:auto}
-.gg-film-thumb .lk-participant-tile video{object-fit:cover}
-.gg-film-thumb .lk-participant-tile [class*="label"],
-.gg-film-thumb .lk-participant-name,
-.gg-film-thumb .lk-participant-metadata,
-.gg-film-thumb .lk-audio-signal,
-.gg-film-thumb .gg-label{display:none!important}
-@media (max-width:640px){
-  .gg-filmstrip{display:block}
+@keyframes pulse {
+  0%, 100% {
+    box-shadow:0 0 0 3px #3b82f6, 0 0 20px rgba(59, 130, 246, 0.4);
+  }
+  50% {
+    box-shadow:0 0 0 3px #60a5fa, 0 0 30px rgba(96, 165, 250, 0.6);
+  }
 }
-.gg-call-layout{display:flex;flex-direction:column;gap:8px;height:100%;width:100%;background:#0b0b0d;padding:env(safe-area-inset-top,8px) 8px env(safe-area-inset-bottom,8px)}
-.gg-main{flex:1;display:flex;min-height:0}
-.gg-pinned,.gg-screens,.gg-cams{flex:1;display:grid;gap:8px;width:100%;height:100%}
-.gg-pinned>*{width:100%;height:100%}
-.gg-screens{grid-template-columns:repeat(auto-fit,minmax(280px,1fr));align-items:stretch}
-.gg-cams{grid-template-columns:repeat(auto-fit,minmax(220px,1fr));align-items:stretch}
-.gg-screen,.gg-cam,.gg-tile{position:relative;border-radius:10px;overflow:hidden;background:#111}
-.gg-strip{display:flex;gap:8px;overflow-x:auto;padding:8px;align-items:center;border-top:1px solid #1f1f1f}
-.gg-thumb{width:190px;min-width:190px;height:110px;border-radius:8px;overflow:hidden;background:#0f0f10;opacity:.95;flex:0 0 auto}
-.gg-thumb.pinned{outline:2px solid #5ad;opacity:1}
-.gg-thumb.screen{width:230px;min-width:230px;height:130px}
-.gg-fullscreen{margin-left:auto;padding:8px 12px;border-radius:8px;border:1px solid #2a2a2a;background:#141414;color:#e7e7e7}
-
-/* Tile overlays and clickability */
-.gg-tile{isolation:isolate}
-.gg-tile>*{pointer-events:none}
-.gg-tile .gg-label,.gg-tile .gg-pin-btn{pointer-events:auto}
-.gg-label{position:absolute;left:8px;bottom:8px;background:rgba(0,0,0,.45);color:#fff;padding:3px 8px;border-radius:6px;font-size:12px;backdrop-filter:blur(2px)}
-.gg-pin-btn{position:absolute;right:8px;top:8px;background:rgba(0,0,0,.45);color:#fff;border:1px solid #444;border-radius:6px;padding:4px 8px;cursor:pointer}
-.gg-pin-btn:hover{background:rgba(0,0,0,.6)}
-
-/* Active speaker ring */
-.gg-tile.speaking{box-shadow:0 0 0 2px #7dd3fc,inset 0 0 0 2px rgba(125,211,252,.25)}
 
 /* Focus accessibility */
-.gg-tile:focus{outline:2px solid #5ad;outline-offset:2px}
+.gg-tile:focus,.gg-btn:focus{
+  outline:2px solid #3b82f6;
+  outline-offset:2px;
+}
 
-@media (max-width:840px){
-  .gg-cams{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
-  .gg-screens{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
-}
-@media (max-width:640px){
-  .gg-thumb{width:140px;min-width:140px;height:80px}
-  .gg-screens{grid-template-columns:1fr}
-}
-.gg-call-layout { display:flex; flex-direction:column; gap:8px; height:100%; width:100%; background:#0b0b0d; }
-.gg-main { flex:1; display:flex; min-height:0; }
-.gg-pinned, .gg-screens, .gg-cams { flex:1; display:grid; gap:6px; width:100%; height:100%; }
-.gg-pinned > * { width:100%; height:100%; }
-.gg-screens { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); align-items:stretch; }
-.gg-cams { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); align-items:stretch; }
-.gg-screen, .gg-cam { position:relative; border-radius:8px; overflow:hidden; background:#111; }
-.gg-strip { display:flex; gap:6px; overflow-x:auto; padding:6px; align-items:center; }
-.gg-thumb { width:180px; min-width:180px; height:102px; border-radius:6px; overflow:hidden; background:#111; opacity:.9; }
-.gg-thumb.pinned { outline:2px solid #5ad; opacity:1; }
-.gg-thumb.screen { width:220px; min-width:220px; height:124px; }
-.gg-fullscreen { margin-left:auto; padding:6px 10px; border-radius:6px; border:1px solid #2a2a2a; background:#141414; color:#e7e7e7; }
-@media (max-width: 640px) {
-  .gg-thumb { width:140px; min-width:140px; height:80px; }
-  .gg-screens { grid-template-columns: 1fr; }
-}
-/* Ensure videos fit the visible frame appropriately */
-.gg-primary.screen .lk-participant-tile video,
-.gg-tile.screen .lk-participant-tile video { object-fit: contain !important; }
-.gg-primary.cam .lk-participant-tile video,
-.gg-tile.cam .lk-participant-tile video { object-fit: cover; }
-/* Per-tile fullscreen button styling */
-.gg-fs-btn{position:absolute;right:8px;bottom:8px;background:rgba(0,0,0,.45);color:#fff;border:1px solid #444;border-radius:6px;padding:4px 8px;cursor:pointer;opacity:.0;transition:opacity .15s ease, background .15s ease}
-.gg-tile:hover .gg-fs-btn{opacity:1}
-.gg-fs-btn:hover{background:rgba(0,0,0,.6)}
-@media (max-width:520px){
-  .gg-fs-btn{padding:3px 6px;font-size:12px;border-radius:5px}
+/* Dark mode refinements */
+@media (prefers-color-scheme: dark) {
+  .gg-root { background: #0a0a0b; }
+  .gg-tile { background: #1a1a1b; }
+  .gg-placeholder { background: #111213; }
 }

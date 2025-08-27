@@ -48,6 +48,16 @@ jobs:
         run: npm run build
       - name: Add SPA 404 fallback
         run: cp dist/index.html dist/404.html
+      - name: Verify Digital Asset Links
+        run: |
+          echo "Checking if assetlinks.json exists..."
+          ls -la dist/.well-known/ || echo "No .well-known directory found"
+          if [ -f "dist/.well-known/assetlinks.json" ]; then
+            echo "✅ assetlinks.json found for TWA verification"
+            cat dist/.well-known/assetlinks.json
+          else
+            echo "⚠️ assetlinks.json not found - TWA may not work properly"
+          fi
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

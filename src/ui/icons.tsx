@@ -57,3 +57,19 @@ export const IconLink = (p: IconProps) => (
 export const IconInvite = (p: IconProps) => (
   <svg {...S(p)} viewBox="0 0 24 24"><path d="M4 6h16v12H4z"/><path d="M4 7l8 6 8-6"/></svg>
 );
+
+// Generic user/person circle icon for placeholders
+export const IconUser = (p: IconProps) => (
+  <svg {...S(p)} viewBox="0 0 24 24">
+    <circle cx="12" cy="8" r="4" />
+    <path d="M4 20c2.5-3.5 6-5 8-5s5.5 1.5 8 5" />
+  </svg>
+);
+
+// Aspect ratio icon (two arrows indicating aspect)
+export const IconAspect = (p: IconProps) => (
+  <svg {...S(p)} viewBox="0 0 24 24">
+    <rect x="4" y="6" width="16" height="12" rx="2" />
+    <path d="M9 10h6M9 14h6" />
+  </svg>
+);

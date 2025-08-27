@@ -32,10 +32,11 @@ android {
 
 	defaultConfig {
 		applicationId "io.github.tayden1990.twa"
-		minSdkVersion 21
-	targetSdkVersion 34
+		minSdkVersion 24
+		targetSdkVersion 34
+		compileSdk 34
 		versionCode 1
-		versionName "1"
+		versionName "1.0.0"
 
 		resValue "string", "appName", twaManifest.name
 		resValue "string", "launcherName", twaManifest.launcherName
@@ -47,6 +48,13 @@ android {
 		resValue "string", "fullScopeUrl", 'https://tayden1990.github.io/GlobGram-alpha-v2.0.0/'
 
 		resValue "string", "hostName", twaManifest.hostName
+		
+		// Enhanced manifest values for native experience
+		manifestPlaceholders = [
+			"hostName": twaManifest.hostName,
+			"launchUrl": launchUrl,
+			"package_id": "io.github.tayden1990.twa"
+		]
 		resValue "color", "colorPrimary", twaManifest.themeColor
 		resValue "color", "colorPrimaryDark", twaManifest.themeColorDark
 		resValue "color", "navigationColor", twaManifest.navigationColor
@@ -90,9 +98,13 @@ android {
 		debug {
 			// More robust debug experience: open in WebView if TWA verification fails
 			resValue "string", "fallbackType", "webview"
+			debuggable true
+			minifyEnabled false
 		}
 		release {
 			minifyEnabled true
+			shrinkResources true
+			proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
 			// Prefer Custom Tabs fallback in release; full TWA will engage when asset links verify
 			resValue "string", "fallbackType", "customtabs"
 			def skipSigning = (System.getenv('SKIP_RELEASE_SIGNING') ?: 'false').toBoolean()

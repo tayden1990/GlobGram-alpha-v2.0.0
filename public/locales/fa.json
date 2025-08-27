@@ -3,7 +3,6 @@
 	"actions.settings": "تنظیمات",
 	"actions.theme": "پوسته",
 	"actions.installApp": "نصب برنامه",
-
 	"modal.invite.title": "دعوت یک دوست",
 	"modal.invite.desc": "برای اتصال مستقیم به شما این لینک را اسکن یا به اشتراک بگذارید:",
 	"modal.invite.qrLabel": "کد QR",
@@ -11,7 +10,6 @@
 	"modal.invite.linkLabel": "لینک دعوت",
 	"modal.invite.copyText": "کپی متن دعوت",
 	"modal.invite.shareAll": "اشتراک متن + لینک (+ QR در صورت پشتیبانی)",
-
 	"settings.title": "تنظیمات",
 	"settings.keys": "کلیدها",
 	"settings.relays": "رله‌ها",
@@ -22,7 +20,6 @@
 	"settings.language": "زبان",
 	"settings.showAds": "نمایش تبلیغات",
 	"settings.manageAds": "مدیریت تبلیغات",
-
 	"common.close": "بستن",
 	"common.next": "بعدی →",
 	"common.back": "بازگشت",
@@ -44,7 +41,6 @@
 	"common.copyLink": "کپی لینک",
 	"common.send": "ارسال",
 	"common.reset": "بازنشانی",
-
 	"status.notRequested": "هنوز درخواست نشده",
 	"status.granted": "اعطا شد",
 	"status.denied": "رد شد",
@@ -53,7 +49,6 @@
 	"status.sent": "ارسال شد",
 	"status.delivered": "تحویل شد",
 	"status.failed": "ناموفق",
-
 	"onboarding.welcome": "به GlobGram خوش آمدید",
 	"onboarding.intro.title": "درباره GlobGram و Nostr",
 	"onboarding.intro.desc": "GlobGram یک پیام‌رسان سبک و خصوصی مبتنی بر Nostr است — پروتکلی باز و غیرمتمرکز برای انتقال پیام‌های امضاشده. بدون حساب‌های مرکزی و بدون قفل‌شدگی.",
@@ -84,7 +79,6 @@
 	"onboarding.step6.tip3": "برای محافظت بیشتر، رسانه‌ها را با عبارت عبور رمزگذاری کنید.",
 	"onboarding.step6.tip4": "وضعیت‌ها: ⏳ در حال ارسال، ✓ ارسال شد، ✓✓ تحویل شد. در خطا دوباره تلاش کنید.",
 	"onboarding.step6.tip5": "در موبایل، فقط ناحیه گفتگو اسکرول می‌شود؛ سربرگ و پابرگ ثابت می‌مانند.",
-
 	"install.installApp": "نصب برنامه",
 	"install.alreadyInstalled": "قبلاً نصب شده",
 	"install.promptNotAvailable": "درخواست نصب هنوز در دسترس نیست",
@@ -107,11 +101,9 @@
 	"install.swControlled": "تحت کنترل",
 	"install.swNoController": "هنوز کنترلی نیست",
 	"install.notYet": "هنوز نه",
-
 	"update.available": "نسخه جدید در دسترس است",
 	"update.countdown": "به‌روزرسانی در {s}ث…",
 	"update.now": "اکنون به‌روزرسانی کن",
-
 	"logs.unlockTitle": "باز کردن قفل گزارش‌ها",
 	"logs.unlockDesc": "برای دیدن گزارش‌ها رمز عبور را وارد کنید.",
 	"logs.incorrectPassword": "رمز عبور نادرست است.",
@@ -121,7 +113,6 @@
 	"logs.level.info": "اطلاعات",
 	"logs.level.warn": "هشدارها",
 	"logs.level.error": "خطاها",
-
 	"invite.message": "به GlobGram بپیوندید. برای شروع گفتگوی امن روی لینک بزنید.",
 	"invite.autoStartMessage": "سلام! دعوت‌نامه‌ات را پذیرفتم. شروع کنیم به گفتگو.",
 	"invite.connectTitle": "اتصال در GlobGram",
@@ -131,9 +122,7 @@
 	"invite.sendingGreeting": "در حال ارسال پیام خوش‌آمد…",
 	"invite.retryingGreeting": "هنوز در حال ارسال… تلاش دوباره",
 	"invite.greetingSent": "پیام خوش‌آمد ارسال شد",
-
 	"errors.powRequiredEnable": "رله نیاز به PoW دارد. برای ارسال، استخراج PoW را در تنظیمات فعال کنید.",
-
 	"tabs.main": "بخش‌های اصلی",
 	"tabs.chats": "گفتگوها",
 	"tabs.rooms": "اتاق‌ها",
@@ -145,12 +134,10 @@
 	"tabs.hideChatsList": "مخفی کردن فهرست گفتگوها",
 	"tabs.hideRooms": "مخفی کردن اتاق‌ها",
 	"tabs.hideRoomsList": "مخفی کردن فهرست اتاق‌ها",
-
 	"loading.chat": "در حال بارگذاری چت…",
 	"loading.room": "در حال بارگذاری اتاق…",
 	"loading.more": "در حال بارگذاری…",
 	"common.loading": "در حال بارگذاری…",
-
 	"fab.newChatPrompt": "چت جدید: کلید عمومی hex یا npub را وارد کنید",
 	"fab.startNewChat": "شروع چت جدید",
 	"fab.newChat": "چت جدید",
@@ -160,7 +147,6 @@
 	"fab.newRoom": "اتاق جدید",
 	"fab.openActions": "باز کردن اقدامات سریع",
 	"fab.scanQR": "اسکن QR",
-
 	"errors.invalidKey": "قالب کلید نامعتبر است. یک hex با ۶۴ کاراکتر، nsec یا فایل پشتیبان معتبر ارائه دهید.",
 	"errors.readKeyFailed": "خواندن فایل کلید ناموفق بود",
 	"errors.invalidPubkey": "کلید عمومی نامعتبر",
@@ -176,11 +162,9 @@
 	"errors.encodedAudioTooLarge": "صوت رمزگذاری‌شده خیلی بزرگ است",
 	"errors.videoTooLarge": "ویدئو خیلی بزرگ است (>10MB)",
 	"errors.encodedVideoTooLarge": "ویدئوی رمزگذاری‌شده خیلی بزرگ است",
-
 	"theme.system": "سیستم",
 	"theme.light": "روشن",
 	"theme.dark": "تیره",
-
 	"chat.selectPrompt": "یک چت را انتخاب کنید",
 	"chat.openImage": "باز کردن تصویر",
 	"chat.playVideo": "پخش ویدئو",
@@ -217,11 +201,19 @@
 	"chat.kind.audio": "صوت",
 	"chat.kind.file": "فایل",
 	"chat.empty": "هنوز گفتگویی وجود ندارد",
-		"input.placeholder": "یک پیام بنویسید"
-		,
-		"call.incoming": "تماس ورودی",
-		"call.accept": "پاسخ",
-		"call.reject": "رد",
-		"call.acceptedNote": "تماس پذیرفته شد",
-		"call.declinedNote": "تماس رد شد"
+	"input.placeholder": "یک پیام بنویسید",
+	"call.incoming": "تماس ورودی",
+	"call.accept": "پاسخ",
+	"call.reject": "رد",
+	"call.acceptedNote": "تماس پذیرفته شد",
+	"call.declinedNote": "تماس رد شد",
+	"actions.instantMeeting": "جلسه فوری",
+	"call.shareCall": "اشتراک‌گذاری تماس",
+	"common.save": "ذخیره",
+	"profile.editProfile": "ویرایش نمایه",
+	"profile.changeAvatar": "تغییر آواتار",
+	"profile.displayName": "نام نمایشی",
+	"settings.general": "عمومی",
+	"settings.privacy": "حریم خصوصی",
+	"settings.appearance": "ظاهر"
 }

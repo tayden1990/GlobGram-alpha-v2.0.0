@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Primary brand color -->
+    <color name="colorPrimary">#1976D2</color>
+    <color name="colorPrimaryDark">#000000</color>
+    <color name="colorAccent">#1976D2</color>
+    
+    <!-- Background colors -->
+    <color name="backgroundColor">#0F1115</color>
+    <color name="backgroundColorDark">#000000</color>
+    
+    <!-- Navigation colors -->
+    <color name="navigationColor">#000000</color>
+    <color name="navigationColorDark">#000000</color>
+    <color name="navigationDividerColor">#000000</color>
+    
+    <!-- Status bar and system UI -->
+    <color name="statusBarColor">#000000</color>
+    <color name="systemWindowsColor">#000000</color>
+    
+    <!-- Common colors -->
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+    <color name="transparent">#00000000</color>
+</resources>

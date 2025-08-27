@@ -3,7 +3,6 @@
 	"actions.settings": "الإعدادات",
 	"actions.theme": "السمة",
 	"actions.installApp": "تثبيت التطبيق",
-
 	"modal.invite.title": "دعوة صديق",
 	"modal.invite.desc": "امسح هذا الرابط أو شاركه للاتصال بك مباشرةً:",
 	"modal.invite.qrLabel": "رمز الاستجابة السريعة",
@@ -11,7 +10,6 @@
 	"modal.invite.linkLabel": "رابط الدعوة",
 	"modal.invite.copyText": "نسخ نص الدعوة",
 	"modal.invite.shareAll": "مشاركة النص + الرابط (+ QR إذا كان مدعومًا)",
-
 	"settings.title": "الإعدادات",
 	"settings.keys": "المفاتيح",
 	"settings.relays": "المُرحِّلات",
@@ -22,7 +20,6 @@
 	"settings.language": "اللغة",
 	"settings.showAds": "إظهار الإعلانات",
 	"settings.manageAds": "إدارة الإعلانات",
-
 	"common.close": "إغلاق",
 	"common.next": "التالي →",
 	"common.back": "رجوع",
@@ -44,7 +41,6 @@
 	"common.copyLink": "نسخ الرابط",
 	"common.send": "إرسال",
 	"common.reset": "إعادة ضبط",
-
 	"status.notRequested": "لم يُطلب بعد",
 	"status.granted": "مُنِح",
 	"status.denied": "مرفوض",
@@ -53,7 +49,6 @@
 	"status.sent": "تم الإرسال",
 	"status.delivered": "تم التسليم",
 	"status.failed": "فشل",
-
 	"onboarding.welcome": "مرحبًا بك في GlobGram",
 	"onboarding.intro.title": "نبذة عن GlobGram وNostr",
 	"onboarding.intro.desc": "GlobGram عبارة عن مراسِل خفيف وخاص مبني على Nostr — بروتوكول مفتوح ولامركزي لترحيل الرسائل الموقَّعة. بلا حسابات مركزية ولا احتجاز.",
@@ -84,7 +79,6 @@
 	"onboarding.step6.tip3": "بإمكانك تشفير الوسائط بعبارة مرور لمزيد من الحماية.",
 	"onboarding.step6.tip4": "الحالات: ⏳ جارٍ الإرسال، ✓ تم الإرسال، ✓✓ تم التسليم. أعد المحاولة عند الفشل.",
 	"onboarding.step6.tip5": "على الهاتف، منطقة المحادثة فقط هي التي تتمرر؛ أما الرأس والتذييل فيبقيان ثابتين.",
-
 	"install.installApp": "تثبيت التطبيق",
 	"install.alreadyInstalled": "مثبَّت بالفعل",
 	"install.promptNotAvailable": "مطالبة التثبيت غير متاحة بعد",
@@ -107,11 +101,9 @@
 	"install.swControlled": "متحكَّم به",
 	"install.swNoController": "لا يوجد متحكم بعد",
 	"install.notYet": "ليس بعد",
-
 	"update.available": "يتوفر إصدار جديد",
 	"update.countdown": "سيتم التحديث خلال {s}ث…",
 	"update.now": "حدّث الآن",
-
 	"logs.unlockTitle": "فتح سجلات",
 	"logs.unlockDesc": "أدخل كلمة المرور لعرض السجلات.",
 	"logs.incorrectPassword": "كلمة مرور غير صحيحة.",
@@ -121,7 +113,6 @@
 	"logs.level.info": "معلومات",
 	"logs.level.warn": "تحذيرات",
 	"logs.level.error": "أخطاء",
-
 	"invite.message": "انضم إليّ على GlobGram. اضغط على الرابط لبدء دردشة آمنة.",
 	"invite.autoStartMessage": "مرحبًا! قبلت دعوتك. لنتحدث.",
 	"invite.connectTitle": "الاتصال عبر GlobGram",
@@ -131,9 +122,7 @@
 	"invite.sendingGreeting": "جارٍ إرسال التحية…",
 	"invite.retryingGreeting": "ما زال الإرسال… إعادة المحاولة",
 	"invite.greetingSent": "تم إرسال التحية",
-
 	"errors.powRequiredEnable": "المُرحِّل يتطلب PoW. فعّل تعدين PoW من الإعدادات للإرسال.",
-
 	"tabs.main": "الأقسام الرئيسية",
 	"tabs.chats": "الدردشات",
 	"tabs.rooms": "الغرف",
@@ -145,12 +134,10 @@
 	"tabs.hideChatsList": "إخفاء قائمة الدردشات",
 	"tabs.hideRooms": "إخفاء الغرف",
 	"tabs.hideRoomsList": "إخفاء قائمة الغرف",
-
 	"loading.chat": "جارٍ تحميل الدردشة…",
 	"loading.room": "جارٍ تحميل الغرفة…",
 	"loading.more": "جارٍ التحميل…",
 	"common.loading": "جارٍ التحميل…",
-
 	"fab.newChatPrompt": "دردشة جديدة: أدخل مفتاحًا عامًا hex أو npub",
 	"fab.startNewChat": "بدء دردشة جديدة",
 	"fab.newChat": "دردشة جديدة",
@@ -160,7 +147,6 @@
 	"fab.newRoom": "غرفة جديدة",
 	"fab.openActions": "فتح الإجراءات السريعة",
 	"fab.scanQR": "مسح QR",
-
 	"errors.invalidKey": "تنسيق مفتاح غير صالح. قدّم hex من 64 حرفًا أو nsec أو ملف نسخ احتياطي صالح.",
 	"errors.readKeyFailed": "فشل في قراءة ملف المفتاح",
 	"errors.invalidPubkey": "مفتاح عام غير صالح",
@@ -176,11 +162,9 @@
 	"errors.encodedAudioTooLarge": "الصوت المُشفّر كبير جدًا",
 	"errors.videoTooLarge": "الفيديو كبير جدًا (>10MB)",
 	"errors.encodedVideoTooLarge": "الفيديو المُشفّر كبير جدًا",
-
 	"theme.system": "النظام",
 	"theme.light": "فاتح",
 	"theme.dark": "داكن",
-
 	"chat.selectPrompt": "اختر دردشة",
 	"chat.openImage": "فتح الصورة",
 	"chat.playVideo": "تشغيل الفيديو",
@@ -215,11 +199,19 @@
 	"chat.kind.audio": "صوت",
 	"chat.kind.file": "ملف",
 	"chat.empty": "لا توجد دردشات بعد",
-		"input.placeholder": "اكتب رسالة"
-		,
-		"call.incoming": "مكالمة واردة",
-		"call.accept": "قبول",
-		"call.reject": "رفض",
-		"call.acceptedNote": "تم قبول المكالمة",
-		"call.declinedNote": "تم رفض المكالمة"
+	"input.placeholder": "اكتب رسالة",
+	"call.incoming": "مكالمة واردة",
+	"call.accept": "قبول",
+	"call.reject": "رفض",
+	"call.acceptedNote": "تم قبول المكالمة",
+	"call.declinedNote": "تم رفض المكالمة",
+	"actions.instantMeeting": "اجتماع فوري",
+	"call.shareCall": "مشاركة المكالمة",
+	"common.save": "حفظ",
+	"profile.editProfile": "تحرير الملف الشخصي",
+	"profile.changeAvatar": "تغيير الصورة الرمزية",
+	"profile.displayName": "اسم العرض",
+	"settings.general": "عام",
+	"settings.privacy": "الخصوصية",
+	"settings.appearance": "المظهر"
 }

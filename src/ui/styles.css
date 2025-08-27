@@ -1,3 +1,6 @@
+/* Enhanced GlobGram UI - Import Design System */
+@import './design-system.css';
+
 /* Base reset */
 * { box-sizing: border-box }
 html, body, #root { height: 100% }
@@ -62,6 +65,9 @@ body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial
 .app-logo-anim { animation: logoPulse 1.8s ease-in-out infinite }
 @keyframes logoPulse { 0% { transform: scale(1) rotate(0deg) } 50% { transform: scale(1.03) rotate(0.5deg) } 100% { transform: scale(1) rotate(0deg) } }
 
+/* Loading spinner for buttons */
+@keyframes spin { 0% { transform: rotate(0deg) } 100% { transform: rotate(360deg) } }
+
 /* Centered loading view */
 .app-loading { min-height: 50vh; display: grid; place-items: center }
 .app-loading .hint { margin-top: 10px; color: var(--muted); font-size: 12px; text-align: center }
@@ -122,42 +128,72 @@ body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial
 		box-shadow: 0 -2px 12px rgba(0,0,0,0.1) !important;
 	}
 	
-	/* Make textarea smaller on mobile */
+	/* Make textarea smaller and more compact on mobile */
 	.sticky-footer textarea {
-		height: 60px !important;
-		min-height: 60px !important;
-		max-height: 120px !important;
-		font-size: 16px !important;
-		border-radius: 8px !important;
+		height: 50px !important;
+		min-height: 50px !important;
+		max-height: 100px !important;
+		font-size: 14px !important;
+		line-height: 1.2 !important;
+		padding: 8px 10px !important;
+		border-radius: 6px !important;
 		width: 100% !important;
 		box-sizing: border-box !important;
 	}
 	
-	/* Ensure send button is visible */
-	.sticky-footer button {
-		padding: 8px 16px !important;
-		min-width: 60px !important;
+	/* Make footer more compact */
+	.sticky-footer {
+		position: fixed !important;
+		bottom: 0 !important;
+		left: 0 !important;
+		right: 0 !important;
+		z-index: 30 !important;
+		background: var(--card) !important;
+		border-top: 1px solid var(--border) !important;
+		padding: 8px !important;
+		padding-bottom: calc(env(safe-area-inset-bottom) + 8px) !important;
+		box-shadow: 0 -2px 12px rgba(0,0,0,0.1) !important;
+		gap: 6px !important;
 	}
 	
-	/* Ensure Send button is always visible and accessible */
+	/* Make footer buttons more compact */
+	.sticky-footer button {
+		padding: 6px 10px !important;
+		min-width: 50px !important;
+		font-size: 12px !important;
+		border-radius: 6px !important;
+	}
+	
+	/* Ensure Send button is more compact but still accessible */
 	.sticky-footer button[style*="minWidth"] {
 		flex-shrink: 0 !important;
-		min-width: 88px !important;
+		min-width: 60px !important;
+		font-size: 13px !important;
 	}
 	
-	/* Ensure footer button row wraps properly on mobile */
+	/* Make footer button row more compact */
 	.sticky-footer > div + div {
 		display: flex !important;
 		flex-wrap: wrap !important;
-		gap: 8px !important;
+		gap: 6px !important;
 		align-items: center !important;
 		justify-content: space-between !important;
 		width: 100% !important;
 	}
 	
-	/* Adjust FAB position to avoid overlap with footer */
-	div[style*="position: fixed"][style*="bottom: 16px"][style*="right: 16px"] {
-		bottom: 100px !important; /* Move FAB container above footer */
+	/* Reduce padding on conversation area to account for smaller footer */
+	section[aria-label="Direct messages"] > div[class="scroll-y"],
+	section[aria-label="Room messages"] > div[class="scroll-y"] {
+		height: 100% !important;
+		min-height: 0 !important;
+		overflow-y: auto !important;
+		position: relative !important;
+		/* Reduced padding since footer is smaller now */
+		padding-bottom: 120px !important;
+		/* Force hardware acceleration for smooth scrolling */
+		transform: translateZ(0);
+		will-change: scroll-position;
+		box-sizing: border-box !important;
 	}
 }
 html, body { overscroll-behavior-y: none }
@@ -227,4 +263,295 @@ section[aria-label="Room messages"] input[type="file"] {
 @media (max-width: 900px) {
 	h1 { font-size: 20px; margin: 10px 16px 0 }
 	p { margin: 4px 16px 8px; font-size: 13px }
+	
+	/* Compact top header on mobile */
+	div[style*="padding: '8px 16px'"] {
+		padding: 4px 8px !important;
+		gap: 8px !important;
+	}
+	
+	/* Make logo smaller on mobile */
+	div[style*="gap: 10"] svg {
+		width: 20px !important;
+		height: 20px !important;
+	}
+	
+	/* Make title smaller and more compact */
+	h1[style*="fontSize: 16"] {
+		font-size: 14px !important;
+		margin: 0 !important;
+	}
+	
+	/* Make header buttons more compact */
+	div[style*="marginLeft: 'auto'"] {
+		gap: 4px !important;
+	}
+	
+	div[style*="marginLeft: 'auto'"] button {
+		padding: 4px 6px !important;
+		font-size: 12px !important;
+		min-width: unset !important;
+	}
+	
+	/* Make settings button smaller */
+	button[aria-label*="Settings"] {
+		padding: 4px !important;
+		font-size: 14px !important;
+	}
+	
+	/* Make theme selector smaller */
+	select[value] {
+		padding: 2px 4px !important;
+		font-size: 11px !important;
+		min-width: 60px !important;
+	}
+	
+	/* Make theme label smaller */
+	label[style*="fontSize: 8"] {
+		font-size: 7px !important;
+		margin: 0 !important;
+	}
+	
+	/* Adjust FAB position to avoid overlap with smaller footer */
+	div[style*="position: fixed"][style*="bottom: 16px"][style*="right: 16px"] {
+		bottom: 80px !important; /* Move FAB container above compact footer */
+	}
+	
+	/* Make tab buttons more compact */
+	button[role="tab"] {
+		padding: 6px 10px !important;
+		font-size: 13px !important;
+		border-radius: 16px !important;
+	}
+	
+	/* Make tab container more compact */
+	div[role="tablist"] {
+		padding: 2px !important;
+		gap: 2px !important;
+	}
+	
+	/* Compact instant meeting and invite buttons */
+	button[title*="Instant meeting"],
+	button[title*="Invite"] {
+		padding: 3px 5px !important;
+		font-size: 11px !important;
+		gap: 3px !important;
+	}
+	
+	button[title*="Instant meeting"] svg,
+	button[title*="Invite"] svg {
+		width: 14px !important;
+		height: 14px !important;
+	}
 }
+@media (max-width:520px) {
+  /* Mobile video optimization: maximize screen usage */
+  .gg-grid {
+    height: calc(100dvh - 96px) !important;
+    padding: 4px !important;
+  }
+  
+  /* For single participant: use most of the screen */
+  .gg-grid:has(.gg-tile:only-child) .gg-tile {
+    width: 95vw !important;
+    height: calc(85vh - 96px) !important;
+  }
+  
+  /* Video fills completely with cover */
+  .lk-participant-tile video {
+    object-fit: cover !important;
+  }
+  
+  /* Extra compact header for very small screens */
+  div[style*="padding: '8px 16px'"] {
+    padding: 2px 4px !important;
+    gap: 4px !important;
+  }
+  
+  /* Hide app title text on very small screens, keep only logo */
+  h1[style*="fontSize: 16"] {
+    display: none !important;
+  }
+  
+  /* Make logo even smaller */
+  div[style*="gap: 10"] svg {
+    width: 18px !important;
+    height: 18px !important;
+  }
+  
+  /* Make buttons even more compact */
+  div[style*="marginLeft: 'auto'"] button {
+    padding: 2px 4px !important;
+    font-size: 10px !important;
+  }
+  
+  /* Hide theme selector on very small screens */
+  select[value],
+  label[style*="fontSize: 8"] {
+    display: none !important;
+  }
+  
+  /* Make instant meeting and invite button text shorter or icon-only */
+  .btn-text {
+    display: none !important;
+  }
+  
+  /* Ultra compact footer for tiny screens */
+  .sticky-footer {
+    padding: 4px !important;
+    padding-bottom: calc(env(safe-area-inset-bottom) + 4px) !important;
+  }
+  
+  .sticky-footer textarea {
+    height: 40px !important;
+    min-height: 40px !important;
+    font-size: 13px !important;
+    padding: 6px 8px !important;
+  }
+  
+  .sticky-footer button {
+    padding: 4px 6px !important;
+    font-size: 11px !important;
+  }
+}
+
+/* Invite Modal Improvements */
+.modal .invite-content {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.modal .invite-qr-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  min-width: 200px;
+}
+
+.modal .invite-actions-section {
+  min-width: 280px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modal .quick-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.modal .quick-actions button {
+  flex: 1;
+  min-width: 120px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.modal .platform-share-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 6px;
+}
+
+.modal .platform-share-grid button {
+  width: 100%;
+  padding: 8px 6px;
+  font-size: 11px;
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.modal .platform-share-grid button:hover {
+  opacity: 0.9;
+}
+
+.modal .tips-section {
+  margin-top: 20px;
+  padding: 12px;
+  background: var(--bg);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+/* Mobile optimizations for invite modal */
+@media (max-width: 600px) {
+  .modal .invite-content {
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .modal .invite-qr-section {
+    width: 100%;
+    align-items: center;
+  }
+  
+  .modal .invite-qr-section canvas {
+    width: 160px !important;
+    height: 160px !important;
+  }
+  
+  .modal .invite-actions-section {
+    min-width: auto;
+    width: 100%;
+  }
+  
+  .modal .quick-actions {
+    flex-direction: column;
+  }
+  
+  .modal .quick-actions button {
+    min-width: auto;
+    width: 100%;
+  }
+  
+  .modal .platform-share-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  
+  .modal .platform-share-grid button {
+    padding: 12px 8px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 400px) {
+  .modal .invite-qr-section canvas {
+    width: 140px !important;
+    height: 140px !important;
+  }
+  
+  .modal .platform-share-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Loading animations for invite buttons */
+@keyframes buttonSuccess {
+  0% { background-color: var(--accent); }
+  50% { background-color: #4caf50; transform: scale(1.05); }
+  100% { background-color: #4caf50; }
+}
+
+@keyframes buttonPulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+  100% { transform: scale(1); }
+}
+

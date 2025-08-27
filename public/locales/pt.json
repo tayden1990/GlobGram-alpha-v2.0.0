@@ -3,7 +3,6 @@
 	"actions.settings": "Configurações",
 	"actions.theme": "Tema",
 	"actions.installApp": "Instalar aplicativo",
-
 	"modal.invite.title": "Convidar um amigo",
 	"modal.invite.desc": "Escaneie ou compartilhe este link para se conectar diretamente com você:",
 	"modal.invite.qrLabel": "QR code",
@@ -11,7 +10,6 @@
 	"modal.invite.linkLabel": "Link de convite",
 	"modal.invite.copyText": "Copiar texto do convite",
 	"modal.invite.shareAll": "Compartilhar texto + link (+ QR se suportado)",
-
 	"settings.title": "Configurações",
 	"settings.keys": "Chaves",
 	"settings.relays": "Relays",
@@ -22,7 +20,6 @@
 	"settings.language": "Idioma",
 	"settings.showAds": "Mostrar anúncios",
 	"settings.manageAds": "Gerenciar anúncios",
-
 	"common.close": "Fechar",
 	"common.next": "Próximo →",
 	"common.back": "Voltar",
@@ -44,7 +41,6 @@
 	"common.copyLink": "Copiar link",
 	"common.send": "Enviar",
 	"common.reset": "Redefinir",
-
 	"status.notRequested": "Ainda não solicitado",
 	"status.granted": "Concedido",
 	"status.denied": "Negado",
@@ -53,7 +49,6 @@
 	"status.sent": "Enviado",
 	"status.delivered": "Entregue",
 	"status.failed": "Falhou",
-
 	"onboarding.welcome": "Bem-vindo ao GlobGram",
 	"onboarding.intro.title": "Sobre o GlobGram e o Nostr",
 	"onboarding.intro.desc": "O GlobGram é um mensageiro leve e privado, baseado no Nostr — um protocolo aberto e descentralizado para retransmitir mensagens assinadas. Sem contas centrais, sem aprisionamento.",
@@ -84,7 +79,6 @@
 	"onboarding.step6.tip3": "Opcionalmente criptografe a mídia com uma senha para proteção extra.",
 	"onboarding.step6.tip4": "Status: ⏳ Enviando, ✓ Enviado, ✓✓ Entregue. Tente novamente em falhas.",
 	"onboarding.step6.tip5": "No celular, apenas a área da conversa rola; cabeçalho e rodapé ficam fixos.",
-
 	"install.installApp": "Instalar aplicativo",
 	"install.alreadyInstalled": "Já instalado",
 	"install.promptNotAvailable": "Prompt de instalação ainda não disponível",
@@ -107,11 +101,9 @@
 	"install.swControlled": "controlado",
 	"install.swNoController": "sem controlador",
 	"install.notYet": "ainda não",
-
 	"update.available": "Há uma nova versão disponível",
 	"update.countdown": "Atualizando em {s}s…",
 	"update.now": "Atualizar agora",
-
 	"logs.unlockTitle": "Desbloquear logs",
 	"logs.unlockDesc": "Insira a senha para ver os logs.",
 	"logs.incorrectPassword": "Senha incorreta.",
@@ -121,7 +113,6 @@
 	"logs.level.info": "Info",
 	"logs.level.warn": "Avisos",
 	"logs.level.error": "Erros",
-
 	"invite.message": "Junte-se a mim no GlobGram. Toque no link para iniciar um chat seguro.",
 	"invite.autoStartMessage": "Oi! Aceitei seu convite. Vamos conversar.",
 	"invite.connectTitle": "Conectar no GlobGram",
@@ -131,9 +122,7 @@
 	"invite.sendingGreeting": "Enviando saudação…",
 	"invite.retryingGreeting": "Ainda enviando… tentando novamente",
 	"invite.greetingSent": "Saudação enviada",
-
 	"errors.powRequiredEnable": "O relé exige PoW. Ative a mineração PoW nas Configurações para enviar.",
-
 	"tabs.main": "Seções principais",
 	"tabs.chats": "Chats",
 	"tabs.rooms": "Salas",
@@ -145,12 +134,10 @@
 	"tabs.hideChatsList": "Ocultar lista de chats",
 	"tabs.hideRooms": "Ocultar salas",
 	"tabs.hideRoomsList": "Ocultar lista de salas",
-
 	"loading.chat": "Carregando chat…",
 	"loading.room": "Carregando sala…",
 	"loading.more": "Carregando…",
 	"common.loading": "Carregando…",
-
 	"fab.newChatPrompt": "Novo chat: insira a chave pública em hex ou npub",
 	"fab.startNewChat": "Iniciar novo chat",
 	"fab.newChat": "Novo chat",
@@ -160,7 +147,6 @@
 	"fab.newRoom": "Nova sala",
 	"fab.openActions": "Abrir ações rápidas",
 	"fab.scanQR": "Escanear QR",
-
 	"errors.invalidKey": "Formato de chave inválido. Forneça hex de 64 caracteres, nsec ou um arquivo de backup válido.",
 	"errors.readKeyFailed": "Falha ao ler o arquivo de chave",
 	"errors.invalidPubkey": "Chave pública inválida",
@@ -176,11 +162,9 @@
 	"errors.encodedAudioTooLarge": "Áudio codificado muito grande",
 	"errors.videoTooLarge": "Vídeo muito grande (>10MB)",
 	"errors.encodedVideoTooLarge": "Vídeo codificado muito grande",
-
 	"theme.system": "Sistema",
 	"theme.light": "Claro",
 	"theme.dark": "Escuro",
-
 	"chat.selectPrompt": "Selecione um chat",
 	"chat.openImage": "Abrir imagem",
 	"chat.playVideo": "Reproduzir vídeo",
@@ -192,9 +176,9 @@
 	"chat.linkCopied": "Link copiado",
 	"chat.copyFailed": "Falha ao copiar",
 	"chat.clipboardUnsupported": "ClipboardItem não suportado",
-		"chat.resolvingMedia": "Resolvendo mídia…",
-		"chat.load": "Carregar",
-		"chat.mediaUnavailable": "Mídia indisponível. O remetente deve habilitar o servidor de upload ou estar online para mem://.",
+	"chat.resolvingMedia": "Resolvendo mídia…",
+	"chat.load": "Carregar",
+	"chat.mediaUnavailable": "Mídia indisponível. O remetente deve habilitar o servidor de upload ou estar online para mem://.",
 	"chat.retry": "Tentar novamente",
 	"chat.retryWithReason": "Reenviar (motivo: {reason})",
 	"chat.delete": "Excluir",
@@ -215,11 +199,19 @@
 	"chat.kind.audio": "áudio",
 	"chat.kind.file": "arquivo",
 	"chat.empty": "Ainda não há chats",
-		"input.placeholder": "Digite uma mensagem"
-		,
-		"call.incoming": "Chamada recebida",
-		"call.accept": "Atender",
-		"call.reject": "Recusar",
-		"call.acceptedNote": "Chamada aceita",
-		"call.declinedNote": "Chamada recusada"
+	"input.placeholder": "Digite uma mensagem",
+	"call.incoming": "Chamada recebida",
+	"call.accept": "Atender",
+	"call.reject": "Recusar",
+	"call.acceptedNote": "Chamada aceita",
+	"call.declinedNote": "Chamada recusada",
+	"actions.instantMeeting": "Reunião instantânea",
+	"call.shareCall": "Compartilhar chamada",
+	"common.save": "Salvar",
+	"profile.editProfile": "Editar Perfil",
+	"profile.changeAvatar": "Alterar Avatar",
+	"profile.displayName": "Nome de Exibição",
+	"settings.general": "Geral",
+	"settings.privacy": "Privacidade",
+	"settings.appearance": "Aparência"
 }

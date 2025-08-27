@@ -37,6 +37,13 @@ jobs:
       - name: Restore keystore (if provided)
         if: env.ANDROID_KEYSTORE_BASE64 != ''
         run: echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > my-release-key.jks
+      - name: Verify keystore fingerprint for TWA
+        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        run: |
+          echo "::group::Keystore fingerprint for Digital Asset Links"
+          keytool -list -v -keystore my-release-key.jks -alias "${ANDROID_KEY_ALIAS}" -storepass "${ANDROID_STORE_PASSWORD}" | grep "SHA256:" || true
+          echo "::endgroup::"
+          echo "ℹ️ Make sure this fingerprint matches the one in your assetlinks.json file"
       - name: Build release APK
         run: |
           echo "::group::Gradle version"; ./gradlew --version; echo "::endgroup::"

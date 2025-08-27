@@ -4,6 +4,7 @@
   "name": "GlobGram Alpha",
   "launcherName": "GlobGram",
   "display": "standalone",
+  "orientation": "portrait",
   "themeColor": "#1976D2",
   "themeColorDark": "#000000",
   "navigationColor": "#000000",
@@ -20,27 +21,35 @@
     "path": "E:\\my-final-app\\GlobGram-alpha-v2.0.0\\my-release-key.JKS",
     "alias": "Tayden1990"
   },
-  "appVersionName": "1",
+  "appVersionName": "1.0.0",
   "appVersionCode": 1,
   "shortcuts": [],
   "generatorApp": "bubblewrap-cli",
   "webManifestUrl": "https://tayden1990.github.io/GlobGram-alpha-v2.0.0/manifest.webmanifest",
   "fallbackType": "customtabs",
-  "features": {},
+  "features": {
+    "locationDelegation": {
+      "enabled": false
+    },
+    "playBilling": {
+      "enabled": false
+    }
+  },
   "alphaDependencies": {
     "enabled": false
   },
-  "enableSiteSettingsShortcut": true,
+  "enableSiteSettingsShortcut": false,
   "isChromeOSOnly": false,
   "isMetaQuest": false,
   "fullScopeUrl": "https://tayden1990.github.io/GlobGram-alpha-v2.0.0/",
-  "minSdkVersion": 21,
-  "orientation": "default",
+  "minSdkVersion": 24,
+  "targetSdkVersion": 34,
+  "maxSdkVersion": 34,
   "fingerprints": [],
   "additionalTrustedOrigins": [],
   "retainedBundles": [],
   "protocolHandlers": [],
   "fileHandlers": [],
   "launchHandlerClientMode": "",
-  "appVersion": "1"
+  "appVersion": "1.0.0"
 }

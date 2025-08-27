@@ -1,0 +1,23 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "io.github.tayden1990.twa",
+      "sha256_cert_fingerprints": [
+        "25:9C:DE:BC:9E:61:90:CD:A3:F4:6F:8A:E5:BE:A5:88:0C:6F:AB:03:DC:34:00:87:36:63:A6:C7:46:22:35:8C"
+      ]
+    }
+  },
+  {
+    "relation": ["delegate_permission/common.get_login_creds"],
+    "target": {
+      "namespace": "android_app", 
+      "package_name": "io.github.tayden1990.twa",
+      "sha256_cert_fingerprints": [
+        "25:9C:DE:BC:9E:61:90:CD:A3:F4:6F:8A:E5:BE:A5:88:0C:6F:AB:03:DC:34:00:87:36:63:A6:C7:46:22:35:8C"
+      ]
+    }
+  }
+]
+

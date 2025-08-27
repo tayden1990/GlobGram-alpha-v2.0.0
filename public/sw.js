@@ -1,5 +1,5 @@
 // Bump these on releases
-const APP_VERSION = '2025-08-20-1'
+const APP_VERSION = '2025-08-27-1'
 const DEBUG = true
 const CACHE_NAME = 'globgram-v2'
 
@@ -10,6 +10,79 @@ function scopeUrl(path) {
     return path
   }
 }
+
+// Handle push notifications
+self.addEventListener('push', (event) => {
+  if (DEBUG) console.log('[SW] Push received:', event.data?.text())
+  
+  const options = {
+    body: 'You have a new message in GlobGram',
+    icon: './branding/logo.png',
+    badge: './branding/logo.png',
+    tag: 'globgram-notification',
+    vibrate: [200, 100, 200],
+    requireInteraction: true,
+    actions: [
+      {
+        action: 'open',
+        title: 'Open App',
+        icon: './branding/logo.png'
+      },
+      {
+        action: 'close',
+        title: 'Dismiss'
+      }
+    ],
+    data: {
+      url: './',
+      timestamp: Date.now()
+    }
+  }
+
+  if (event.data) {
+    try {
+      const payload = event.data.json()
+      options.body = payload.body || options.body
+      options.title = payload.title || 'GlobGram'
+      options.data.url = payload.url || options.data.url
+    } catch (e) {
+      options.title = 'GlobGram'
+      options.body = event.data.text() || options.body
+    }
+  }
+
+  event.waitUntil(
+    self.registration.showNotification('GlobGram', options)
+  )
+})
+
+// Handle notification clicks
+self.addEventListener('notificationclick', (event) => {
+  if (DEBUG) console.log('[SW] Notification clicked:', event.action)
+  
+  event.notification.close()
+
+  if (event.action === 'close') {
+    return
+  }
+
+  const targetUrl = event.notification.data?.url || './'
+  
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // Try to focus existing window
+      for (const client of clientList) {
+        if (client.url.includes(self.registration.scope) && 'focus' in client) {
+          return client.focus()
+        }
+      }
+      // Open new window if no existing window found
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl)
+      }
+    })
+  )
+})
 
 self.addEventListener('install', (e) => {
   if (DEBUG) console.log('[SW] install')

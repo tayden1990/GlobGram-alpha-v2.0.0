@@ -5,3 +5,9 @@ export { NostrEngine } from './NostrEngine'
 export { RelayManager } from './RelayManager'
 export { RoomList } from './RoomList'
 export { RoomWindow } from './RoomWindow'
+
+// Enhanced UI Components
+export * from './components'
+export * from './navigation'
+export * from './message-components'
+export * from './settings-components'

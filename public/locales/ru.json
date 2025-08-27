@@ -3,7 +3,6 @@
 	"actions.settings": "Настройки",
 	"actions.theme": "Тема",
 	"actions.installApp": "Установить приложение",
-
 	"modal.invite.title": "Пригласить друга",
 	"modal.invite.desc": "Отсканируйте или поделитесь этой ссылкой, чтобы подключиться к вам напрямую:",
 	"modal.invite.qrLabel": "QR-код",
@@ -16,7 +15,6 @@
 	"modal.invite.shareTelegram": "Поделиться через Telegram",
 	"modal.invite.shareEmail": "Поделиться по Email",
 	"modal.invite.shareSMS": "Поделиться через SMS",
-
 	"settings.title": "Настройки",
 	"settings.keys": "Ключи",
 	"settings.relays": "Реле",
@@ -27,7 +25,6 @@
 	"settings.language": "Язык",
 	"settings.showAds": "Показывать рекламу",
 	"settings.manageAds": "Управлять рекламой",
-
 	"common.close": "Закрыть",
 	"common.next": "Далее →",
 	"common.back": "Назад",
@@ -49,7 +46,6 @@
 	"common.copyLink": "Копировать ссылку",
 	"common.send": "Отправить",
 	"common.reset": "Сброс",
-
 	"status.notRequested": "Ещё не запрошено",
 	"status.granted": "Предоставлено",
 	"status.denied": "Отказано",
@@ -58,7 +54,6 @@
 	"status.sent": "Отправлено",
 	"status.delivered": "Доставлено",
 	"status.failed": "Не удалось",
-
 	"onboarding.welcome": "Добро пожаловать в GlobGram",
 	"onboarding.intro.title": "О GlobGram и Nostr",
 	"onboarding.intro.desc": "GlobGram — лёгкий приватный мессенджер на базе Nostr — открытого децентрализованного протокола для ретрансляции подписанных сообщений. Без центральных аккаунтов и без привязки к приложению.",
@@ -89,7 +84,6 @@
 	"onboarding.step6.tip3": "При желании шифруйте медиафайлы с помощью парольной фразы для дополнительной защиты.",
 	"onboarding.step6.tip4": "Статусы: ⏳ Отправка, ✓ Отправлено, ✓✓ Доставлено. Повторите попытку при сбое.",
 	"onboarding.step6.tip5": "На мобильных устройствах прокручивается только область переписки; шапка и подвал закреплены.",
-
 	"install.installApp": "Установить приложение",
 	"install.alreadyInstalled": "Уже установлено",
 	"install.promptNotAvailable": "Запрос установки пока недоступен",
@@ -112,11 +106,9 @@
 	"install.swControlled": "под управлением SW",
 	"install.swNoController": "пока без контроллера",
 	"install.notYet": "пока нет",
-
 	"update.available": "Доступна новая версия",
 	"update.countdown": "Обновление через {s}с…",
 	"update.now": "Обновить сейчас",
-
 	"logs.unlockTitle": "Разблокировать логи",
 	"logs.unlockDesc": "Введите пароль для просмотра логов.",
 	"logs.incorrectPassword": "Неверный пароль.",
@@ -126,7 +118,6 @@
 	"logs.level.info": "Инфо",
 	"logs.level.warn": "Предупреждения",
 	"logs.level.error": "Ошибки",
-
 	"invite.message": "Присоединяйтесь ко мне в GlobGram. Нажмите ссылку, чтобы начать безопасный чат.",
 	"invite.autoStartMessage": "Привет! Я принял(а) твоё приглашение. Давай общаться.",
 	"invite.connectTitle": "Подключиться в GlobGram",
@@ -136,9 +127,7 @@
 	"invite.sendingGreeting": "Отправка приветствия…",
 	"invite.retryingGreeting": "Всё ещё отправляем… повторная попытка",
 	"invite.greetingSent": "Приветствие отправлено",
-
 	"errors.powRequiredEnable": "Реле требует PoW. Включите майнинг PoW в настройках для отправки.",
-
 	"tabs.main": "Основные разделы",
 	"tabs.chats": "Чаты",
 	"tabs.rooms": "Комнаты",
@@ -150,12 +139,10 @@
 	"tabs.hideChatsList": "Скрыть список чатов",
 	"tabs.hideRooms": "Скрыть комнаты",
 	"tabs.hideRoomsList": "Скрыть список комнат",
-
 	"loading.chat": "Загрузка чата…",
 	"loading.room": "Загрузка комнаты…",
 	"loading.more": "Загрузка…",
 	"common.loading": "Загрузка…",
-
 	"fab.newChatPrompt": "Новый чат: введите публичный ключ (hex) или npub",
 	"fab.startNewChat": "Начать новый чат",
 	"fab.newChat": "Новый чат",
@@ -165,7 +152,6 @@
 	"fab.newRoom": "Новая комната",
 	"fab.openActions": "Открыть быстрые действия",
 	"fab.scanQR": "Сканировать QR",
-
 	"errors.invalidKey": "Недопустимый формат ключа. Укажите 64-символьный hex, nsec или корректный файл резервной копии.",
 	"errors.readKeyFailed": "Не удалось прочитать файл ключа",
 	"errors.invalidPubkey": "Недопустимый публичный ключ",
@@ -181,11 +167,9 @@
 	"errors.encodedAudioTooLarge": "Закодированный аудио-файл слишком большой",
 	"errors.videoTooLarge": "Видео слишком большое (>10 МБ)",
 	"errors.encodedVideoTooLarge": "Закодированное видео слишком большое",
-
 	"theme.system": "Система",
 	"theme.light": "Светлая",
 	"theme.dark": "Тёмная",
-
 	"chat.selectPrompt": "Выберите чат",
 	"chat.openImage": "Открыть изображение",
 	"chat.playVideo": "Воспроизвести видео",
@@ -197,9 +181,9 @@
 	"chat.linkCopied": "Ссылка скопирована",
 	"chat.copyFailed": "Не удалось скопировать",
 	"chat.clipboardUnsupported": "ClipboardItem не поддерживается",
-		"chat.resolvingMedia": "Разрешение медиа…",
-		"chat.load": "Загрузить",
-		"chat.mediaUnavailable": "Медиа недоступно. Отправителю нужно включить сервер загрузки или быть онлайн для mem://.",
+	"chat.resolvingMedia": "Разрешение медиа…",
+	"chat.load": "Загрузить",
+	"chat.mediaUnavailable": "Медиа недоступно. Отправителю нужно включить сервер загрузки или быть онлайн для mem://.",
 	"chat.retry": "Повторить",
 	"chat.retryWithReason": "Повторить отправку (причина: {reason})",
 	"chat.delete": "Удалить",
@@ -228,11 +212,19 @@
 	"chat.kind.audio": "аудио",
 	"chat.kind.file": "файл",
 	"chat.empty": "Пока нет чатов",
-		"input.placeholder": "Введите сообщение"
-		,
-		"call.incoming": "Входящий звонок",
-		"call.accept": "Принять",
-		"call.reject": "Отклонить",
-		"call.acceptedNote": "Звонок принят",
-		"call.declinedNote": "Звонок отклонён"
+	"input.placeholder": "Введите сообщение",
+	"call.incoming": "Входящий звонок",
+	"call.accept": "Принять",
+	"call.reject": "Отклонить",
+	"call.acceptedNote": "Звонок принят",
+	"call.declinedNote": "Звонок отклонён",
+	"actions.instantMeeting": "Мгновенная встреча",
+	"call.shareCall": "Поделиться звонком",
+	"common.save": "Сохранить",
+	"profile.editProfile": "Редактировать профиль",
+	"profile.changeAvatar": "Изменить аватар",
+	"profile.displayName": "Отображаемое имя",
+	"settings.general": "Общие",
+	"settings.privacy": "Конфиденциальность",
+	"settings.appearance": "Внешний вид"
 }

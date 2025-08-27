@@ -1,12 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { LiveKitRoom, VideoConference, useRoomContext, ParticipantTile, useTracks } from '@livekit/components-react'
+import { LiveKitRoom, useRoomContext } from '@livekit/components-react'
 import type { Room } from 'livekit-client'
-import { Track } from 'livekit-client'
 import { fetchLiveKitToken } from '../livekit/token'
 import { CONFIG } from '../config'
 import { emitToast } from './Toast'
-import { IconInvite } from './icons'
-import CallGallery from './CallGallery';
+import SimpleConference from './SimpleConference';
+import { CallErrorBoundary } from './CallErrorBoundary';
 
 type Props = {
   roomName: string
@@ -29,6 +28,39 @@ export function CallPanel({ roomName, identity, open, onClose, onEnded }: Props)
   const [logs, setLogs] = useState<string[]>([])
   const [showDebug, setShowDebug] = useState(false)
   const [connectKey, setConnectKey] = useState(0) // force remount to reconnect
+
+  // Add global error handler for LiveKit WebRTC errors
+  useEffect(() => {
+    const originalConsoleError = console.error;
+    console.error = (...args) => {
+      const message = args.join(' ');
+      // Suppress known harmless LiveKit cleanup errors
+      if (message.includes('removeTrack') || 
+          message.includes('RTCRtpSender') ||
+          message.includes('could not removeTrack')) {
+        console.warn('[LiveKit Cleanup Warning]:', ...args);
+        return;
+      }
+      originalConsoleError(...args);
+    };
+
+    // Global unhandled error suppression for specific LiveKit errors
+    const handleError = (event: ErrorEvent) => {
+      if (event.error?.message?.includes('removeTrack') ||
+          event.error?.message?.includes('RTCRtpSender')) {
+        event.preventDefault();
+        console.warn('[LiveKit Error Suppressed]:', event.error);
+        return false;
+      }
+    };
+
+    window.addEventListener('error', handleError);
+
+    return () => {
+      console.error = originalConsoleError;
+      window.removeEventListener('error', handleError);
+    };
+  }, []);
   const [tokenMeta, setTokenMeta] = useState<{ iss?: string; sub?: string; room?: string } | null>(null)
   const [checkRunning, setCheckRunning] = useState(false)
   const [checkResult, setCheckResult] = useState<any>(null)
@@ -41,9 +73,7 @@ export function CallPanel({ roomName, identity, open, onClose, onEnded }: Props)
   const [selectedOutput, setSelectedOutput] = useState<string | ''>('')
   const pttActiveRef = useRef(false)
   const pttPrevMicRef = useRef<boolean | null>(null)
-  const [pinnedId, setPinnedId] = useState<string | null>(null)
-  const hasAdvancedLayout = typeof ParticipantTile !== 'undefined' && typeof useTracks === 'function'
-  const [layoutMode, setLayoutMode] = useState<'auto'|'gallery'|'speaker'|'screens'>('auto')
+  // Legacy pin/layout removed; SimpleConference provides the UI
   // Track call lifecycle for summary
   const startedAtRef = useRef<number | null>(null)
   const endedSentRef = useRef(false)
@@ -306,66 +336,7 @@ export function CallPanel({ roomName, identity, open, onClose, onEnded }: Props)
   return (
     <div role="dialog" aria-modal className="call-panel-overlay" style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 99999, display: 'flex', alignItems: 'stretch', justifyContent: 'stretch' }}>
       <div ref={panelRef as any} className="call-panel" style={{ width: '100vw', height: '100vh', background: '#0b0b0c', color: '#fff', borderRadius: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-  <div className="call-topbar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#121216', borderBottom: '1px solid #222', gap: 8 }}>
-          <strong>Call: {room}</strong>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button
-              title="Copy invite link"
-              onClick={async () => {
-                let link = ''
-                try {
-                  const base = (import.meta as any).env?.BASE_URL || '/'
-                  const u = new URL(base, window.location.origin)
-                  u.searchParams.set('call', roomName)
-                  link = u.toString()
-                } catch {
-                  link = `${window.location.origin}?call=${encodeURIComponent(roomName)}`
-                }
-                try {
-                  await navigator.clipboard.writeText(link)
-                  emitToast?.('Invite link copied', 'success')
-                  addLog('Invite link copied to clipboard')
-                } catch {
-                  addLog('Clipboard failed, showing prompt')
-                  prompt('Copy this link', link)
-                }
-              }}
-              style={{ background: 'transparent', border: '1px solid #444', color: '#fff', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
-            ><IconInvite size={16} /> Invite</button>
-            <button
-              title={showDebug ? 'Hide debug' : 'Show debug'}
-              onClick={() => setShowDebug(v => !v)}
-              style={{ background: 'transparent', border: '1px solid #444', color: '#fff', borderRadius: 6, padding: '4px 8px', cursor: 'pointer' }}
-            >{showDebug ? 'Debug−' : 'Debug+'}</button>
-            {/* Layout and fullscreen controls moved to in-video toolbar */}
-            <button onClick={() => { try { emitEndedOnce('closed') } catch {} ; onClose() }} style={{ background: 'transparent', border: '1px solid #444', color: '#fff', borderRadius: 6, padding: '4px 8px', cursor: 'pointer' }}>✖</button>
-          </div>
-        </div>
-  <div className="call-statusbar" style={{ padding: '8px 12px', background: '#0f0f12', borderBottom: '1px solid #222', fontSize: 13, color: '#ddd', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <span>Status: {status}{error ? ` – ${error}` : ''}</span>
-          {(status === 'error' || status === 'disconnected') && (
-            <button
-              onClick={() => {
-                addLog('Manual reconnect requested')
-                setError(null)
-                setStatus('fetching-token')
-                setToken(null)
-                setConnectKey(k => k + 1)
-              }}
-              style={{ background: 'transparent', border: '1px solid #444', color: '#fff', borderRadius: 6, padding: '2px 8px', cursor: 'pointer' }}
-            >Reconnect</button>
-          )}
-          {(status === 'error') && (
-            <button
-              disabled={checkRunning}
-              onClick={() => runPreflight(false)}
-              style={{ background: 'transparent', border: '1px solid #444', color: '#fff', borderRadius: 6, padding: '2px 8px', cursor: 'pointer', opacity: checkRunning ? 0.6 : 1 }}
-            >{checkRunning ? 'Checking…' : 'Run Check'}</button>
-          )}
-          <span style={{ opacity: 0.8 }}>Server: {CONFIG.LIVEKIT_WS_URL}</span>
-          <span style={{ opacity: 0.8 }}>Identity: {identity.slice(0, 10)}…</span>
-          <span style={{ opacity: 0.8 }}>Room: {room}</span>
-        </div>
+  {/* Top/status bars removed for a minimal, clean UI */}
 
         {showDebug && (
           <div style={{ padding: 12, background: '#0e0e11', color: '#bbb', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', fontSize: 12, maxHeight: 160, overflow: 'auto', borderBottom: '1px solid #222' }}>
@@ -376,122 +347,7 @@ export function CallPanel({ roomName, identity, open, onClose, onEnded }: Props)
           </div>
         )}
 
-        {/* Lightweight custom controls */}
-  <div className="call-controls" style={{ padding: '8px 12px', background: '#0f0f12', borderBottom: '1px solid #222', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <button
-            title="Toggle microphone"
-            onClick={async () => {
-              try {
-                if (!lkRoom) return
-                const lp: any = lkRoom.localParticipant as any
-                const pubs: any[] = Array.from(lp?.trackPublications?.values?.() || [])
-                const micPub = pubs.find(p => String(p?.source || '').toLowerCase().includes('micro'))
-                const enabled = micPub ? !micPub.isMuted : false
-                const next = !enabled
-                await lp.setMicrophoneEnabled(next)
-                setMicOn(next)
-                addLog(`Mic -> ${next ? 'on' : 'off'}`)
-              } catch (e: any) { addLog(`Mic toggle error: ${e?.message || e}`) }
-            }}
-            style={{ background: micOn ? '#1f3a1f' : 'transparent', border: '1px solid #444', color: '#fff', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
-          >{micOn ? '🎤 Mic On' : '🎤 Mic Off'}</button>
-          <button
-            title="Toggle camera"
-            onClick={async () => {
-              try {
-                if (!lkRoom) return
-                const lp: any = lkRoom.localParticipant as any
-                const pubs: any[] = Array.from(lp?.trackPublications?.values?.() || [])
-                const camPub = pubs.find(p => String(p?.source || '').toLowerCase().includes('camera'))
-                const enabled = camPub ? !camPub.isMuted : false
-                const next = !enabled
-                await lp.setCameraEnabled(next)
-                setCamOn(next)
-                addLog(`Camera -> ${next ? 'on' : 'off'}`)
-              } catch (e: any) { addLog(`Camera toggle error: ${e?.message || e}`); emitToast?.(`Camera toggle failed: ${e?.message || e}`, 'error') }
-            }}
-            style={{ background: camOn ? '#1f3a1f' : 'transparent', border: '1px solid #444', color: '#fff', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
-          >{camOn ? '🎥 Cam On' : '🎥 Cam Off'}</button>
-          <button
-            title="Toggle screen share"
-            onClick={async () => {
-              try {
-                if (!lkRoom) return
-                const lp: any = lkRoom.localParticipant as any
-                // No direct getter across browsers; try enable true first if no screen track
-                const pubs: any[] = Array.from(lp?.trackPublications?.values?.() || [])
-                const screenPub = pubs.find(p => String(p?.source || '').toLowerCase().includes('screenshare'))
-                const desired = !screenPub || screenPub.isMuted
-                await lp.setScreenShareEnabled(desired)
-                setScreenOn(desired)
-                addLog(`ScreenShare -> ${desired ? 'on' : 'off'}`)
-              } catch (e: any) { addLog(`Screen share error: ${e?.message || e}`); emitToast?.(`Screen share failed: ${e?.message || e}`, 'error') }
-            }}
-            style={{ background: screenOn ? '#1f3a1f' : 'transparent', border: '1px solid #444', color: '#fff', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
-          >{screenOn ? '🖥️ Share On' : '🖥️ Share Off'}</button>
-          <span style={{ width: 1, height: 18, background: '#333', display: 'inline-block', margin: '0 6px' }} />
-          {/* Audio output selector */}
-          <label style={{ fontSize: 12, opacity: 0.9 }}>Output:</label>
-          <select
-            value={selectedOutput}
-            onChange={async (e) => {
-              const id = e.target.value
-              setSelectedOutput(id)
-              try {
-                if (lkRoom && id) {
-                  await lkRoom.switchActiveDevice('audiooutput', id)
-                  addLog(`Audio output -> ${id}`)
-                }
-              } catch (err: any) {
-                emitToast?.(`Switch output failed: ${err?.message || err}`, 'error')
-              }
-            }}
-            style={{ background: 'transparent', border: '1px solid #444', color: '#fff', borderRadius: 6, padding: '4px 6px' }}
-          >
-            <option value="">System default</option>
-            {audioOutputs.map(d => (
-              <option key={d.deviceId} value={d.deviceId}>{d.label || d.deviceId}</option>
-            ))}
-          </select>
-          <span style={{ width: 1, height: 18, background: '#333', display: 'inline-block', margin: '0 6px' }} />
-          <button
-            title="Switch to front (selfie) camera"
-            onClick={async () => {
-              try {
-                if (!lkRoom) return
-                const devices = await navigator.mediaDevices.enumerateDevices()
-                const cams = devices.filter(d => d.kind === 'videoinput')
-                // Prefer labels indicating front/user
-                const cand = cams.find(d => /front|user/i.test(d.label)) || cams[0]
-                if (cand?.deviceId) {
-                  await lkRoom.switchActiveDevice('videoinput', cand.deviceId)
-                  addLog(`Switched camera -> front (${cand.label || cand.deviceId})`)
-                } else {
-                  addLog('No camera devices found')
-                }
-              } catch (e: any) { addLog(`Switch to front error: ${e?.message || e}`) }
-            }}
-            style={{ background: 'transparent', border: '1px solid #444', color: '#fff', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
-          >↔️ Front</button>
-          <button
-            title="Switch to back (environment) camera"
-            onClick={async () => {
-              try {
-                if (!lkRoom) return
-                const devices = await navigator.mediaDevices.enumerateDevices()
-                const cams = devices.filter(d => d.kind === 'videoinput')
-                const cand = cams.find(d => /back|rear|environment/i.test(d.label)) || cams[1] || cams[0]
-                if (cand?.deviceId) {
-                  await lkRoom.switchActiveDevice('videoinput', cand.deviceId)
-                  addLog(`Switched camera -> back (${cand.label || cand.deviceId})`)
-                } else {
-                  addLog('No camera devices found')
-                }
-              } catch (e: any) { addLog(`Switch to back error: ${e?.message || e}`) }
-            }}
-            style={{ background: 'transparent', border: '1px solid #444', color: '#fff', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
-          >↔️ Back</button>
-        </div>
+  {/* Legacy inline controls removed; in-video toolbar is used */}
 
         {error && (
           <div style={{ padding: 12, color: '#f88', fontSize: 14 }}>
@@ -515,110 +371,71 @@ export function CallPanel({ roomName, identity, open, onClose, onEnded }: Props)
           <div style={{ padding: 12, color: '#aaa' }}>{status === 'fetching-token' ? 'Fetching token…' : 'Connecting…'}</div>
         )}
   {token && status !== 'error' && (
-          <LiveKitRoom
-            token={token}
-            serverUrl={CONFIG.LIVEKIT_WS_URL}
-            connectOptions={{ autoSubscribe: true }}
-            audio={true}
-            video={true}
-            onConnected={() => {
-              setStatus('connected')
-              addLog('Connected to LiveKit')
-              if (!startedAtRef.current) startedAtRef.current = Date.now()
-              hadConnectedRef.current = true
-            }}
-            onDisconnected={() => {
-              setStatus('disconnected')
-              setLkRoom(null)
-              addLog('Disconnected from LiveKit')
-              if (hadConnectedRef.current) emitEndedOnce('disconnected')
-            }}
-            onError={(e: any) => { const msg = e?.message || String(e); setError(msg); setStatus('error'); addLog(`LiveKit error: ${msg}`) }}
-            data-lk-theme="default"
-          >
-            <RoomBinder onReady={setLkRoom} />
-            {/* header / controls remain above */}
-            <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-              <CallGallery onHangup={() => { try { emitEndedOnce('hangup') } catch {} ; onClose() }} />
-            </div>
-          </LiveKitRoom>
+          <CallErrorBoundary>
+            <LiveKitRoom
+              token={token}
+              serverUrl={CONFIG.LIVEKIT_WS_URL}
+              connectOptions={{ 
+                autoSubscribe: true,
+                maxRetries: 3,
+                peerConnectionTimeout: 15000,
+              }}
+              options={{
+                adaptiveStream: true,
+                dynacast: true,
+                videoCaptureDefaults: {
+                  resolution: { width: 1280, height: 720 },
+                  facingMode: 'user',
+                },
+                audioCaptureDefaults: {
+                  echoCancellation: true,
+                  noiseSuppression: true,
+                },
+                publishDefaults: {
+                  red: false, // Disable redundancy encoding to prevent track errors
+                  dtx: false, // Disable discontinuous transmission
+                },
+              }}
+              audio={true}
+              video={true}
+              onConnected={() => {
+                setStatus('connected')
+                addLog('Connected to LiveKit')
+                if (!startedAtRef.current) startedAtRef.current = Date.now()
+                hadConnectedRef.current = true
+              }}
+              onDisconnected={() => {
+                setStatus('disconnected')
+                setLkRoom(null)
+                addLog('Disconnected from LiveKit')
+                if (hadConnectedRef.current) emitEndedOnce('disconnected')
+              }}
+              onError={(e: any) => { 
+                const msg = e?.message || String(e);
+                // Filter out known harmless LiveKit cleanup errors
+                if (msg.includes('removeTrack') || msg.includes('RTCRtpSender')) {
+                  addLog(`LiveKit cleanup warning (ignored): ${msg}`);
+                  return; // Don't treat as fatal error
+                }
+                setError(msg); 
+                setStatus('error'); 
+                addLog(`LiveKit error: ${msg}`);
+              }}
+              data-lk-theme="default"
+            >
+              <RoomBinder onReady={setLkRoom} />
+              {/* header / controls remain above */}
+              <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+                <SimpleConference 
+                  roomId={roomName}
+                  onLeave={() => { try { emitEndedOnce('hangup') } catch {} ; onClose() }} 
+                />
+              </div>
+            </LiveKitRoom>
+          </CallErrorBoundary>
         )}
       </div>
     </div>
   )
 }
-
-function CallTiles({ pinnedId, onPin, layoutMode }: { pinnedId: string | null; onPin: (id: string | null) => void; layoutMode: 'auto'|'gallery'|'speaker'|'screens' }) {
-  const screenRefs = useTracks([{ source: Track.Source.ScreenShare, withPlaceholder: false }])
-  const camRefs = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }])
-  // If pinned, prefer pinned screen share, else pinned camera
-  const pinned = useMemo(() => {
-    if (!pinnedId) return null
-    return (
-      screenRefs.find((r) => (r.participant?.identity === pinnedId)) ||
-      camRefs.find((r) => (r.participant?.identity === pinnedId)) ||
-      null
-    )
-  }, [pinnedId, screenRefs, camRefs])
-
-  const mode = useMemo(() => {
-    if (layoutMode !== 'auto') return layoutMode
-    if (pinned || screenRefs.length > 0) return 'speaker'
-    return 'gallery'
-  }, [layoutMode, pinned, screenRefs.length])
-
-  const gridStyle = (count: number): React.CSSProperties => {
-    const cols = count <= 1 ? 1 : count === 2 ? 2 : count <= 4 ? 2 : count <= 9 ? 3 : 4
-    return { display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 8 }
-  }
-
-  const Tile = ({ tr }: { tr: any }) => (
-    <div onClick={() => onPin(tr?.participant?.identity || null)} style={{ position: 'relative', cursor: 'pointer', background: '#000', borderRadius: 8, overflow: 'hidden' }}>
-      <ParticipantTile trackRef={tr} style={{ width: '100%', height: '100%' }} />
-    </div>
-  )
-
-  return (
-    <div style={{ display: 'grid', gridTemplateRows: mode==='gallery' ? '1fr' : '1fr auto', minHeight: 0, gap: 8, padding: 8 }}>
-      <div style={{ minHeight: 0 }}>
-        {mode === 'speaker' ? (
-          pinned ? (
-            <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-              <ParticipantTile trackRef={pinned} style={{ width: '100%', height: '100%' }} />
-              <button onClick={() => onPin(null)} style={{ position: 'absolute', top: 8, right: 8, zIndex: 2, background: 'rgba(0,0,0,0.5)', color: '#fff', border: '1px solid #444', borderRadius: 6, padding: '4px 8px' }}>Unpin</button>
-            </div>
-          ) : screenRefs.length > 0 ? (
-            <div style={{ width: '100%', height: '100%', ...gridStyle(screenRefs.length) }}>
-              {screenRefs.map((tr) => (
-                <Tile key={tr.publication?.trackSid || tr.participant?.identity || Math.random()} tr={tr} />
-              ))}
-            </div>
-          ) : (
-            <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center', color: '#bbb' }}>No screen share</div>
-          )
-        ) : mode === 'screens' ? (
-          <div style={{ width: '100%', height: '100%', ...gridStyle(screenRefs.length || 1) }}>
-            {(screenRefs.length ? screenRefs : camRefs).map((tr) => (
-              <Tile key={tr.publication?.trackSid || tr.participant?.identity || Math.random()} tr={tr} />
-            ))}
-          </div>
-        ) : (
-          <div style={{ width: '100%', height: '100%', ...gridStyle(camRefs.length || 1) }}>
-            {camRefs.map((tr) => (
-              <Tile key={tr.publication?.trackSid || tr.participant?.identity || Math.random()} tr={tr} />
-            ))}
-          </div>
-        )}
-      </div>
-      {mode !== 'gallery' && (
-        <div style={{ minHeight: 160, maxHeight: 240, overflow: 'auto', borderTop: '1px solid #222', paddingTop: 8 }}>
-          <div style={{ ...gridStyle(camRefs.length || 1) }}>
-            {camRefs.map((tr) => (
-              <Tile key={tr.publication?.trackSid || tr.participant?.identity || Math.random()} tr={tr} />
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
+ 

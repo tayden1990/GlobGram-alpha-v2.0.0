@@ -24,6 +24,7 @@ import { CallPanel } from './CallPanel'
 import { CONFIG } from '../config'
 import { IconInvite, IconLink } from './icons'
 import { useContactStore } from '../state/contactStore'
+import { useCallPersistence, useCallJoinHandler } from './useCallPersistence'
 // Lazy-load QRCode only when needed to reduce initial bundle size
 
 const ChatWindowLazy = lazy(() => import('./ChatWindow').then(m => ({ default: m.ChatWindow })))
@@ -244,6 +245,19 @@ export default function App() {
     if (t === 'system') root.removeAttribute('data-theme')
     else root.setAttribute('data-theme', t)
   }
+
+  // Initialize call persistence for handling shared call links
+  useCallPersistence();
+  const { autoJoinRoom, clearAutoJoinRoom } = useCallJoinHandler();
+  
+  // Auto-join call when URL parameter detected
+  useEffect(() => {
+    if (autoJoinRoom) {
+      setGlobalCallRoom(autoJoinRoom);
+      setGlobalCallOpen(true);
+      clearAutoJoinRoom();
+    }
+  }, [autoJoinRoom, clearAutoJoinRoom]);
 
   // persist tab
   useEffect(() => {
@@ -1377,7 +1391,7 @@ export default function App() {
               setInviteOpen(true)
             }
             }} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <IconInvite size={18} /> {t('actions.invite')}
+              <IconInvite size={18} /> <span className="btn-text">{t('actions.invite')}</span>
             </button>
             {CONFIG.LIVEKIT_ENABLED && (
               <button
@@ -1419,12 +1433,6 @@ export default function App() {
                 <IconLink size={18} /> {(t('actions.instantMeeting') as string) || 'Instant meeting'}
               </button>
             )}
-          <label style={{ fontSize: 8, color: 'var(--muted)' }}>{t('actions.theme')}</label>
-          <select value={theme} onChange={(e) => applyTheme(e.target.value as any)}>
-            <option value="system">{t('theme.system')}</option>
-            <option value="light">{t('theme.light')}</option>
-            <option value="dark">{t('theme.dark')}</option>
-          </select>
           <button aria-label={t('actions.settings')} title={t('actions.settings')} onClick={() => setSettingsOpen(true)}>⚙️</button>
         </div>
         </div>
@@ -1473,6 +1481,25 @@ export default function App() {
                   <input type="checkbox" checked={powMining} onChange={(e) => { setPowMining(e.target.checked); try { log(`Settings: powMining=${e.target.checked}`) } catch {} }} />
                   {t('settings.powMining')}
                 </label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label style={{ fontSize: 14, fontWeight: 500 }}>{t('actions.theme')}</label>
+                  <select 
+                    value={theme} 
+                    onChange={(e) => applyTheme(e.target.value as any)}
+                    style={{ 
+                      padding: '8px 12px', 
+                      borderRadius: '6px', 
+                      border: '1px solid var(--border)', 
+                      background: 'var(--bg)', 
+                      color: 'var(--fg)',
+                      fontSize: '14px'
+                    }}
+                  >
+                    <option value="system">{t('theme.system')}</option>
+                    <option value="light">{t('theme.light')}</option>
+                    <option value="dark">{t('theme.dark')}</option>
+                  </select>
+                </div>
                 <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                   <input type="checkbox" checked={!adsDisabled} onChange={(e) => setAdsDisabled(!e.target.checked)} />
                   {t('settings.showAds') || 'Show top banner' }
@@ -2020,7 +2047,7 @@ export default function App() {
         </div>
       )}
     {isMobile && (
-        <div style={{ position: 'fixed', right: 16, bottom: 16, zIndex: 50 }}>
+        <div style={{ position: 'fixed', right: 16, bottom: 120, zIndex: 50, transform: 'scale(0.5)', transformOrigin: 'bottom right' }}>
       <div className={`fab-menu ${fabOpen ? '' : 'hidden'}`} style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8, alignItems: 'flex-end' }}>
               <button onClick={async () => {
                 setFabOpen(false)

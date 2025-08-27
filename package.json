@@ -27,9 +27,9 @@
     "deploy:pages": "echo Ensure GitHub Pages workflow is enabled in repo settings; exit 0"
   },
   "dependencies": {
+    "@livekit/components-react": "^2.3.5",
     "@tanstack/react-virtual": "^3.13.12",
-  "@livekit/components-react": "^2.3.5",
-  "livekit-client": "^2.7.6",
+    "livekit-client": "^2.7.6",
     "nostr-tools": "^2.7.1",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",

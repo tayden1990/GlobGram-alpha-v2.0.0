@@ -3,7 +3,6 @@
 	"actions.settings": "Paramètres",
 	"actions.theme": "Thème",
 	"actions.installApp": "Installer l’application",
-
 	"modal.invite.title": "Inviter un ami",
 	"modal.invite.desc": "Scannez ou partagez ce lien pour vous connecter directement avec vous :",
 	"modal.invite.qrLabel": "QR code",
@@ -11,7 +10,6 @@
 	"modal.invite.linkLabel": "Invite link",
 	"modal.invite.copyText": "Copy invite text",
 	"modal.invite.shareAll": "Share text + link (+ QR if supported)",
-
 	"settings.title": "Paramètres",
 	"settings.keys": "Clés",
 	"settings.relays": "Relais",
@@ -22,7 +20,6 @@
 	"settings.language": "Langue",
 	"settings.showAds": "Afficher les publicités",
 	"settings.manageAds": "Gérer les publicités",
-
 	"common.close": "Fermer",
 	"common.next": "Suivant →",
 	"common.back": "Retour",
@@ -44,7 +41,6 @@
 	"common.copyLink": "Copier le lien",
 	"common.send": "Envoyer",
 	"common.reset": "Réinitialiser",
-
 	"status.notRequested": "Pas encore demandé",
 	"status.granted": "Accordé",
 	"status.denied": "Refusé",
@@ -53,7 +49,6 @@
 	"status.sent": "Envoyé",
 	"status.delivered": "Distribué",
 	"status.failed": "Échec",
-
 	"onboarding.welcome": "Bienvenue sur GlobGram",
 	"onboarding.intro.title": "À propos de GlobGram et Nostr",
 	"onboarding.intro.desc": "GlobGram est une messagerie légère et privée basée sur Nostr — un protocole ouvert et décentralisé pour relayer des messages signés. Pas de comptes centraux, pas d’enfermement.",
@@ -84,7 +79,6 @@
 	"onboarding.step6.tip3": "Chiffrez éventuellement les médias avec une phrase secrète pour plus de protection.",
 	"onboarding.step6.tip4": "Statuts : ⏳ Envoi, ✓ Envoyé, ✓✓ Distribué. Réessayez en cas d’échec.",
 	"onboarding.step6.tip5": "Sur mobile, seule la zone de conversation défile ; l’en-tête et le pied restent fixes.",
-
 	"install.installApp": "Installer l’application",
 	"install.alreadyInstalled": "Déjà installée",
 	"install.promptNotAvailable": "Invite d’installation pas encore disponible",
@@ -107,11 +101,9 @@
 	"install.swControlled": "contrôlé",
 	"install.swNoController": "pas encore de contrôleur",
 	"install.notYet": "pas encore",
-
 	"update.available": "Une nouvelle version est disponible",
 	"update.countdown": "Mise à jour dans {s}s…",
 	"update.now": "Mettre à jour maintenant",
-
 	"logs.unlockTitle": "Déverrouiller les journaux",
 	"logs.unlockDesc": "Entrez le mot de passe pour voir les journaux.",
 	"logs.incorrectPassword": "Mot de passe incorrect.",
@@ -121,7 +113,6 @@
 	"logs.level.info": "Info",
 	"logs.level.warn": "Avertissements",
 	"logs.level.error": "Erreurs",
-
 	"invite.message": "Rejoignez-moi sur GlobGram. Touchez le lien pour démarrer un chat sécurisé.",
 	"invite.autoStartMessage": "Salut ! J’ai accepté ton invitation. Discutons.",
 	"invite.connectTitle": "Se connecter sur GlobGram",
@@ -131,9 +122,7 @@
 	"invite.sendingGreeting": "Envoi du message de bienvenue…",
 	"invite.retryingGreeting": "Toujours en cours… nouvel essai",
 	"invite.greetingSent": "Message de bienvenue envoyé",
-
 	"errors.powRequiredEnable": "Preuve de travail requise par le relais. Activez le minage PoW dans les paramètres pour envoyer.",
-
 	"tabs.main": "Sections principales",
 	"tabs.chats": "Discussions",
 	"tabs.rooms": "Salons",
@@ -145,12 +134,10 @@
 	"tabs.hideChatsList": "Masquer la liste des discussions",
 	"tabs.hideRooms": "Masquer les salons",
 	"tabs.hideRoomsList": "Masquer la liste des salons",
-
 	"loading.chat": "Chargement de la discussion…",
 	"loading.room": "Chargement du salon…",
 	"loading.more": "Chargement…",
 	"common.loading": "Chargement…",
-
 	"fab.newChatPrompt": "Nouvelle discussion : entrez la clé publique hex ou npub",
 	"fab.startNewChat": "Démarrer une nouvelle discussion",
 	"fab.newChat": "Nouvelle discussion",
@@ -160,7 +147,6 @@
 	"fab.newRoom": "Nouveau salon",
 	"fab.openActions": "Ouvrir les actions rapides",
 	"fab.scanQR": "Scanner un QR",
-
 	"errors.invalidKey": "Format de clé invalide. Fournissez un hex 64 caractères, un nsec ou un fichier de sauvegarde valide.",
 	"errors.readKeyFailed": "Échec de lecture du fichier clé",
 	"errors.invalidPubkey": "Clé publique invalide",
@@ -176,11 +162,9 @@
 	"errors.encodedAudioTooLarge": "Audio encodé trop volumineux",
 	"errors.videoTooLarge": "Vidéo trop volumineuse (>10 Mo)",
 	"errors.encodedVideoTooLarge": "Vidéo encodée trop volumineuse",
-
 	"theme.system": "Système",
 	"theme.light": "Clair",
 	"theme.dark": "Sombre",
-
 	"chat.selectPrompt": "Sélectionnez une discussion",
 	"chat.openImage": "Ouvrir l’image",
 	"chat.playVideo": "Lire la vidéo",
@@ -192,9 +176,9 @@
 	"chat.linkCopied": "Lien copié",
 	"chat.copyFailed": "Échec de la copie",
 	"chat.clipboardUnsupported": "ClipboardItem non pris en charge",
-		"chat.resolvingMedia": "Résolution du média…",
-		"chat.load": "Charger",
-		"chat.mediaUnavailable": "Média indisponible. L’expéditeur doit activer le serveur de téléversement ou être en ligne pour mem://.",
+	"chat.resolvingMedia": "Résolution du média…",
+	"chat.load": "Charger",
+	"chat.mediaUnavailable": "Média indisponible. L’expéditeur doit activer le serveur de téléversement ou être en ligne pour mem://.",
 	"chat.retry": "Réessayer",
 	"chat.retryWithReason": "Réessayer l’envoi (raison : {reason})",
 	"chat.delete": "Supprimer",
@@ -215,11 +199,19 @@
 	"chat.kind.audio": "audio",
 	"chat.kind.file": "fichier",
 	"chat.empty": "Pas encore de discussions",
-	"input.placeholder": "Écrire un message"
-		,
-		"call.incoming": "Appel entrant",
-		"call.accept": "Accepter",
-		"call.reject": "Refuser",
-		"call.acceptedNote": "Appel accepté",
-		"call.declinedNote": "Appel refusé"
-	}
+	"input.placeholder": "Écrire un message",
+	"call.incoming": "Appel entrant",
+	"call.accept": "Accepter",
+	"call.reject": "Refuser",
+	"call.acceptedNote": "Appel accepté",
+	"call.declinedNote": "Appel refusé",
+	"actions.instantMeeting": "Réunion instantanée",
+	"call.shareCall": "Partager l'appel",
+	"common.save": "Enregistrer",
+	"profile.editProfile": "Modifier le profil",
+	"profile.changeAvatar": "Changer l'avatar",
+	"profile.displayName": "Nom d'affichage",
+	"settings.general": "Général",
+	"settings.privacy": "Confidentialité",
+	"settings.appearance": "Apparence"
+}

@@ -1,5 +1,6 @@
 {
 	"actions.invite": "Invitar a un amigo",
+	"actions.instantMeeting": "Reunión instantánea",
 	"actions.settings": "Ajustes",
 	"actions.theme": "Tema",
 	"actions.installApp": "Instalar aplicación",
@@ -13,6 +14,11 @@
 	"modal.invite.shareAll": "Share text + link (+ QR if supported)",
 
 	"settings.title": "Ajustes",
+	"settings.general": "General",
+	"settings.privacy": "Privacidad",
+	"settings.notifications": "Notificaciones",
+	"settings.appearance": "Apariencia",
+	"settings.advanced": "Avanzado",
 	"settings.keys": "Claves",
 	"settings.relays": "Relés",
 	"settings.preferences": "Preferencias",
@@ -44,6 +50,7 @@
 	"common.copyLink": "Copiar enlace",
 	"common.send": "Enviar",
 	"common.reset": "Restablecer",
+	"common.save": "Guardar",
 
 	"status.notRequested": "Aún no solicitado",
 	"status.granted": "Concedido",
@@ -217,6 +224,15 @@
 	"chat.empty": "Aún no hay chats",
 	"input.placeholder": "Escribe un mensaje"
 	,
+	"profile.editProfile": "Editar Perfil",
+	"profile.changeAvatar": "Cambiar Avatar",
+	"profile.removeAvatar": "Eliminar Avatar",
+	"profile.displayName": "Nombre de Usuario",
+	"profile.bio": "Biografía",
+	"profile.bioPlaceholder": "Cuéntales a otros sobre ti...",
+	"profile.publicKey": "Clave Pública",
+
+	"call.shareCall": "Compartir llamada",
 	"call.incoming": "Llamada entrante",
 	"call.accept": "Aceptar",
 	"call.reject": "Rechazar",
