@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- List additional origins allowed to open in TWA context (leave empty if none) -->
+    <string-array name="additional_trusted_origins">
+    </string-array>
+</resources>
