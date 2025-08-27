@@ -20,6 +20,7 @@ import { useSettingsStore } from './settingsStore'
 import { getLogs, clearLogs, onLog, log, setLogMinLevel, getPersistedLogsText, clearPersistedLogs } from './logger'
 import { useI18n } from '../i18n'
 import { BUILD_INFO } from '../version'
+import { checkLatestRelease, semverGreater, type GithubRelease, type GithubAsset } from '../services'
 import { CallPanel } from './CallPanel'
 import { CONFIG } from '../config'
 import { IconInvite, IconLink } from './icons'
@@ -33,6 +34,7 @@ const RoomWindowLazy = lazy(() => import('./RoomWindow').then(m => ({ default: m
 export default function App() {
   const { t, locale, setLocale, availableLocales } = useI18n()
   const aliases = useContactStore(s => s.aliases)
+  const [latestTag, setLatestTag] = useState<string | null>(null)
   // Helper: safely get a localized invite caption/message without leaking raw keys
   const getInviteMessage = () => {
     const cap = t('invite.caption') as string
@@ -76,6 +78,29 @@ export default function App() {
     }
     return null
   }
+
+  // Background: Check GitHub Releases for newer version (rate-limited)
+  useEffect(() => {
+    const owner = 'tayden1990'
+    const repo = 'GlobGram-alpha-v2.0.0'
+    const now = Date.now()
+    const lastAt = Number(localStorage.getItem('latest_release_check_at') || '0')
+    if (now - lastAt < 6 * 60 * 60 * 1000) return // check at most every 6h
+    localStorage.setItem('latest_release_check_at', String(now))
+  checkLatestRelease(owner, repo).then((rel: GithubRelease) => {
+      const tag = rel?.tag_name
+      if (!tag) return
+      const current = (BUILD_INFO.refName && /^v?\d+\.\d+\.\d+/.test(BUILD_INFO.refName)) ? BUILD_INFO.refName : 'v0.0.0'
+      if (semverGreater(tag, current)) {
+        setLatestTag(tag)
+        const shownKey = `release_toast_shown_${tag}`
+        if (!sessionStorage.getItem(shownKey)) {
+          sessionStorage.setItem(shownKey, '1')
+      emitToast((t('update.newReleaseAvailable', { tag }) as string) || `New release available: ${tag}`, 'info')
+        }
+      }
+    }).catch(()=>{})
+  }, [t])
   // Parse an invite value from arbitrary input (URL, npub/nprofile, hex) and return hex pubkey
   const parseInviteInput = (raw: string): string | null => {
     try {
@@ -1583,6 +1608,7 @@ export default function App() {
                   </select>
                 </label>
                 <BuildInfoRow />
+                <UpdateSection />
               </div>
             </details>
           </div>
@@ -2163,6 +2189,106 @@ function BuildInfoRow() {
       <span>Build: {BUILD_INFO.shortSha} {BUILD_INFO.refName} {new Date(BUILD_INFO.date).toLocaleString()}</span>
       <span> · Mode: {BUILD_INFO.mode} · Base: {BUILD_INFO.base}</span>
       {swVer ? <span> · SW: {swVer}</span> : null}
+    </div>
+  )
+}
+
+function UpdateSection() {
+  const { t } = useI18n()
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [release, setRelease] = useState<GithubRelease | null>(null)
+
+  // Current "version": prefer a semver-like refName (e.g., v3.9.5); else fall back to 0.0.0
+  const current = (BUILD_INFO.refName && /^v?\d+\.\d+\.\d+/.test(BUILD_INFO.refName)) ? BUILD_INFO.refName : 'v0.0.0'
+
+  const owner = 'tayden1990'
+  const repo = 'GlobGram-alpha-v2.0.0'
+
+  useEffect(() => {
+    let mounted = true
+    setLoading(true)
+    checkLatestRelease(owner, repo)
+      .then((r: GithubRelease) => { if (mounted) setRelease(r) })
+      .catch((e: any) => { if (mounted) setError(String(e?.message || e)) })
+      .finally(() => mounted && setLoading(false))
+    return () => { mounted = false }
+  }, [])
+
+  const latestTag = release?.tag_name || null
+  const hasUpdate = latestTag ? semverGreater(latestTag, current) : false
+
+  const openUrl = (u?: string) => { if (u) window.open(u, '_blank') }
+
+  // Best-effort platform asset pickers
+  const assets: GithubAsset[] = (release?.assets ?? []) as any
+  const findAsset = (match: RegExp) => assets.find((a: GithubAsset) => match.test(a.name))
+  const winAsset = findAsset(/win32|windows|\.exe$|\.zip$/i)
+  const apkAsset = findAsset(/\.apk$/i)
+  const aabAsset = findAsset(/\.aab$/i)
+
+  const isStandalone = (() => {
+    try { return window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone } catch { return false }
+  })()
+  const isElectron = /Electron/i.test(navigator.userAgent)
+
+  const tryPwaUpdateNow = async () => {
+    try {
+      const reg = await navigator.serviceWorker.getRegistration()
+      await reg?.update()
+      // If a new worker installed and waiting, activate it
+      if (reg?.waiting) {
+        reg.waiting.postMessage({ type: 'SKIP_WAITING' })
+        setTimeout(() => window.location.reload(), 250)
+      } else {
+        // Force reload to pick up any cached assets if update landed
+        window.location.reload()
+      }
+    } catch {
+      window.location.reload()
+    }
+  }
+
+  // Signing info comes from build-time env if provided
+  const signing = (import.meta as any).env?.VITE_SIGNING_FINGERPRINT || ''
+
+  // Translation with safe fallback (avoid showing raw i18n keys)
+  const tf = (key: string, fb: string) => {
+    const v = (t(key) as string) || ''
+    return v && v !== key ? v : fb
+  }
+
+  return (
+    <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+      <div style={{ fontWeight: 600, marginBottom: 6 }}>{tf('settings.appInfo', 'App info')}</div>
+      <div style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div>{tf('settings.currentVersion', 'Current')}: <code>{current}</code></div>
+        <div>{tf('settings.latestVersion', 'Latest')}: <code>{latestTag || (loading ? tf('common.loading', 'Loading…') : '—')}</code></div>
+        <div>{tf('settings.platform', 'Platform')}: <code>{isElectron ? 'Desktop (Electron/Nativefier)' : isStandalone ? 'PWA (standalone)' : 'Web (browser tab)'}</code></div>
+        <div>{tf('settings.signing', 'Signing')}: <code>{signing || tf('settings.signingUnknown', 'Not available in this build')}</code></div>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+        {hasUpdate ? (
+          <>
+            {isStandalone && (
+              <button onClick={tryPwaUpdateNow}>{tf('settings.updateNowPwa', 'Update PWA now')}</button>
+            )}
+            <button onClick={() => openUrl(release?.html_url)}>{tf('settings.openRelease', 'Open latest release')}</button>
+            {apkAsset ? <button onClick={() => openUrl(apkAsset.browser_download_url)}>{tf('settings.downloadApk', 'Download APK')}</button> : null}
+            {aabAsset ? <button onClick={() => openUrl(aabAsset.browser_download_url)}>{tf('settings.downloadAab', 'Download AAB')}</button> : null}
+            {winAsset ? <button onClick={() => openUrl(winAsset.browser_download_url)}>{tf('settings.downloadWindows', 'Download for Windows')}</button> : null}
+          </>
+        ) : (
+          <>
+            <button onClick={() => openUrl(release?.html_url)} disabled={!release}>{tf('settings.openRelease', 'Open latest release')}</button>
+            {isStandalone && <button onClick={tryPwaUpdateNow}>{tf('settings.checkForUpdates', 'Check for updates')}</button>}
+          </>
+        )}
+      </div>
+      {!loading && !error && release && !hasUpdate ? (
+        <div style={{ marginTop: 6, fontSize: 12, color: 'var(--muted)' }}>{tf('settings.upToDate', 'You are up to date.')}</div>
+      ) : null}
+      {error ? <div style={{ marginTop: 6, fontSize: 12, color: 'tomato' }}>{tf('settings.updateError', 'Failed to check updates')}: {String(error)}</div> : null}
     </div>
   )
 }

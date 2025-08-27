@@ -96,6 +96,16 @@
 				"build"
 			],
 			"group": "build"
+		},
+		{
+			"label": "vite-build",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"build"
+			],
+			"group": "build"
 		}
 	]
 }
