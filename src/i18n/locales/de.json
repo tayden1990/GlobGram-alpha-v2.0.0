@@ -242,5 +242,51 @@
 	"notification.callEnded": "Call ended",
 	"room.join": "Join",
 	"room.joinActiveRoom": "Join Active Room",
-	"room.activeUsers": "{count} users active"
+	"room.activeUsers": "{count} users active",
+	"settings": {
+		"soundEnabled": "Tonbenachrichtigungen",
+		"soundEnabledDesc": "Klingeltöne für Benachrichtigungen und Anrufe abspielen"
+	},
+	"invite": {
+		"caption": "Sicher mit mir auf GlobGram verbinden:"
+	},
+	"chat": {
+		"resolvingMedia": "Medien werden aufgelöst…",
+		"load": "Laden",
+		"mediaUnavailable": "Medium nicht verfügbar. Der Absender muss den Upload-Server aktivieren oder für mem:// online sein."
+	},
+	"call": {
+		"incomingCall": "Eingehender Anruf",
+		"isCallingYou": "ruft dich an",
+		"expiresIn": "Läuft ab in",
+		"accept": "Annehmen",
+		"reject": "Ablehnen",
+		"activeCall": "Aktiver Anruf",
+		"joinCall": "Anruf beitreten",
+		"leaveCall": "Anruf verlassen",
+		"startCall": "Anruf starten",
+		"endCall": "Anruf beenden",
+		"callEnded": "Anruf beendet",
+		"callExpired": "Anruf abgelaufen",
+		"callRejected": "Anruf abgelehnt",
+		"shareCall": "Anruf teilen",
+		"shareableLink": "Teilbarer Link",
+		"inviteMessage": "Einladungstext",
+		"copyInvite": "Einladung kopieren",
+		"shareCallTitle": "Tritt meinem GlobGram-Anruf bei",
+		"join": "Beitreten",
+		"joinActiveRoom": "Aktivem Raum beitreten",
+		"ringing": "Klingelt…",
+		"connecting": "Verbinde…",
+		"callInProgress": "Anruf läuft"
+	},
+	"notification": {
+		"callMissed": "Verpasster Anruf",
+		"callEnded": "Anruf beendet"
+	},
+	"room": {
+		"join": "Beitreten",
+		"joinActiveRoom": "Aktivem Raum beitreten",
+		"activeUsers": "{count} aktive Benutzer"
+	}
 }

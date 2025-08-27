@@ -242,5 +242,51 @@
 	"notification.callEnded": "Call ended",
 	"room.join": "Join",
 	"room.joinActiveRoom": "Join Active Room",
-	"room.activeUsers": "{count} users active"
+	"room.activeUsers": "{count} users active",
+	"settings": {
+		"soundEnabled": "فعال‌سازی اعلان‌های صدا",
+		"soundEnabledDesc": "پخش زنگ برای اعلان‌ها و تماس‌ها"
+	},
+	"invite": {
+		"caption": "به‌صورت امن با من در GlobGram متصل شوید:"
+	},
+	"chat": {
+		"resolvingMedia": "در حال پردازش رسانه…",
+		"load": "بارگذاری",
+		"mediaUnavailable": "رسانه در دسترس نیست. فرستنده باید سرور بارگذاری را فعال کند یا برای mem:// برخط باشد."
+	},
+	"call": {
+		"incomingCall": "تماس ورودی",
+		"isCallingYou": "در حال تماس با شما است",
+		"expiresIn": "انقضا در",
+		"accept": "پذیرفتن",
+		"reject": "رد کردن",
+		"activeCall": "تماس فعال",
+		"joinCall": "پیوستن به تماس",
+		"leaveCall": "ترک تماس",
+		"startCall": "شروع تماس",
+		"endCall": "پایان تماس",
+		"callEnded": "تماس پایان یافت",
+		"callExpired": "تماس منقضی شد",
+		"callRejected": "تماس رد شد",
+		"shareCall": "اشتراک‌گذاری تماس",
+		"shareableLink": "پیوند قابل اشتراک",
+		"inviteMessage": "پیام دعوت",
+		"copyInvite": "کپی دعوت‌نامه",
+		"shareCallTitle": "به تماس GlobGram من بپیوندید",
+		"join": "پیوستن",
+		"joinActiveRoom": "پیوستن به اتاق فعال",
+		"ringing": "در حال زنگ خوردن...",
+		"connecting": "در حال اتصال...",
+		"callInProgress": "تماس در حال انجام"
+	},
+	"notification": {
+		"callMissed": "تماس از دست رفته",
+		"callEnded": "تماس پایان یافت"
+	},
+	"room": {
+		"join": "پیوستن",
+		"joinActiveRoom": "پیوستن به اتاق فعال",
+		"activeUsers": "{count} کاربر فعال"
+	}
 }

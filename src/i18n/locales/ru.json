@@ -242,5 +242,51 @@
 	"notification.callEnded": "Call ended",
 	"room.join": "Join",
 	"room.joinActiveRoom": "Join Active Room",
-	"room.activeUsers": "{count} users active"
+	"room.activeUsers": "{count} users active",
+	"settings": {
+		"soundEnabled": "Звуковые уведомления",
+		"soundEnabledDesc": "Воспроизводить рингтоны для уведомлений и звонков"
+	},
+	"invite": {
+		"caption": "Безопасно подключайтесь со мной в GlobGram:"
+	},
+	"chat": {
+		"resolvingMedia": "Обработка медиа…",
+		"load": "Загрузить",
+		"mediaUnavailable": "Медиа недоступно. Отправитель должен включить сервер загрузки или быть онлайн для mem://."
+	},
+	"call": {
+		"incomingCall": "Входящий звонок",
+		"isCallingYou": "звонит вам",
+		"expiresIn": "Истекает через",
+		"accept": "Принять",
+		"reject": "Отклонить",
+		"activeCall": "Идет звонок",
+		"joinCall": "Присоединиться к звонку",
+		"leaveCall": "Покинуть звонок",
+		"startCall": "Начать звонок",
+		"endCall": "Завершить звонок",
+		"callEnded": "Звонок завершен",
+		"callExpired": "Звонок истек",
+		"callRejected": "Звонок отклонен",
+		"shareCall": "Поделиться звонком",
+		"shareableLink": "Ссылка для доступа",
+		"inviteMessage": "Пригласительное сообщение",
+		"copyInvite": "Копировать приглашение",
+		"shareCallTitle": "Присоединяйтесь ко мне к звонку GlobGram",
+		"join": "Присоединиться",
+		"joinActiveRoom": "Присоединиться к активной комнате",
+		"ringing": "Звонит...",
+		"connecting": "Подключение...",
+		"callInProgress": "Идет звонок"
+	},
+	"notification": {
+		"callMissed": "Пропущенный звонок",
+		"callEnded": "Звонок завершен"
+	},
+	"room": {
+		"join": "Присоединиться",
+		"joinActiveRoom": "Присоединиться к активной комнате",
+		"activeUsers": "{count} активных пользователей"
+	}
 }

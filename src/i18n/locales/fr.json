@@ -242,5 +242,51 @@
 	"notification.callEnded": "Call ended",
 	"room.join": "Join",
 	"room.joinActiveRoom": "Join Active Room",
-	"room.activeUsers": "{count} users active"
+	"room.activeUsers": "{count} users active",
+	"settings": {
+		"soundEnabled": "Notifications sonores",
+		"soundEnabledDesc": "Jouer des sonneries pour les notifications et les appels"
+	},
+	"invite": {
+		"caption": "Se connecter en toute sécurité avec moi sur GlobGram :"
+	},
+	"chat": {
+		"resolvingMedia": "Résolution des médias…",
+		"load": "Charger",
+		"mediaUnavailable": "Média indisponible. L’expéditeur doit activer le serveur de téléversement ou être en ligne pour mem://."
+	},
+	"call": {
+		"incomingCall": "Appel entrant",
+		"isCallingYou": "vous appelle",
+		"expiresIn": "Expire dans",
+		"accept": "Accepter",
+		"reject": "Refuser",
+		"activeCall": "Appel en cours",
+		"joinCall": "Rejoindre l’appel",
+		"leaveCall": "Quitter l’appel",
+		"startCall": "Démarrer l’appel",
+		"endCall": "Terminer l’appel",
+		"callEnded": "Appel terminé",
+		"callExpired": "Appel expiré",
+		"callRejected": "Appel refusé",
+		"shareCall": "Partager l’appel",
+		"shareableLink": "Lien partageable",
+		"inviteMessage": "Message d’invitation",
+		"copyInvite": "Copier l’invitation",
+		"shareCallTitle": "Rejoignez-moi sur un appel GlobGram",
+		"join": "Rejoindre",
+		"joinActiveRoom": "Rejoindre la salle active",
+		"ringing": "Sonnerie…",
+		"connecting": "Connexion…",
+		"callInProgress": "Appel en cours"
+	},
+	"notification": {
+		"callMissed": "Appel manqué",
+		"callEnded": "Appel terminé"
+	},
+	"room": {
+		"join": "Rejoindre",
+		"joinActiveRoom": "Rejoindre la salle active",
+		"activeUsers": "{count} utilisateurs actifs"
+	}
 }

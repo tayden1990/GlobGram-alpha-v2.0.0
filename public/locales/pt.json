@@ -299,5 +299,24 @@
 	"chat.publishing": "Publishing…",
 	"chat.sending": "Sending…",
 	"chat.openInNewTab": "Open in new tab",
-	"chat.open": "Open"
+	"chat.open": "Open",
+	"settings": {
+		"appInfo": "Informações do app",
+		"currentVersion": "Atual",
+		"latestVersion": "Mais recente",
+		"platform": "Plataforma",
+		"signing": "Assinatura",
+		"signingUnknown": "Não disponível nesta build",
+		"openRelease": "Abrir a versão mais recente",
+		"updateNowPwa": "Atualizar PWA agora",
+		"checkForUpdates": "Verificar atualizações",
+		"upToDate": "Você está atualizado.",
+		"downloadWindows": "Baixar para Windows",
+		"downloadApk": "Baixar APK",
+		"downloadAab": "Baixar AAB",
+		"updateError": "Falha ao verificar atualizações"
+	},
+	"update": {
+		"newReleaseAvailable": "Nova versão disponível: {tag}"
+	}
 }

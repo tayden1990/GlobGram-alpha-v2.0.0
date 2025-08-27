@@ -299,5 +299,24 @@
 	"chat.publishing": "Publishing…",
 	"chat.sending": "Sending…",
 	"chat.openInNewTab": "Open in new tab",
-	"chat.open": "Open"
+	"chat.open": "Open",
+	"settings": {
+		"appInfo": "اطلاعات برنامه",
+		"currentVersion": "نسخه فعلی",
+		"latestVersion": "آخرین",
+		"platform": "پلتفرم",
+		"signing": "امضا",
+		"signingUnknown": "در این بیلد در دسترس نیست",
+		"openRelease": "باز کردن آخرین انتشار",
+		"updateNowPwa": "به‌روزرسانی PWA اکنون",
+		"checkForUpdates": "بررسی برای به‌روزرسانی‌ها",
+		"upToDate": "شما به‌روز هستید.",
+		"downloadWindows": "دانلود برای ویندوز",
+		"downloadApk": "دانلود APK",
+		"downloadAab": "دانلود AAB",
+		"updateError": "بررسی به‌روزرسانی‌ها ناموفق بود"
+	},
+	"update": {
+		"newReleaseAvailable": "نسخه جدید در دسترس است: {tag}"
+	}
 }

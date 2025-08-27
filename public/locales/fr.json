@@ -299,5 +299,24 @@
 	"chat.publishing": "Publishing…",
 	"chat.sending": "Sending…",
 	"chat.openInNewTab": "Open in new tab",
-	"chat.open": "Open"
+	"chat.open": "Open",
+	"settings": {
+		"appInfo": "Informations de l’application",
+		"currentVersion": "Actuelle",
+		"latestVersion": "Dernière",
+		"platform": "Plateforme",
+		"signing": "Signature",
+		"signingUnknown": "Non disponible dans cette build",
+		"openRelease": "Ouvrir la dernière publication",
+		"updateNowPwa": "Mettre à jour la PWA maintenant",
+		"checkForUpdates": "Rechercher des mises à jour",
+		"upToDate": "Vous êtes à jour.",
+		"downloadWindows": "Télécharger pour Windows",
+		"downloadApk": "Télécharger l’APK",
+		"downloadAab": "Télécharger l’AAB",
+		"updateError": "Échec de la vérification des mises à jour"
+	},
+	"update": {
+		"newReleaseAvailable": "Nouvelle version disponible : {tag}"
+	}
 }

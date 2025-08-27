@@ -299,5 +299,24 @@
 	"profile.bio": "Bio",
 	"profile.bioPlaceholder": "Tell others about yourself...",
 	"profile.publicKey": "Public Key",
-	"chat.autoStartMessage": "Hi! I accepted your invite. Let's chat."
+	"chat.autoStartMessage": "Hi! I accepted your invite. Let's chat.",
+	"settings": {
+		"appInfo": "Информация о приложении",
+		"currentVersion": "Текущая",
+		"latestVersion": "Последняя",
+		"platform": "Платформа",
+		"signing": "Подпись",
+		"signingUnknown": "Недоступно в этой сборке",
+		"openRelease": "Открыть последний релиз",
+		"updateNowPwa": "Обновить PWA сейчас",
+		"checkForUpdates": "Проверить обновления",
+		"upToDate": "У вас установлена последняя версия.",
+		"downloadWindows": "Скачать для Windows",
+		"downloadApk": "Скачать APK",
+		"downloadAab": "Скачать AAB",
+		"updateError": "Не удалось проверить обновления"
+	},
+	"update": {
+		"newReleaseAvailable": "Доступен новый релиз: {tag}"
+	}
 }

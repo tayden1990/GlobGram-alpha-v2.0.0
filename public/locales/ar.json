@@ -299,5 +299,24 @@
 	"chat.publishing": "Publishing…",
 	"chat.sending": "Sending…",
 	"chat.openInNewTab": "Open in new tab",
-	"chat.open": "Open"
+	"chat.open": "Open",
+	"settings": {
+		"appInfo": "معلومات التطبيق",
+		"currentVersion": "الحالي",
+		"latestVersion": "الأحدث",
+		"platform": "المنصة",
+		"signing": "التوقيع",
+		"signingUnknown": "غير متوفر في هذا البناء",
+		"openRelease": "فتح آخر إصدار",
+		"updateNowPwa": "تحديث PWA الآن",
+		"checkForUpdates": "التحقق من التحديثات",
+		"upToDate": "أنت على أحدث إصدار.",
+		"downloadWindows": "تنزيل لنظام Windows",
+		"downloadApk": "تنزيل APK",
+		"downloadAab": "تنزيل AAB",
+		"updateError": "فشل التحقق من التحديثات"
+	},
+	"update": {
+		"newReleaseAvailable": "إصدار جديد متوفر: {tag}"
+	}
 }

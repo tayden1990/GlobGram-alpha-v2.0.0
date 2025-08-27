@@ -242,5 +242,51 @@
 	"notification.callEnded": "Call ended",
 	"room.join": "Join",
 	"room.joinActiveRoom": "Join Active Room",
-	"room.activeUsers": "{count} users active"
+	"room.activeUsers": "{count} users active",
+	"settings": {
+		"soundEnabled": "تمكين إشعارات الصوت",
+		"soundEnabledDesc": "تشغيل نغمات للإشعارات والمكالمات"
+	},
+	"invite": {
+		"caption": "اتصل بي بأمان على GlobGram:"
+	},
+	"chat": {
+		"resolvingMedia": "جارٍ معالجة الوسائط…",
+		"load": "تحميل",
+		"mediaUnavailable": "الوسائط غير متاحة. يجب أن يقوم المُرسِل بتمكين خادم الرفع أو أن يكون متصلاً لـ mem://."
+	},
+	"call": {
+		"incomingCall": "مكالمة واردة",
+		"isCallingYou": "يتصل بك",
+		"expiresIn": "تنتهي خلال",
+		"accept": "قبول",
+		"reject": "رفض",
+		"activeCall": "مكالمة نشطة",
+		"joinCall": "الانضمام إلى المكالمة",
+		"leaveCall": "مغادرة المكالمة",
+		"startCall": "بدء مكالمة",
+		"endCall": "إنهاء المكالمة",
+		"callEnded": "انتهت المكالمة",
+		"callExpired": "انتهت صلاحية المكالمة",
+		"callRejected": "تم رفض المكالمة",
+		"shareCall": "مشاركة المكالمة",
+		"shareableLink": "رابط قابل للمشاركة",
+		"inviteMessage": "رسالة دعوة",
+		"copyInvite": "نسخ الدعوة",
+		"shareCallTitle": "انضم إليّ في مكالمة GlobGram",
+		"join": "انضمام",
+		"joinActiveRoom": "الانضمام إلى الغرفة النشطة",
+		"ringing": "يرن...",
+		"connecting": "جارٍ الاتصال...",
+		"callInProgress": "مكالمة قيد التقدم"
+	},
+	"notification": {
+		"callMissed": "مكالمة فائتة",
+		"callEnded": "انتهت المكالمة"
+	},
+	"room": {
+		"join": "انضمام",
+		"joinActiveRoom": "الانضمام إلى الغرفة النشطة",
+		"activeUsers": "{count} مستخدمين نشطين"
+	}
 }
