@@ -34,7 +34,6 @@ android {
 		applicationId "io.github.tayden1990.twa"
 		minSdkVersion 24
 		targetSdkVersion 34
-		compileSdk 34
 		versionCode 1
 		versionName "1.0.0"
 
