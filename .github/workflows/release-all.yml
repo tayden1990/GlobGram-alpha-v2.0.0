@@ -21,13 +21,13 @@ jobs:
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
       ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v3
+      - uses: actions/setup-java@v3
         with:
           distribution: temurin
           java-version: '17'
           cache: 'gradle'
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v2
       - name: Ensure Gradle wrapper is executable
         run: chmod +x ./gradlew
       - name: Install Android SDK components
@@ -54,7 +54,7 @@ jobs:
           export SKIP_RELEASE_SIGNING=false
           ./gradlew :app:assembleRelease :app:bundleRelease --stacktrace
       - name: Upload Android artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: android-apk
           path: |
@@ -69,8 +69,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
         with:
           node-version: '20'
       - name: Install Nativefier
@@ -181,7 +181,7 @@ jobs:
           [ -d "$APP_DIR" ] || { echo "App dir not found: $APP_DIR" >&2; exit 1; }
           zip -r release-desktop/GlobGram-linux.zip "$APP_DIR"
       - name: Upload Desktop artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: desktop-${{ runner.os }}
           path: release-desktop/*.zip
@@ -194,10 +194,8 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v3
         with:
-          pattern: '*'
-          merge-multiple: true
           path: release-assets
       - name: List gathered assets
         run: |
