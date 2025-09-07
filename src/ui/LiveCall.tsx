@@ -175,60 +175,76 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
       let foundEngine = null;
       
       try {
+        console.log(`[LiveCall Debug ${statsAttempts}] Starting peer connection search...`);
+        
         // Method 1: Access through Room.engine (most common in v2.7.6)
         const engine = (room as any).engine;
         if (engine) {
           foundEngine = engine;
+          console.log(`[LiveCall Debug ${statsAttempts}] Found engine:`, Object.keys(engine));
           
-          // Try primary transport in LiveKit v2.7.6
-          if (engine.primaryTransport?.pc) {
-            pc = engine.primaryTransport.pc;
-            pcPath = 'engine.primaryTransport.pc';
-          }
-          // Try publisher/subscriber transports
-          else if (engine.subscriberTransport?.pc) {
-            pc = engine.subscriberTransport.pc;
-            pcPath = 'engine.subscriberTransport.pc';
-          }
-          else if (engine.publisherTransport?.pc) {
-            pc = engine.publisherTransport.pc;
-            pcPath = 'engine.publisherTransport.pc';
-          }
-          // Legacy client structure
-          else if (engine.client?._pc) {
-            pc = engine.client._pc;
-            pcPath = 'engine.client._pc';
-          }
-          else if (engine.client?.pc) {
-            pc = engine.client.pc;
-            pcPath = 'engine.client.pc';
+          // Check all possible transport locations
+          const transports = [
+            { path: 'primaryTransport', obj: engine.primaryTransport },
+            { path: 'subscriberTransport', obj: engine.subscriberTransport },
+            { path: 'publisherTransport', obj: engine.publisherTransport },
+            { path: 'client._pc', obj: engine.client?._pc },
+            { path: 'client.pc', obj: engine.client?.pc }
+          ];
+          
+          for (const transport of transports) {
+            if (transport.obj?.pc) {
+              pc = transport.obj.pc;
+              pcPath = `engine.${transport.path}.pc`;
+              console.log(`[LiveCall Debug ${statsAttempts}] Found PC at: ${pcPath}`);
+              break;
+            }
+            if (transport.obj && typeof transport.obj.getStats === 'function') {
+              pc = transport.obj;
+              pcPath = `engine.${transport.path}`;
+              console.log(`[LiveCall Debug ${statsAttempts}] Found PC directly at: ${pcPath}`);
+              break;
+            }
           }
         }
         
         // Method 2: Check local participant engine
         if (!pc && room.localParticipant) {
+          console.log(`[LiveCall Debug ${statsAttempts}] Checking localParticipant...`);
           const lpEngine = (room.localParticipant as any).engine;
           if (lpEngine?.primaryTransport?.pc) {
             pc = lpEngine.primaryTransport.pc;
             pcPath = 'localParticipant.engine.primaryTransport.pc';
+            console.log(`[LiveCall Debug ${statsAttempts}] Found PC in localParticipant`);
           }
         }
         
-        // Method 3: Look through track publications for sender stats
-        if (!pc && room.localParticipant) {
-          const trackPubs = Array.from(room.localParticipant.trackPublications.values());
-          for (const pub of trackPubs) {
-            const track = (pub as any).track;
-            if (track && track.sender?.transport?.pc) {
-              pc = track.sender.transport.pc;
-              pcPath = 'track.sender.transport.pc';
-              break;
+        // Method 3: Check for RTCPeerConnection objects anywhere in room
+        if (!pc) {
+          console.log(`[LiveCall Debug ${statsAttempts}] Deep searching for RTCPeerConnection...`);
+          const searchForPC = (obj: any, path: string, depth: number = 0): any => {
+            if (depth > 3) return null; // Prevent infinite recursion
+            
+            for (const key in obj) {
+              try {
+                const value = obj[key];
+                if (value && value.constructor && value.constructor.name === 'RTCPeerConnection') {
+                  console.log(`[LiveCall Debug ${statsAttempts}] Found RTCPeerConnection at: ${path}.${key}`);
+                  return { pc: value, path: `${path}.${key}` };
+                }
+                if (typeof value === 'object' && value !== null && depth < 3) {
+                  const result = searchForPC(value, `${path}.${key}`, depth + 1);
+                  if (result) return result;
+                }
+              } catch {}
             }
-            if (track && track.transceiver?.sender?.transport?.pc) {
-              pc = track.transceiver.sender.transport.pc;
-              pcPath = 'track.transceiver.sender.transport.pc';
-              break;
-            }
+            return null;
+          };
+          
+          const result = searchForPC(room, 'room');
+          if (result) {
+            pc = result.pc;
+            pcPath = result.path;
           }
         }
         
@@ -274,73 +290,104 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
       let foundStats = false;
       let statsDetails: any = {};
 
-      if (pc && typeof pc.getStats === "function" && pc.connectionState === "connected") {
-        try {
-          const stats = await pc.getStats();
-          let reportCount = 0;
-          let outboundReports: any[] = [];
-          let inboundReports: any[] = [];
-          
-          stats.forEach((report: any) => {
-            reportCount++;
+      if (pc && typeof pc.getStats === "function") {
+        console.log(`[LiveCall Debug ${statsAttempts}] Found valid PC with getStats, connection state: ${pc.connectionState}, ice state: ${pc.iceConnectionState}`);
+        
+        // Try to get stats if connection is established or connecting (be more permissive)
+        if (['connected', 'connecting', 'new', 'checking'].includes(pc.connectionState) || 
+            ['connected', 'checking', 'new', 'completed'].includes(pc.iceConnectionState)) {
+          try {
+            const stats = await pc.getStats();
+            let reportCount = 0;
+            let outboundReports: any[] = [];
+            let inboundReports: any[] = [];
             
-            // Track outbound (sending) stats
-            if (report.type === "outbound-rtp") {
-              outboundReports.push({
-                kind: report.kind,
-                bytesSent: report.bytesSent,
-                framesPerSecond: report.framesPerSecond,
-                packetsSent: report.packetsSent,
-                id: report.id,
-                ssrc: report.ssrc
-              });
+            console.log(`[LiveCall Debug ${statsAttempts}] Got stats object with ${stats.size} reports`);
+            
+            stats.forEach((report: any) => {
+              reportCount++;
+              if (statsAttempts <= 3) {
+                console.log(`[LiveCall Debug ${statsAttempts}] Report ${reportCount}: ${report.type} - ${report.kind || 'no-kind'} - ssrc: ${report.ssrc || 'none'}`);
+              }
               
-              if (report.kind === "video") {
-                foundStats = true;
-                setDataSource('real');
-                if (lastStats[report.id]) {
-                  const bytes = report.bytesSent - lastStats[report.id].bytesSent;
-                  videoBitrate = Math.round((bytes * 8) / 2 / 1000); // kbps, 2s interval
-                  if (report.framesPerSecond) fps = report.framesPerSecond;
+              // Track outbound (sending) stats
+              if (report.type === "outbound-rtp") {
+                outboundReports.push({
+                  kind: report.kind,
+                  bytesSent: report.bytesSent,
+                  framesPerSecond: report.framesPerSecond,
+                  packetsSent: report.packetsSent,
+                  id: report.id,
+                  ssrc: report.ssrc
+                });
+                
+                if (statsAttempts <= 3) {
+                  console.log(`[LiveCall Debug ${statsAttempts}] Found outbound-rtp: ${report.kind}, bytes: ${report.bytesSent}, fps: ${report.framesPerSecond}`);
                 }
-                lastStats[report.id] = { bytesSent: report.bytesSent };
-              }
-              if (report.kind === "audio") {
-                foundStats = true;
-                if (lastStats[report.id]) {
-                  const bytes = report.bytesSent - lastStats[report.id].bytesSent;
-                  audioBitrate = Math.round((bytes * 8) / 2 / 1000); // kbps
+                
+                if (report.kind === "video") {
+                  foundStats = true;
+                  setDataSource('real');
+                  if (lastStats[report.id]) {
+                    const bytes = report.bytesSent - lastStats[report.id].bytesSent;
+                    videoBitrate = Math.round((bytes * 8) / 2 / 1000); // kbps, 2s interval
+                    if (report.framesPerSecond) fps = report.framesPerSecond;
+                    console.log(`[LiveCall Debug ${statsAttempts}] Calculated video bitrate: ${videoBitrate} kbps, fps: ${fps}`);
+                  }
+                  lastStats[report.id] = { bytesSent: report.bytesSent };
                 }
-                lastStats[report.id] = { bytesSent: report.bytesSent };
+                if (report.kind === "audio") {
+                  foundStats = true;
+                  if (lastStats[report.id]) {
+                    const bytes = report.bytesSent - lastStats[report.id].bytesSent;
+                    audioBitrate = Math.round((bytes * 8) / 2 / 1000); // kbps
+                    console.log(`[LiveCall Debug ${statsAttempts}] Calculated audio bitrate: ${audioBitrate} kbps`);
+                  }
+                  lastStats[report.id] = { bytesSent: report.bytesSent };
+                }
               }
-            }
+              
+              // Also track inbound (receiving) stats for debugging
+              if (report.type === "inbound-rtp") {
+                inboundReports.push({
+                  kind: report.kind,
+                  bytesReceived: report.bytesReceived,
+                  packetsReceived: report.packetsReceived,
+                  id: report.id
+                });
+              }
+            });
             
-            // Also track inbound (receiving) stats for debugging
-            if (report.type === "inbound-rtp") {
-              inboundReports.push({
-                kind: report.kind,
-                bytesReceived: report.bytesReceived,
-                packetsReceived: report.packetsReceived,
-                id: report.id
-              });
-            }
-          });
-          
+            console.log(`[LiveCall Debug ${statsAttempts}] Stats summary: ${outboundReports.length} outbound, ${inboundReports.length} inbound, foundStats: ${foundStats}`);
+            
+            statsDetails = { 
+              reportCount, 
+              outboundReports: outboundReports.slice(0, 3),
+              inboundReports: inboundReports.slice(0, 3),
+              pcState: pc.connectionState,
+              iceState: pc.iceConnectionState
+            };
+          } catch (e) {
+            console.warn(`[LiveCall Debug ${statsAttempts}] getStats failed:`, e);
+            statsDetails = { error: e instanceof Error ? e.message : String(e) };
+          }
+        } else {
+          console.log(`[LiveCall Debug ${statsAttempts}] PC not ready for stats: connection=${pc.connectionState}, ice=${pc.iceConnectionState}`);
           statsDetails = { 
-            reportCount, 
-            outboundReports: outboundReports.slice(0, 3),
-            inboundReports: inboundReports.slice(0, 3),
             pcState: pc.connectionState,
-            iceState: pc.iceConnectionState
+            iceState: pc.iceConnectionState,
+            waiting: 'connection not ready'
           };
-        } catch (e) {
-          console.warn("getStats failed:", e);
-          statsDetails = { error: e instanceof Error ? e.message : String(e) };
         }
+      } else if (pc) {
+        console.log(`[LiveCall Debug ${statsAttempts}] Found PC but no getStats method:`, typeof pc.getStats);
+      } else {
+        console.log(`[LiveCall Debug ${statsAttempts}] No peer connection found`);
       }
 
-      // Fallback: generate mock data if no real stats found after 5 attempts
-      if (!foundStats && statsAttempts > 5) {
+      // Fallback: generate mock data if no real stats found after 30 attempts (60 seconds)
+      if (!foundStats && statsAttempts > 30) {
+        console.log(`[LiveCall Debug ${statsAttempts}] Using mock data fallback after ${statsAttempts} attempts`);
         setDataSource('mock');
         videoBitrate = Math.floor(Math.random() * 500) + 200; // 200-700 kbps
         audioBitrate = Math.floor(Math.random() * 50) + 20;   // 20-70 kbps
@@ -372,7 +419,7 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
           foundStats,
           statsDetails,
           results: { videoBitrate, audioBitrate, fps },
-          dataSource: foundStats ? 'real' : (statsAttempts > 5 ? 'mock' : 'searching')
+          dataSource: foundStats ? 'real' : (statsAttempts > 15 ? 'mock' : 'searching')
         });
       }
     }, 2000);

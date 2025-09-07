@@ -29,6 +29,9 @@ export class VideoStabilizer {
   private applyStabilizationStyles() {
     const video = this.video;
     
+    // Add CSS class for styling support
+    video.classList.add('video-stabilized');
+    
     // Force GPU acceleration and prevent jumps
     video.style.transform = 'translateZ(0)';
     video.style.willChange = 'auto';
@@ -38,14 +41,18 @@ export class VideoStabilizer {
     video.style.imageRendering = 'auto';
     video.style.objectFit = 'cover';
     video.style.objectPosition = 'center';
+    video.style.transition = 'none'; // Prevent CSS transitions
     
-    // Force stable dimensions
-    const rect = video.getBoundingClientRect();
-    if (rect.width > 0 && rect.height > 0) {
-      video.style.minWidth = `${rect.width}px`;
-      video.style.minHeight = `${rect.height}px`;
-      video.style.maxWidth = `${rect.width}px`;
-      video.style.maxHeight = `${rect.height}px`;
+    // Force stable dimensions - let CSS custom properties control sizing
+    const container = video.closest('.lk-participant-tile, .gg-tile') as HTMLElement;
+    if (container) {
+      const rect = container.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        // Use CSS custom properties for stable sizing
+        video.style.setProperty('--stable-width', `${rect.width}px`);
+        video.style.setProperty('--stable-height', `${rect.height}px`);
+        console.log(`[VideoStabilizer] Set stable dimensions: ${rect.width}x${rect.height}`);
+      }
     }
   }
 
@@ -137,11 +144,18 @@ export class VideoStabilizer {
 
   public destroy() {
     this.stabilizationActive = false;
-    // Remove any forced styles
+    // Remove CSS class and forced styles
+    this.video.classList.remove('video-stabilized');
+    this.video.style.removeProperty('--stable-width');
+    this.video.style.removeProperty('--stable-height');
     this.video.style.minWidth = '';
     this.video.style.minHeight = '';
     this.video.style.maxWidth = '';
     this.video.style.maxHeight = '';
+    this.video.style.transform = '';
+    this.video.style.objectFit = '';
+    this.video.style.objectPosition = '';
+    this.video.style.transition = '';
   }
 }
 
