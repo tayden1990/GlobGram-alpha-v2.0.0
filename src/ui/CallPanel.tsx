@@ -556,22 +556,28 @@ export function CallPanel({ roomName, identity, open, onClose, onEnded }: Props)
           top: 24,
           right: 24,
           zIndex: 1100,
-          background: '#1976d2',
+          background: 'rgba(30,30,30,0.18)',
           color: '#fff',
           border: 'none',
-          borderRadius: 6,
-          padding: '10px 22px',
-          fontSize: 18,
-          fontWeight: 600,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+          borderRadius: '50%',
+          padding: 10,
+          width: 44,
+          height: 44,
+          fontSize: 22,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
-          gap: 10,
+          justifyContent: 'center',
+          opacity: 0.7,
+          transition: 'opacity 0.2s',
         }}
+        title="Call Status"
+        aria-label="Call Status"
+        onMouseOver={e => (e.currentTarget.style.opacity = '1')}
+        onMouseOut={e => (e.currentTarget.style.opacity = '0.7')}
       >
         <span role="img" aria-label="chart">📊</span>
-        <span>Call Status</span>
       </button>
       <Modal open={showCallStatus} onClose={() => setShowCallStatus(false)}>
         {lkRoom && <LiveCall room={lkRoom} />}

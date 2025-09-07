@@ -20,7 +20,7 @@ const modalStyle: React.CSSProperties = {
 };
 
 const contentStyle: React.CSSProperties = {
-  background: "#f9f9f9",
+  background: "#23272f",
   borderRadius: 12,
   padding: 32,
   minWidth: 340,
@@ -28,7 +28,8 @@ const contentStyle: React.CSSProperties = {
   maxHeight: "90vh",
   overflow: "auto",
   boxShadow: "0 4px 32px rgba(0,0,0,0.35)",
-  border: "1.5px solid #333",
+  border: "1.5px solid #444",
+  color: '#f5f5f5',
 };
 
 const Modal: React.FC<ModalProps> = ({ open, onClose, children }) => {

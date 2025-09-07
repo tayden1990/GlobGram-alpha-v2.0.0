@@ -93,16 +93,16 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
       <h2>Remote Video</h2>
       <video ref={remoteVideoRef} autoPlay playsInline style={{ width: "300px", border: "1px solid gray" }} />
 
-      <h3 style={{ color: '#222', marginTop: 24 }}>Local Video Stats (last 30 points)</h3>
+      <h3 style={{ color: '#f5f5f5', marginTop: 24 }}>Local Video Stats (last 30 points)</h3>
       <ResponsiveContainer width="100%" height={300}>
         <LineChart data={statsHistory}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#bbb" />
-          <XAxis dataKey="time" stroke="#222" tick={{ fill: '#222' }} />
-          <YAxis stroke="#222" tick={{ fill: '#222' }} />
-          <Tooltip contentStyle={{ background: '#fff', color: '#222', border: '1px solid #888' }} labelStyle={{ color: '#222' }} />
-          <Legend wrapperStyle={{ color: '#222' }} />
-          <Line type="monotone" dataKey="videoBitrate" stroke="#1976d2" name="Video Bitrate (kbps)" dot={false} />
-          <Line type="monotone" dataKey="fps" stroke="#d2691e" name="FPS" dot={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke="#555" />
+          <XAxis dataKey="time" stroke="#f5f5f5" tick={{ fill: '#f5f5f5' }} />
+          <YAxis stroke="#f5f5f5" tick={{ fill: '#f5f5f5' }} />
+          <Tooltip contentStyle={{ background: '#23272f', color: '#f5f5f5', border: '1px solid #888' }} labelStyle={{ color: '#f5f5f5' }} />
+          <Legend wrapperStyle={{ color: '#f5f5f5' }} />
+          <Line type="monotone" dataKey="videoBitrate" stroke="#4fc3f7" name="Video Bitrate (kbps)" dot={false} />
+          <Line type="monotone" dataKey="fps" stroke="#ffd54f" name="FPS" dot={false} />
         </LineChart>
       </ResponsiveContainer>
     </div>
