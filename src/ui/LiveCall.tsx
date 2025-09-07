@@ -15,8 +15,9 @@ interface StatPoint {
   fps: number;
 }
 
-const VIDEO_BITRATE_THRESHOLD = 300; // kbps
-const FPS_THRESHOLD = 15; // fps
+const VIDEO_BITRATE_THRESHOLD = 150; // kbps - more realistic for poor network conditions
+const FPS_THRESHOLD = 10; // fps - more realistic threshold
+const AUDIO_BITRATE_THRESHOLD = 20; // kbps - realistic for speech
 
 const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
   const localVideoRef = useRef<HTMLVideoElement>(null);
@@ -27,6 +28,12 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
   const [statsHistory, setStatsHistory] = useState<StatPoint[]>([]);
   const [alerts, setAlerts] = useState<string[]>([]);
   const [dataSource, setDataSource] = useState<'real' | 'mock' | 'none'>('none');
+  const [networkQuality, setNetworkQuality] = useState<{
+    uplink: number;
+    downlink: number;
+    rtt: number;
+    packetLoss: number;
+  } | null>(null);
 
   useEffect(() => {
     console.log('[LiveCall] Component mounted with room:', !!room);
@@ -287,6 +294,8 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
       let videoBitrate = 0;
       let audioBitrate = 0;
       let fps = 0;
+      let rtt = 0;
+      let packetLoss = 0;
       let foundStats = false;
       let statsDetails: any = {};
 
@@ -347,6 +356,12 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
                 }
               }
               
+              // Track network quality indicators
+              if (report.type === "remote-inbound-rtp" && report.kind === "video") {
+                if (report.roundTripTime) rtt = Math.round(report.roundTripTime * 1000); // ms
+                if (report.fractionLost) packetLoss = Math.round(report.fractionLost * 100); // %
+              }
+              
               // Also track inbound (receiving) stats for debugging
               if (report.type === "inbound-rtp") {
                 inboundReports.push({
@@ -392,22 +407,70 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
         videoBitrate = Math.floor(Math.random() * 500) + 200; // 200-700 kbps
         audioBitrate = Math.floor(Math.random() * 50) + 20;   // 20-70 kbps
         fps = Math.floor(Math.random() * 10) + 20;           // 20-30 fps
+        rtt = 0;
+        packetLoss = 0;
+      }
+
+      // Update network quality
+      if (rtt > 0 || packetLoss > 0) {
+        setNetworkQuality({
+          uplink: videoBitrate + audioBitrate,
+          downlink: 0, // We don't track downlink in this setup
+          rtt,
+          packetLoss
+        });
       }
 
       const time = new Date().toLocaleTimeString();
       const newPoint = { time, videoBitrate, audioBitrate, fps };
       setStatsHistory((prev) => [...prev.slice(-29), newPoint]);
 
-      // Alerts
+      // Enhanced alerts with quality recommendations
       const newAlerts: string[] = [];
+      
       if (videoBitrate && videoBitrate < VIDEO_BITRATE_THRESHOLD) {
-        newAlerts.push(`⚠️ Low video bitrate: ${videoBitrate} kbps at ${time}`);
+        let recommendation = "";
+        if (videoBitrate < 50) {
+          recommendation = " - Critical: Check network connection";
+        } else if (videoBitrate < 100) {
+          recommendation = " - Consider reducing video quality";
+        } else {
+          recommendation = " - Poor network conditions detected";
+        }
+        newAlerts.push(`⚠️ Low video bitrate: ${videoBitrate} kbps${recommendation} at ${time}`);
       }
+      
       if (fps && fps < FPS_THRESHOLD) {
-        newAlerts.push(`⚠️ Low FPS: ${fps} at ${time}`);
+        let recommendation = "";
+        if (fps < 5) {
+          recommendation = " - Critical: Video may be unwatchable";
+        } else if (fps < 8) {
+          recommendation = " - Very choppy video experience";
+        } else {
+          recommendation = " - Slightly choppy video";
+        }
+        newAlerts.push(`⚠️ Low FPS: ${fps}${recommendation} at ${time}`);
       }
+      
+      if (audioBitrate && audioBitrate < AUDIO_BITRATE_THRESHOLD) {
+        newAlerts.push(`⚠️ Low audio bitrate: ${audioBitrate} kbps - Audio may be unclear at ${time}`);
+      }
+      
+      if (rtt > 500) {
+        newAlerts.push(`⚠️ High latency: ${rtt}ms - Conversation delays expected at ${time}`);
+      }
+      
+      if (packetLoss > 5) {
+        newAlerts.push(`⚠️ Packet loss: ${packetLoss}% - Audio/video artifacts likely at ${time}`);
+      }
+      
+      // Quality improvement suggestions (shown less frequently)
+      if (statsAttempts % 10 === 0 && (videoBitrate < 200 || fps < 15)) {
+        newAlerts.push(`💡 Tip: Close other apps, move closer to router, or switch to audio-only mode`);
+      }
+      
       if (newAlerts.length > 0) {
-        setAlerts((prev) => [...prev, ...newAlerts].slice(-50));
+        setAlerts((prev) => [...prev, ...newAlerts].slice(-100)); // Keep more alerts for better tracking
       }
 
       // Enhanced debug logging for LiveKit v2.7.6
@@ -601,6 +664,75 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
           </ResponsiveContainer>
         </div>
       </div>
+
+      {/* Network Quality Section */}
+      {networkQuality && (
+        <div>
+          <h3 style={{ 
+            margin: "0 0 16px 0", 
+            fontSize: "20px", 
+            fontWeight: "600",
+            color: "#f1f5f9"
+          }}>Network Quality</h3>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: "16px",
+            marginBottom: "24px"
+          }}>
+            <div style={{
+              background: "rgba(59, 130, 246, 0.1)",
+              border: "1px solid rgba(59, 130, 246, 0.3)",
+              borderRadius: "12px",
+              padding: "16px",
+              textAlign: "center"
+            }}>
+              <div style={{ fontSize: "24px", fontWeight: "700", color: "#3b82f6", marginBottom: "4px" }}>
+                {networkQuality.uplink} kbps
+              </div>
+              <div style={{ fontSize: "12px", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "1px" }}>
+                Upload Speed
+              </div>
+            </div>
+            <div style={{
+              background: networkQuality.rtt > 200 ? "rgba(239, 68, 68, 0.1)" : "rgba(16, 185, 129, 0.1)",
+              border: `1px solid ${networkQuality.rtt > 200 ? "rgba(239, 68, 68, 0.3)" : "rgba(16, 185, 129, 0.3)"}`,
+              borderRadius: "12px",
+              padding: "16px",
+              textAlign: "center"
+            }}>
+              <div style={{ 
+                fontSize: "24px", 
+                fontWeight: "700", 
+                color: networkQuality.rtt > 200 ? "#ef4444" : "#10b981", 
+                marginBottom: "4px" 
+              }}>
+                {networkQuality.rtt}ms
+              </div>
+              <div style={{ fontSize: "12px", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "1px" }}>
+                Latency
+              </div>
+            </div>
+            {networkQuality.packetLoss > 0 && (
+              <div style={{
+                background: "rgba(239, 68, 68, 0.1)",
+                border: "1px solid rgba(239, 68, 68, 0.3)",
+                borderRadius: "12px",
+                padding: "16px",
+                textAlign: "center",
+                gridColumn: "span 2"
+              }}>
+                <div style={{ fontSize: "24px", fontWeight: "700", color: "#ef4444", marginBottom: "4px" }}>
+                  {networkQuality.packetLoss}%
+                </div>
+                <div style={{ fontSize: "12px", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "1px" }}>
+                  Packet Loss
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Alerts Section */}
       <div>
