@@ -22,6 +22,7 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
 
   const [statsHistory, setStatsHistory] = useState<StatPoint[]>([]);
   const [alerts, setAlerts] = useState<string[]>([]);
+  const [dataSource, setDataSource] = useState<'real' | 'mock' | 'none'>('none');
 
   useEffect(() => {
     if (!room) return;
@@ -83,6 +84,7 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
           stats.forEach((report: any) => {
             if (report.type === "outbound-rtp" && report.kind === "video") {
               foundStats = true;
+              setDataSource('real');
               if (lastStats[report.id]) {
                 const bytes = report.bytesSent - lastStats[report.id].bytesSent;
                 videoBitrate = Math.round((bytes * 8) / 2 / 1000); // kbps, 2s interval
@@ -106,6 +108,7 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
 
       // Fallback: generate mock data if no real stats found after 3 attempts
       if (!foundStats && statsAttempts > 3) {
+        setDataSource('mock');
         videoBitrate = Math.floor(Math.random() * 500) + 200; // 200-700 kbps
         audioBitrate = Math.floor(Math.random() * 50) + 20;   // 20-70 kbps
         fps = Math.floor(Math.random() * 10) + 20;           // 20-30 fps
@@ -149,7 +152,19 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
       <h2>Remote Video</h2>
       <video ref={remoteVideoRef} autoPlay playsInline style={{ width: "300px", border: "1px solid gray" }} />
 
-      <h3>Live Stats (last 30 points)</h3>
+      <h3>Live Stats (last 30 points) 
+        <span style={{ 
+          marginLeft: '10px', 
+          fontSize: '14px', 
+          padding: '2px 8px', 
+          borderRadius: '4px',
+          background: dataSource === 'real' ? '#0a5d0a' : dataSource === 'mock' ? '#5d4a0a' : '#444',
+          color: dataSource === 'real' ? '#90ee90' : dataSource === 'mock' ? '#ffd700' : '#ccc'
+        }}>
+          {dataSource === 'real' ? '🟢 Real WebRTC Data' : 
+           dataSource === 'mock' ? '🟡 Mock Data' : '⚪ No Data'}
+        </span>
+      </h3>
       <ResponsiveContainer width="100%" height={300}>
         <LineChart data={statsHistory}>
           <CartesianGrid strokeDasharray="3 3" />
