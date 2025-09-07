@@ -142,3 +142,5 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
     </div>
   );
 }
+
+export default LiveCall;
