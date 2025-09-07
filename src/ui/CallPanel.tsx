@@ -44,7 +44,7 @@ const livekitConfigs = {
           { rid: 'h', scaleResolutionDownBy: 2.0, maxBitrate: 600_000 },
           { rid: 'q', scaleResolutionDownBy: 4.0, maxBitrate: 200_000 },
         ],
-        videoEncoding: { maxBitrate: 1_500_000, maxFramerate: 30 },
+        videoEncoding: { maxBitrate: 900_000, maxFramerate: 30 },
         screenShareEncoding: { maxBitrate: 3_000_000, maxFramerate: 30 },
         audioBitrate: 32000,
         audioStereo: false,
