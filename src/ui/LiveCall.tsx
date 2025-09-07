@@ -58,73 +58,109 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
     // Listen for new participants
     room.on("participantConnected", attachRemoteVideo);
 
-    // --- WebRTC getStats polling with extensive debugging and multiple access paths ---
+    // --- WebRTC getStats polling with LiveKit v2.7.6 specific paths ---
     let lastStats: any = {};
     let statsAttempts = 0;
     const interval = setInterval(async () => {
       statsAttempts++;
       
-      // Try multiple paths to find the peer connection with extensive debugging
+      // LiveKit v2.7.6 specific peer connection detection
       let pc = null;
       let pcPath = 'none';
+      let foundEngine = null;
       
       try {
-        // Path 1: Standard LiveKit engine client
-        if ((room as any).engine?.client?._pc) {
-          pc = (room as any).engine.client._pc;
-          pcPath = 'engine.client._pc';
+        // Method 1: Access through Room.engine (most common in v2.7.6)
+        const engine = (room as any).engine;
+        if (engine) {
+          foundEngine = engine;
+          
+          // Try primary transport in LiveKit v2.7.6
+          if (engine.primaryTransport?.pc) {
+            pc = engine.primaryTransport.pc;
+            pcPath = 'engine.primaryTransport.pc';
+          }
+          // Try publisher/subscriber transports
+          else if (engine.subscriberTransport?.pc) {
+            pc = engine.subscriberTransport.pc;
+            pcPath = 'engine.subscriberTransport.pc';
+          }
+          else if (engine.publisherTransport?.pc) {
+            pc = engine.publisherTransport.pc;
+            pcPath = 'engine.publisherTransport.pc';
+          }
+          // Legacy client structure
+          else if (engine.client?._pc) {
+            pc = engine.client._pc;
+            pcPath = 'engine.client._pc';
+          }
+          else if (engine.client?.pc) {
+            pc = engine.client.pc;
+            pcPath = 'engine.client.pc';
+          }
         }
-        // Path 2: Alternative client structure
-        else if ((room as any).engine?.client?.pc) {
-          pc = (room as any).engine.client.pc;
-          pcPath = 'engine.client.pc';
+        
+        // Method 2: Check local participant engine
+        if (!pc && room.localParticipant) {
+          const lpEngine = (room.localParticipant as any).engine;
+          if (lpEngine?.primaryTransport?.pc) {
+            pc = lpEngine.primaryTransport.pc;
+            pcPath = 'localParticipant.engine.primaryTransport.pc';
+          }
         }
-        // Path 3: Direct engine pc
-        else if ((room as any).engine?.pc) {
-          pc = (room as any).engine.pc;
-          pcPath = 'engine.pc';
+        
+        // Method 3: Look through track publications for sender stats
+        if (!pc && room.localParticipant) {
+          const trackPubs = Array.from(room.localParticipant.trackPublications.values());
+          for (const pub of trackPubs) {
+            const track = (pub as any).track;
+            if (track && track.sender?.transport?.pc) {
+              pc = track.sender.transport.pc;
+              pcPath = 'track.sender.transport.pc';
+              break;
+            }
+            if (track && track.transceiver?.sender?.transport?.pc) {
+              pc = track.transceiver.sender.transport.pc;
+              pcPath = 'track.transceiver.sender.transport.pc';
+              break;
+            }
+          }
         }
-        // Path 4: Legacy engine structure
-        else if ((room as any)._engine?.client?._pc) {
-          pc = (room as any)._engine.client._pc;
-          pcPath = '_engine.client._pc';
-        }
-        // Path 5: Look in publisher/subscriber engines
-        else if ((room as any).engine?.publisher?.pc) {
-          pc = (room as any).engine.publisher.pc;
-          pcPath = 'engine.publisher.pc';
-        }
-        else if ((room as any).engine?.subscriber?.pc) {
-          pc = (room as any).engine.subscriber.pc;
-          pcPath = 'engine.subscriber.pc';
-        }
-        // Path 6: Check for RTCPeerConnection in participants
-        else if ((room as any).localParticipant?.engine?.client?._pc) {
-          pc = (room as any).localParticipant.engine.client._pc;
-          pcPath = 'localParticipant.engine.client._pc';
-        }
-        // Path 7: Look deeper in room structure
-        else if ((room as any)._signalClient?.engine?.client?._pc) {
-          pc = (room as any)._signalClient.engine.client._pc;
-          pcPath = '_signalClient.engine.client._pc';
-        }
+        
       } catch (e) {
-        console.warn("Error accessing peer connection:", e);
+        console.warn("Error accessing LiveKit engine:", e);
       }
 
-      // Enhanced debugging - log room structure on first few attempts
+      // Enhanced debugging for LiveKit v2.7.6 structure
       if (statsAttempts <= 3) {
-        console.log(`[LiveCall Debug ${statsAttempts}] Room structure:`, {
-          hasEngine: !!(room as any).engine,
-          hasEngineClient: !!(room as any).engine?.client,
-          engineClientKeys: (room as any).engine?.client ? Object.keys((room as any).engine.client) : [],
-          hasPublisher: !!(room as any).engine?.publisher,
-          hasSubscriber: !!(room as any).engine?.subscriber,
+        console.log(`[LiveCall Debug ${statsAttempts}] LiveKit v2.7.6 analysis:`, {
+          hasRoom: !!room,
+          roomConnectionState: (room as any).state,
+          hasEngine: !!foundEngine,
+          engineKeys: foundEngine ? Object.keys(foundEngine).slice(0, 15) : [],
+          hasLocalParticipant: !!room.localParticipant,
+          localParticipantTracks: room.localParticipant ? Array.from(room.localParticipant.trackPublications.keys()) : [],
           pcFound: !!pc,
           pcPath,
           pcType: pc ? pc.constructor.name : 'none',
-          roomKeys: Object.keys(room as any).slice(0, 10), // First 10 keys
+          pcConnectionState: pc ? pc.connectionState : 'none',
+          pcIceConnectionState: pc ? pc.iceConnectionState : 'none',
         });
+        
+        // Log engine structure for debugging
+        if (foundEngine && statsAttempts === 1) {
+          const engineStructure: any = {};
+          try {
+            engineStructure.hasPublisherTransport = !!foundEngine.publisherTransport;
+            engineStructure.hasSubscriberTransport = !!foundEngine.subscriberTransport;
+            engineStructure.hasPrimaryTransport = !!foundEngine.primaryTransport;
+            engineStructure.hasClient = !!foundEngine.client;
+            engineStructure.publisherKeys = foundEngine.publisherTransport ? Object.keys(foundEngine.publisherTransport).slice(0, 10) : [];
+            engineStructure.subscriberKeys = foundEngine.subscriberTransport ? Object.keys(foundEngine.subscriberTransport).slice(0, 10) : [];
+            engineStructure.primaryKeys = foundEngine.primaryTransport ? Object.keys(foundEngine.primaryTransport).slice(0, 10) : [];
+          } catch {}
+          console.log('[LiveCall] Engine structure:', engineStructure);
+        }
       }
 
       let videoBitrate = 0;
@@ -133,44 +169,65 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
       let foundStats = false;
       let statsDetails: any = {};
 
-      if (pc && typeof pc.getStats === "function") {
+      if (pc && typeof pc.getStats === "function" && pc.connectionState === "connected") {
         try {
           const stats = await pc.getStats();
           let reportCount = 0;
           let outboundReports: any[] = [];
+          let inboundReports: any[] = [];
           
           stats.forEach((report: any) => {
             reportCount++;
+            
+            // Track outbound (sending) stats
             if (report.type === "outbound-rtp") {
               outboundReports.push({
                 kind: report.kind,
                 bytesSent: report.bytesSent,
                 framesPerSecond: report.framesPerSecond,
+                packetsSent: report.packetsSent,
+                id: report.id,
+                ssrc: report.ssrc
+              });
+              
+              if (report.kind === "video") {
+                foundStats = true;
+                setDataSource('real');
+                if (lastStats[report.id]) {
+                  const bytes = report.bytesSent - lastStats[report.id].bytesSent;
+                  videoBitrate = Math.round((bytes * 8) / 2 / 1000); // kbps, 2s interval
+                  if (report.framesPerSecond) fps = report.framesPerSecond;
+                }
+                lastStats[report.id] = { bytesSent: report.bytesSent };
+              }
+              if (report.kind === "audio") {
+                foundStats = true;
+                if (lastStats[report.id]) {
+                  const bytes = report.bytesSent - lastStats[report.id].bytesSent;
+                  audioBitrate = Math.round((bytes * 8) / 2 / 1000); // kbps
+                }
+                lastStats[report.id] = { bytesSent: report.bytesSent };
+              }
+            }
+            
+            // Also track inbound (receiving) stats for debugging
+            if (report.type === "inbound-rtp") {
+              inboundReports.push({
+                kind: report.kind,
+                bytesReceived: report.bytesReceived,
+                packetsReceived: report.packetsReceived,
                 id: report.id
               });
             }
-            
-            if (report.type === "outbound-rtp" && report.kind === "video") {
-              foundStats = true;
-              setDataSource('real');
-              if (lastStats[report.id]) {
-                const bytes = report.bytesSent - lastStats[report.id].bytesSent;
-                videoBitrate = Math.round((bytes * 8) / 2 / 1000); // kbps, 2s interval
-                if (report.framesPerSecond) fps = report.framesPerSecond;
-              }
-              lastStats[report.id] = { bytesSent: report.bytesSent };
-            }
-            if (report.type === "outbound-rtp" && report.kind === "audio") {
-              foundStats = true;
-              if (lastStats[report.id]) {
-                const bytes = report.bytesSent - lastStats[report.id].bytesSent;
-                audioBitrate = Math.round((bytes * 8) / 2 / 1000); // kbps
-              }
-              lastStats[report.id] = { bytesSent: report.bytesSent };
-            }
           });
           
-          statsDetails = { reportCount, outboundReports: outboundReports.slice(0, 3) }; // First 3 reports
+          statsDetails = { 
+            reportCount, 
+            outboundReports: outboundReports.slice(0, 3),
+            inboundReports: inboundReports.slice(0, 3),
+            pcState: pc.connectionState,
+            iceState: pc.iceConnectionState
+          };
         } catch (e) {
           console.warn("getStats failed:", e);
           statsDetails = { error: e instanceof Error ? e.message : String(e) };
@@ -201,11 +258,12 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
         setAlerts((prev) => [...prev, ...newAlerts].slice(-50));
       }
 
-      // Enhanced debug logging
+      // Enhanced debug logging for LiveKit v2.7.6
       if (statsAttempts <= 8) {
         console.log(`[LiveCall Stats ${statsAttempts}]:`, {
           pcFound: !!pc,
           pcPath,
+          pcConnectionState: pc ? pc.connectionState : 'none',
           foundStats,
           statsDetails,
           results: { videoBitrate, audioBitrate, fps },
