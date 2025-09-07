@@ -5,6 +5,7 @@ import './video-stabilization.css';
 import { stabilizeVideo, VideoStabilizer } from './videoStabilizer';
 import { createVideoQualityMonitor, VideoQualityMonitor, VideoQualityMetrics } from './videoQualityMonitor';
 import { createGracefulConstraintManager, GracefulConstraintManager } from './gracefulConstraintManager';
+import { stabilizeVideoCallLayout, LayoutStabilizer } from './layoutStabilizer';
 
 interface LiveCallProps {
   room: Room;
@@ -24,12 +25,14 @@ const AUDIO_BITRATE_THRESHOLD = 20; // kbps - realistic for speech
 const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const localStabilizerRef = useRef<VideoStabilizer | null>(null);
   const remoteStabilizerRef = useRef<VideoStabilizer | null>(null);
   const localQualityMonitorRef = useRef<VideoQualityMonitor | null>(null);
   const remoteQualityMonitorRef = useRef<VideoQualityMonitor | null>(null);
   const localConstraintManagerRef = useRef<GracefulConstraintManager | null>(null);
   const remoteConstraintManagerRef = useRef<GracefulConstraintManager | null>(null);
+  const layoutStabilizersRef = useRef<LayoutStabilizer[]>([]);
 
   const [statsHistory, setStatsHistory] = useState<StatPoint[]>([]);
   const [alerts, setAlerts] = useState<string[]>([]);
@@ -61,11 +64,27 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
       remoteParticipants: (room as any).participants?.size || 0
     });
 
+    // AGGRESSIVE LAYOUT STABILIZATION - PREVENT ALL JUMPING
+    if (containerRef.current) {
+      // Clean up any existing stabilizers
+      layoutStabilizersRef.current.forEach(stabilizer => stabilizer.destroy());
+      layoutStabilizersRef.current = [];
+      
+      // Apply comprehensive layout stabilization
+      layoutStabilizersRef.current = stabilizeVideoCallLayout(containerRef.current);
+      console.log('[LiveCall] Applied aggressive layout stabilization to prevent jumping');
+    }
+
     // Handle room state changes to cleanup monitoring when disconnected
     const handleRoomStateChange = (state: any) => {
       console.log('[LiveCall] Room state changed to:', state);
       if (state === 'disconnected' || state === 'reconnecting') {
-        console.log('[LiveCall] Room disconnected, cleaning up quality monitors and constraint managers');
+        console.log('[LiveCall] Room disconnected, cleaning up all stabilizers and monitors');
+        
+        // Cleanup layout stabilizers
+        layoutStabilizersRef.current.forEach(stabilizer => stabilizer.destroy());
+        layoutStabilizersRef.current = [];
+        
         if (localQualityMonitorRef.current) {
           localQualityMonitorRef.current.stopMonitoring();
         }
@@ -584,6 +603,10 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
       clearInterval(interval);
       room.off("participantConnected", attachRemoteVideo);
       
+      // Cleanup layout stabilizers FIRST (most important for preventing jumping)
+      layoutStabilizersRef.current.forEach(stabilizer => stabilizer.destroy());
+      layoutStabilizersRef.current = [];
+      
       // Cleanup room state listeners
       if ((room as any).off) {
         (room as any).off('connectionStateChanged', handleRoomStateChange);
@@ -624,13 +647,17 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
 
   // --- Render UI ---
   return (
-    <div style={{ 
-      padding: "24px",
-      background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)",
-      color: "#ffffff",
-      borderRadius: "16px",
-      fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
-    }}>
+    <div 
+      ref={containerRef}
+      className="call-panel"
+      style={{ 
+        padding: "24px",
+        background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)",
+        color: "#ffffff",
+        borderRadius: "16px",
+        fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+      }}
+    >
       {/* Video Section */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "32px" }}>
         <div>

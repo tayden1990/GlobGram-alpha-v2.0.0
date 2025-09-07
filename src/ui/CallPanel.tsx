@@ -8,6 +8,7 @@ import SimpleConference from './SimpleConference';
 import { CallErrorBoundary } from './CallErrorBoundary';
 import Modal from './Modal';
 import LiveCall from './LiveCall';
+import { disableSpeakingAnimations, enableSpeakingAnimations } from './speakingAnimationDisabler';
 // LiveKit scenario-based configs
 const livekitConfigs = {
   general: {
@@ -520,6 +521,24 @@ export function CallPanel({ roomName, identity, open, onClose, onEnded }: Props)
       window.removeEventListener('keyup', onKeyUp)
     }
   }, [lkRoom, status, addLog])
+
+  // CRITICAL: Disable all speaking animations when call panel is open to prevent jumping
+  useEffect(() => {
+    if (open) {
+      console.log('[CallPanel] Disabling all speaking animations to prevent video jumping');
+      disableSpeakingAnimations();
+    } else {
+      console.log('[CallPanel] Re-enabling speaking animations');
+      enableSpeakingAnimations();
+    }
+    
+    // Cleanup on unmount
+    return () => {
+      if (open) {
+        enableSpeakingAnimations();
+      }
+    };
+  }, [open]);
 
   if (!open) return null
   return (

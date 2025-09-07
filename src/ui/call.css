@@ -100,7 +100,125 @@
   contain: layout style !important;
 }
 
-/* Disable ALL animations and transitions during video calls */
+/* ULTIMATE ANTI-JUMPING PROTECTION */
+/* Disable ALL animations and layout-affecting changes during video calls */
+.call-panel .gg-tile,
+.call-panel .gg-tile *,
+.call-panel .gg-placeholder,
+.call-panel .gg-placeholder * {
+  /* ZERO TOLERANCE FOR LAYOUT SHIFTS */
+  animation: none !important;
+  transform: none !important;
+  transition: none !important;
+  will-change: auto !important;
+  
+  /* Force layout containment */
+  contain: layout style !important;
+  
+  /* Prevent any size changes */
+  box-sizing: border-box !important;
+  
+  /* Lock positioning */
+  position: relative !important;
+}
+
+/* Special protection for video elements */
+.call-panel video,
+.call-panel .stable-video {
+  /* MAXIMUM STABILITY */
+  animation: none !important;
+  transform: none !important;
+  transition: none !important;
+  will-change: auto !important;
+  
+  /* Force exact dimensions */
+  object-fit: cover !important;
+  object-position: center !important;
+  
+  /* Hardware acceleration without transforms */
+  backface-visibility: hidden !important;
+  -webkit-backface-visibility: hidden !important;
+  
+  /* Prevent any scaling or movement */
+  min-width: 100% !important;
+  min-height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+}
+
+/* ULTIMATE VIDEO STABILITY - NO JUMPING ALLOWED */
+.call-panel video,
+.call-panel-overlay video,
+video.stable-video,
+.gg-tile video {
+  /* ABSOLUTE STABILITY */
+  animation: none !important;
+  transform: none !important;
+  transition: none !important;
+  will-change: auto !important;
+  
+  /* Force exact positioning and sizing */
+  position: relative !important;
+  object-fit: cover !important;
+  object-position: center !important;
+  
+  /* Lock all dimensions */
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 100% !important;
+  min-height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  
+  /* Hardware acceleration without layout shifts */
+  backface-visibility: hidden !important;
+  -webkit-backface-visibility: hidden !important;
+  
+  /* Prevent any filter or backdrop changes that could cause jumps */
+  filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  
+  /* Force layout containment */
+  contain: layout style size paint !important;
+  
+  /* Prevent any margin/padding changes */
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  outline: none !important;
+  
+  /* Override any inherited styles that could cause movement */
+  top: auto !important;
+  left: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  
+  /* Disable any pseudo-elements */
+}
+
+.call-panel video::before,
+.call-panel video::after,
+.call-panel-overlay video::before,
+.call-panel-overlay video::after {
+  content: none !important;
+  display: none !important;
+}
+
+/* NUCLEAR OPTION: Disable all animations during video calls */
+.call-panel *,
+.call-panel-overlay *,
+.call-panel *::before,
+.call-panel *::after,
+.call-panel-overlay *::before,
+.call-panel-overlay *::after {
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+  transition-duration: 0s !important;
+  transition-delay: 0s !important;
+  transform: none !important;
+  will-change: auto !important;
+}
 .gg-grid .lk-participant-tile video.video-stabilized,
 .gg-grid .lk-participant-tile video.video-stabilized * {
   animation: none !important;
@@ -383,33 +501,51 @@
   transition: all 0.3s ease;
 }
 
-/* Speaking indicator - Optimized to prevent jumping */
+/* ROBUST SPEAKING INDICATOR - ZERO LAYOUT SHIFTS */
 .gg-tile.speaking{
-  box-shadow:0 0 0 3px #3b82f6, 0 0 20px rgba(59, 130, 246, 0.4);
-  /* Use transform instead of box-shadow animation to prevent layout shifts */
-  animation: speaking-pulse 2s infinite;
-  /* Force layer creation to prevent repaints affecting other elements */
-  will-change: transform;
-  transform: translateZ(0); /* Force hardware acceleration */
+  /* COMPLETELY DISABLE ALL ANIMATIONS */
+  animation: none !important;
+  transform: none !important;
+  transition: none !important;
+  will-change: auto !important;
+  
+  /* Static visual indicator only - no movement */
+  box-shadow: 
+    0 0 0 2px rgba(59, 130, 246, 0.9),
+    0 0 0 4px rgba(59, 130, 246, 0.5),
+    0 0 10px rgba(59, 130, 246, 0.3) !important;
+  
+  /* Force stable layout containment */
+  contain: layout style size paint !important;
+  
+  /* Prevent any child animations */
+  * {
+    animation: none !important;
+    transform: none !important;
+    transition: none !important;
+    will-change: auto !important;
+  }
 }
 
-/* Optimized animation that doesn't affect layout */
+/* REMOVE ALL SPEAKING ANIMATIONS */
 @keyframes speaking-pulse {
-  0%, 100% {
-    transform: translateZ(0) scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: translateZ(0) scale(1.02); /* Very subtle scale instead of box-shadow */
-    opacity: 0.95;
-  }
+  /* Animation disabled - keeping keyframe to prevent CSS errors */
+  0%, 100% { transform: none; }
 }
 
-/* Fallback: disable speaking animation completely if user prefers reduced motion */
+/* FORCE DISABLE ALL SPEAKING ANIMATIONS FOR ACCESSIBILITY */
 @media (prefers-reduced-motion: reduce) {
   .gg-tile.speaking {
-    animation: none;
-    box-shadow:0 0 0 3px #3b82f6, 0 0 20px rgba(59, 130, 246, 0.4);
+    animation: none !important;
+    transform: none !important;
+    transition: none !important;
+    box-shadow: 0 0 0 2px #3b82f6, 0 0 10px rgba(59, 130, 246, 0.4) !important;
+  }
+  
+  .gg-tile.speaking .gg-placeholder {
+    animation: none !important;
+    transform: none !important;
+    transition: none !important;
   }
 }
 
@@ -438,20 +574,27 @@
   flex-shrink: 0;
 }
 
-/* Override speaking animation specifically for placeholder icons */
+/* COMPLETELY DISABLE PLACEHOLDER SPEAKING ANIMATIONS */
 .gg-tile.speaking .gg-placeholder {
-  /* Use a more subtle animation that doesn't affect layout */
-  animation: placeholder-speaking 2s infinite;
+  /* NO ANIMATION WHATSOEVER */
+  animation: none !important;
+  transform: none !important;
+  transition: none !important;
+  will-change: auto !important;
+  
+  /* Static visual change only */
+  opacity: 1 !important;
+  
+  /* Force layout stability */
+  contain: layout style size !important;
 }
 
+/* DISABLE ALL PLACEHOLDER ANIMATIONS */
 @keyframes placeholder-speaking {
-  0%, 100% {
-    transform: translateZ(0);
+  /* Animation disabled - keeping keyframe to prevent CSS errors */
+  0%, 100% { 
+    transform: none;
     opacity: 1;
-  }
-  50% {
-    transform: translateZ(0);
-    opacity: 0.8; /* Only fade slightly, no scaling or movement */
   }
 }
 
