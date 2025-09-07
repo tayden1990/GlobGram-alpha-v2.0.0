@@ -75,14 +75,37 @@
   transition: none; /* Prevent CSS transitions from interfering */
 }
 
-/* Video stabilization classes - higher specificity to override defaults */
+/* Video stabilization classes - highest specificity to override everything */
 .lk-participant-tile video.video-stabilized {
   object-fit: cover !important;
   object-position: center center !important;
   width: var(--stable-width, 100%) !important;
   height: var(--stable-height, 100%) !important;
-  transform: none !important;
+  transform: translateZ(0) !important;
   transition: none !important;
+  animation: none !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+  user-select: none !important;
+  /* Prevent any browser scaling or adjustments */
+  image-rendering: auto !important;
+  backface-visibility: hidden !important;
+  will-change: auto !important;
+}
+
+/* Anti-jumping container stabilization */
+.lk-participant-tile:has(video.video-stabilized) {
+  overflow: hidden !important;
+  /* Prevent container from causing jumps */
+  contain: layout style !important;
+}
+
+/* Disable ALL animations and transitions during video calls */
+.gg-grid .lk-participant-tile video.video-stabilized,
+.gg-grid .lk-participant-tile video.video-stabilized * {
+  animation: none !important;
+  transition: none !important;
+  transform: translateZ(0) !important;
 }
 
 /* Hide built-in LiveKit labels/indicators to avoid double text & overflow */
