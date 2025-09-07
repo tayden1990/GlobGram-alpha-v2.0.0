@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useSettingsStore } from './settingsStore';
 import { usePresenceStore } from '../state/presenceStore';
+import { createSoundAudio, playSoundSafely, checkSoundExists } from './soundUtils';
 
 type RingtoneState = 'idle' | 'incoming' | 'outgoing' | 'connecting';
 
@@ -15,10 +16,11 @@ export function useRingtoneManager() {
   // Initialize ringtone audio
   useEffect(() => {
     if (!ringtoneRef.current) {
-      const audio = new Audio('/sounds/ringtone-soft.mp3');
-      audio.loop = true;
-      audio.volume = 0.3;
-      audio.preload = 'auto';
+      const audio = createSoundAudio('ringtone-soft.mp3', {
+        loop: true,
+        volume: 0.3,
+        preload: 'auto'
+      });
       ringtoneRef.current = audio;
 
       // Preload on first user interaction

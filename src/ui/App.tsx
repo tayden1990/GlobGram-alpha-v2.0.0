@@ -18,6 +18,7 @@ import { bytesToHex } from '../nostr/utils'
 import { createRoom, refreshSubscriptions, sendDM } from '../nostr/engine'
 import { useSettingsStore } from './settingsStore'
 import { getLogs, clearLogs, onLog, log, setLogMinLevel, getPersistedLogsText, clearPersistedLogs } from './logger'
+import { createSoundAudio, playSoundSafely } from './soundUtils'
 import { useI18n } from '../i18n'
 import { BUILD_INFO } from '../version'
 import { checkLatestRelease, semverGreater, type GithubRelease, type GithubAsset } from '../services'
@@ -221,10 +222,16 @@ export default function App() {
     const onFirstGesture = () => {
       try {
         if (localStorage.getItem('ringtone_preloaded') === '1') return
-        const a = new Audio('/sounds/ringtone-soft.mp3')
-        a.loop = false
-        a.volume = 0.001
-        a.play().then(() => { a.pause(); try { a.currentTime = 0 } catch {}; localStorage.setItem('ringtone_preloaded', '1') }).catch(() => {
+        const a = createSoundAudio('ringtone-soft.mp3', {
+          loop: false,
+          volume: 0.001,
+          preload: 'auto'
+        });
+        playSoundSafely(a, 'ringtone-preload').then(() => { 
+          a.pause(); 
+          try { a.currentTime = 0 } catch {}; 
+          localStorage.setItem('ringtone_preloaded', '1') 
+        }).catch(() => {
           // even if it fails, set the flag to avoid spamming
           try { localStorage.setItem('ringtone_preloaded', '1') } catch {}
         })
@@ -499,8 +506,12 @@ export default function App() {
       // try to play a soft ringtone (best-effort; may require prior gesture on iOS)
       try {
         if (!ringtoneRef.current) {
-          const audio = new Audio('/sounds/ringtone-soft.mp3')
-          audio.loop = true
+          const audio = createSoundAudio('ringtone-soft.mp3', {
+            loop: true,
+            volume: 0.3,
+            preload: 'auto'
+          });
+          ringtoneRef.current = audio
           audio.volume = 0.25
           ringtoneRef.current = audio
         }

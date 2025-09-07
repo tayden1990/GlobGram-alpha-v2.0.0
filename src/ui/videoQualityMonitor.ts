@@ -66,15 +66,28 @@ export class VideoQualityMonitor {
 
   private async checkQuality() {
     try {
+      // Check if track is still valid and connected
+      if (!this.mediaTrack || this.mediaTrack.readyState === 'ended' || !this.mediaTrack.enabled) {
+        console.warn('[VideoQualityMonitor] Media track is disconnected, stopping monitoring');
+        this.stopMonitoring();
+        return;
+      }
+
       const settings = this.mediaTrack.getSettings();
       const capabilities = this.mediaTrack.getCapabilities();
+      
+      // If no settings available, track might be disconnected
+      if (!settings || (!settings.width && !settings.height)) {
+        console.warn('[VideoQualityMonitor] No video settings available, track may be disconnected');
+        return;
+      }
       
       let bitrate = 0;
       let jitter = 0;
       let packetsLost = 0;
 
       // Get WebRTC stats if peer connection is available
-      if (this.peerConnection) {
+      if (this.peerConnection && this.peerConnection.connectionState === 'connected') {
         const stats = await this.peerConnection.getStats();
         stats.forEach((report) => {
           if (report.type === 'outbound-rtp' && report.kind === 'video') {
@@ -144,6 +157,13 @@ export class VideoQualityMonitor {
     console.warn('[VideoQualityMonitor] Quality degradation detected:', metrics);
     
     try {
+      // Check if track is still valid before applying constraints
+      if (!this.mediaTrack || this.mediaTrack.readyState !== 'live' || !this.mediaTrack.enabled) {
+        console.warn('[VideoQualityMonitor] Track is not live, cannot apply corrective constraints');
+        this.stopMonitoring();
+        return;
+      }
+
       // Immediately restore video constraints
       if (this.mediaTrack.applyConstraints) {
         await this.mediaTrack.applyConstraints({
@@ -162,8 +182,13 @@ export class VideoQualityMonitor {
         this.onQualityDegraded(metrics);
       }
 
-    } catch (error) {
-      console.error('[VideoQualityMonitor] Failed to apply corrective constraints:', error);
+    } catch (error: any) {
+      if (error.name === 'OverconstrainedError' || error.message.includes('not connected')) {
+        console.warn('[VideoQualityMonitor] Track disconnected, stopping monitoring');
+        this.stopMonitoring();
+      } else {
+        console.error('[VideoQualityMonitor] Failed to apply corrective constraints:', error);
+      }
     }
   }
 

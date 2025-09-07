@@ -4,6 +4,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, CartesianGrid, Responsi
 import './video-stabilization.css';
 import { stabilizeVideo, VideoStabilizer } from './videoStabilizer';
 import { createVideoQualityMonitor, VideoQualityMonitor, VideoQualityMetrics } from './videoQualityMonitor';
+import { createGracefulConstraintManager, GracefulConstraintManager } from './gracefulConstraintManager';
 
 interface LiveCallProps {
   room: Room;
@@ -27,6 +28,8 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
   const remoteStabilizerRef = useRef<VideoStabilizer | null>(null);
   const localQualityMonitorRef = useRef<VideoQualityMonitor | null>(null);
   const remoteQualityMonitorRef = useRef<VideoQualityMonitor | null>(null);
+  const localConstraintManagerRef = useRef<GracefulConstraintManager | null>(null);
+  const remoteConstraintManagerRef = useRef<GracefulConstraintManager | null>(null);
 
   const [statsHistory, setStatsHistory] = useState<StatPoint[]>([]);
   const [alerts, setAlerts] = useState<string[]>([]);
@@ -57,6 +60,32 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
       localParticipant: !!room.localParticipant,
       remoteParticipants: (room as any).participants?.size || 0
     });
+
+    // Handle room state changes to cleanup monitoring when disconnected
+    const handleRoomStateChange = (state: any) => {
+      console.log('[LiveCall] Room state changed to:', state);
+      if (state === 'disconnected' || state === 'reconnecting') {
+        console.log('[LiveCall] Room disconnected, cleaning up quality monitors and constraint managers');
+        if (localQualityMonitorRef.current) {
+          localQualityMonitorRef.current.stopMonitoring();
+        }
+        if (remoteQualityMonitorRef.current) {
+          remoteQualityMonitorRef.current.stopMonitoring();
+        }
+        if (localConstraintManagerRef.current) {
+          localConstraintManagerRef.current.stopMonitoring();
+        }
+        if (remoteConstraintManagerRef.current) {
+          remoteConstraintManagerRef.current.stopMonitoring();
+        }
+      }
+    };
+
+    // Listen for room state changes
+    if ((room as any).on) {
+      (room as any).on('connectionStateChanged', handleRoomStateChange);
+      (room as any).on('disconnected', handleRoomStateChange);
+    }
 
     // Attach local video (camera) with stabilization
     const localCamPub = Array.from(room.localParticipant.trackPublications.values()).find(
@@ -128,70 +157,35 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
           
           localQualityMonitorRef.current.startMonitoring();
         }
-        if (mediaTrack && mediaTrack.applyConstraints) {
-          // Initial strict constraints
-          (async () => {
-            try {
-              await mediaTrack.applyConstraints({
-                width: { exact: 960 },           // Force exact resolution
-                height: { exact: 540 },          // Force exact resolution
-                frameRate: { exact: 30 },        // Force exact framerate
-                aspectRatio: { exact: 16/9 },    // Force exact aspect ratio
-                resizeMode: 'none',              // Prevent resizing
-                latency: { max: 0.1 },           // Low latency
-                // Advanced browser-specific constraints
-                googCpuOveruseDetection: false,  // Disable CPU overuse detection
-                googSuspendBelowMinBitrate: false, // Never suspend video
-                googNoiseReduction: false,       // Disable noise reduction
-                googExperimentalAutoDetectSsrc: false, // Disable SSRC detection
-              });
-              
-              const settings = mediaTrack.getSettings();
-              console.log('[LiveCall] Applied strict video constraints:', settings);
-              
-              // Set up continuous monitoring to prevent changes
-              const monitoringInterval = setInterval(() => {
-                const currentSettings = mediaTrack.getSettings();
-                
-                // Check if dimensions have changed (common cause of jumping)
-                if (currentSettings.width !== 960 || currentSettings.height !== 540) {
-                  console.warn('[LiveCall] Video dimensions changed, correcting:', currentSettings);
-                  
-                  // Immediately reapply constraints
-                  mediaTrack.applyConstraints({
-                    width: { exact: 960 },
-                    height: { exact: 540 },
-                    frameRate: { exact: 30 },
-                    aspectRatio: { exact: 16/9 },
-                  }).catch((e: any) => console.warn('Failed to reapply constraints:', e));
-                }
-                
-                // Check if framerate has changed
-                if (currentSettings.frameRate && currentSettings.frameRate !== 30) {
-                  console.warn('[LiveCall] Framerate changed, correcting:', currentSettings.frameRate);
-                  mediaTrack.applyConstraints({
-                    frameRate: { exact: 30 }
-                  }).catch((e: any) => console.warn('Failed to correct framerate:', e));
-                }
-              }, 500); // Check every 500ms
-              
-              // Cleanup monitoring on component unmount
-              return () => clearInterval(monitoringInterval);
-              
-            } catch (e) {
-              console.warn('Failed to apply strict video constraints, trying relaxed:', e);
-              try {
-                await mediaTrack.applyConstraints({
-                  width: { ideal: 960, min: 640, max: 960 },
-                  height: { ideal: 540, min: 360, max: 540 },
-                  frameRate: { ideal: 30, min: 30, max: 30 },
-                  aspectRatio: { ideal: 16/9 }
-                });
-              } catch (e2) {
-                console.warn('Failed to apply any video constraints:', e2);
-              }
+
+        // Set up graceful constraint management
+        if (mediaTrack) {
+          if (localConstraintManagerRef.current) {
+            localConstraintManagerRef.current.destroy();
+          }
+          
+          localConstraintManagerRef.current = createGracefulConstraintManager(mediaTrack, {
+            width: 960,
+            height: 540,
+            frameRate: 30,
+            fallbackConstraints: {
+              width: { ideal: 960, min: 640, max: 960 },
+              height: { ideal: 540, min: 360, max: 540 },
+              frameRate: { ideal: 30, min: 24, max: 30 },
+              aspectRatio: { ideal: 16/9 }
             }
-          })();
+          });
+
+          // Apply initial constraints
+          localConstraintManagerRef.current.applyConstraints().then((success) => {
+            if (success) {
+              console.log('[LiveCall] Successfully applied initial video constraints');
+              // Start monitoring for constraint drift
+              localConstraintManagerRef.current?.startMonitoring(2000);
+            } else {
+              console.warn('[LiveCall] Failed to apply initial video constraints');
+            }
+          });
         }
     }
 
@@ -548,19 +542,27 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
         setAlerts((prev) => [...prev, ...newAlerts].slice(-100)); // Keep more alerts for better tracking
       }
 
-      // Update current quality metrics from monitors
-      if (localQualityMonitorRef.current) {
-        const localMetrics = localQualityMonitorRef.current.getCurrentMetrics();
-        if (localMetrics) {
-          setCurrentQuality(prev => ({ ...prev, local: localMetrics }));
+      // Update current quality metrics from monitors (with error handling)
+      try {
+        if (localQualityMonitorRef.current) {
+          const localMetrics = localQualityMonitorRef.current.getCurrentMetrics();
+          if (localMetrics) {
+            setCurrentQuality(prev => ({ ...prev, local: localMetrics }));
+          }
         }
+      } catch (error) {
+        console.warn('[LiveCall] Error getting local quality metrics:', error);
       }
       
-      if (remoteQualityMonitorRef.current) {
-        const remoteMetrics = remoteQualityMonitorRef.current.getCurrentMetrics();
-        if (remoteMetrics) {
-          setCurrentQuality(prev => ({ ...prev, remote: remoteMetrics }));
+      try {
+        if (remoteQualityMonitorRef.current) {
+          const remoteMetrics = remoteQualityMonitorRef.current.getCurrentMetrics();
+          if (remoteMetrics) {
+            setCurrentQuality(prev => ({ ...prev, remote: remoteMetrics }));
+          }
         }
+      } catch (error) {
+        console.warn('[LiveCall] Error getting remote quality metrics:', error);
       }
 
       // Enhanced debug logging for LiveKit v2.7.6
@@ -582,6 +584,12 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
       clearInterval(interval);
       room.off("participantConnected", attachRemoteVideo);
       
+      // Cleanup room state listeners
+      if ((room as any).off) {
+        (room as any).off('connectionStateChanged', handleRoomStateChange);
+        (room as any).off('disconnected', handleRoomStateChange);
+      }
+      
       // Cleanup video stabilizers
       if (localStabilizerRef.current) {
         localStabilizerRef.current.destroy();
@@ -600,6 +608,16 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
       if (remoteQualityMonitorRef.current) {
         remoteQualityMonitorRef.current.destroy();
         remoteQualityMonitorRef.current = null;
+      }
+      
+      // Cleanup constraint managers
+      if (localConstraintManagerRef.current) {
+        localConstraintManagerRef.current.destroy();
+        localConstraintManagerRef.current = null;
+      }
+      if (remoteConstraintManagerRef.current) {
+        remoteConstraintManagerRef.current.destroy();
+        remoteConstraintManagerRef.current = null;
       }
     };
   }, [room]);
