@@ -21,8 +21,8 @@ const livekitConfigs = {
       },
     },
     roomOptions: {
-      adaptiveStream: true,
-      dynacast: false,
+      adaptiveStream: false,
+      dynacast: true,
       videoCaptureDefaults: {
         resolution: { width: 960, height: 540 },
         frameRate: 24,
