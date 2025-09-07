@@ -16,6 +16,9 @@ const base = explicit || (repo ? `/${repo}/` : ghRepo ? `/${ghRepo}/` : '/')
 export default defineConfig({
   base,
   plugins: [react()],
+  build: {
+    sourcemap: true,
+  },
   server: {
     port: 5173,
     open: true,
