@@ -20,36 +20,46 @@ const livekitConfigs = {
           { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }
         ],
         iceTransportPolicy: 'all',
+        bundlePolicy: 'max-bundle',     // Bundle all media on single connection
+        rtcpMuxPolicy: 'require',       // Multiplex RTP and RTCP for stability
+        iceCandidatePoolSize: 10,       // Pre-gather ICE candidates
       },
     },
     roomOptions: {
-      adaptiveStream: false,
-      dynacast: true,
+      adaptiveStream: false,  // Keep disabled to prevent auto quality changes
+      dynacast: false,        // Disable to prevent dynamic quality switching
       videoCaptureDefaults: {
         resolution: { width: 960, height: 540 },
-        frameRate: 24,
+        frameRate: 30,          // Increased for smoother video
         facingMode: 'user',
         contentHint: 'motion',
-        advanced: [{ degradationPreference: 'maintain-resolution' }],
+        advanced: [
+          { degradationPreference: 'maintain-framerate' }, // Prioritize framerate over resolution
+          { width: { min: 640, ideal: 960, max: 1280 } },
+          { height: { min: 360, ideal: 540, max: 720 } },
+          { frameRate: { min: 15, ideal: 30, max: 30 } }
+        ],
       },
       audioCaptureDefaults: {
         echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
+        noiseSuppression: false,  // Disable to reduce CPU load during speech
+        autoGainControl: false,   // Disable to prevent audio processing interference
+        channelCount: 1,          // Mono to reduce bandwidth
+        sampleRate: 48000,        // Standard rate
+        sampleSize: 16,
       },
       publishDefaults: {
-        red: true,
-        dtx: true,
-        simulcast: false,
+        red: false,               // Disable RED codec to reduce processing
+        dtx: false,               // Disable discontinuous transmission
+        simulcast: false,         // Keep disabled to prevent layer switching
         videoCodec: 'vp8',
-        simulcastLayers: [
-          { rid: 'f', scaleResolutionDownBy: 1.0, maxBitrate: 1_200_000 },
-          { rid: 'h', scaleResolutionDownBy: 2.0, maxBitrate: 600_000 },
-          { rid: 'q', scaleResolutionDownBy: 4.0, maxBitrate: 200_000 },
-        ],
-        videoEncoding: { maxBitrate: 900_000, maxFramerate: 24 },
+        videoEncoding: { 
+          maxBitrate: 1_500_000,  // Higher bitrate for stable quality
+          maxFramerate: 30,       // Consistent 30fps
+          degradationPreference: 'maintain-framerate' // Prioritize smooth video
+        },
         screenShareEncoding: { maxBitrate: 3_000_000, maxFramerate: 30 },
-        audioBitrate: 12000,
+        audioBitrate: 64000,      // Higher audio bitrate for better quality
         audioStereo: false,
       },
       stopMicTrackOnMute: true,

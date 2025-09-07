@@ -37,25 +37,59 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
       remoteParticipants: (room as any).participants?.size || 0
     });
 
-    // Attach local video (camera)
+    // Attach local video (camera) with stabilization
     const localCamPub = Array.from(room.localParticipant.trackPublications.values()).find(
       (pub: any) => pub.source === Track.Source.Camera
     );
     if (localCamPub && localCamPub.track && localVideoRef.current) {
       localCamPub.track.attach(localVideoRef.current);
+      
+      // Apply video stabilization settings
+      const videoElement = localVideoRef.current;
+      videoElement.style.objectFit = 'cover';
+      videoElement.style.transform = 'scale(1.0)'; // Prevent scaling jumps
+      videoElement.style.transition = 'none'; // Remove any CSS transitions that could cause jumps
+      
+      // Set video track constraints for stability
+      const mediaTrack = (localCamPub.track as any).mediaStreamTrack;
+      if (mediaTrack && mediaTrack.applyConstraints) {
+        try {
+          mediaTrack.applyConstraints({
+            width: { ideal: 960, min: 640 },
+            height: { ideal: 540, min: 360 },
+            frameRate: { ideal: 30, min: 15 },
+            aspectRatio: { ideal: 16/9 }
+          });
+        } catch (e) {
+          console.warn('Failed to apply video constraints:', e);
+        }
+      }
     }
 
-    // Attach remote video for the first participant (if any)
+    // Attach remote video for the first participant (if any) with stabilization
     const attachRemoteVideo = (participant: RemoteParticipant) => {
       const videoPub = Array.from(participant.trackPublications.values()).find(
         (pub: any) => pub.kind === "video" && pub.track
       );
       if (videoPub && videoPub.track && remoteVideoRef.current) {
         videoPub.track.attach(remoteVideoRef.current);
+        
+        // Apply stabilization to remote video
+        const videoElement = remoteVideoRef.current;
+        videoElement.style.objectFit = 'cover';
+        videoElement.style.transform = 'scale(1.0)';
+        videoElement.style.transition = 'none';
       }
+      
       participant.on("trackSubscribed", (track: Track) => {
         if (track.kind === "video" && remoteVideoRef.current) {
           track.attach(remoteVideoRef.current);
+          
+          // Apply stabilization to newly subscribed tracks
+          const videoElement = remoteVideoRef.current;
+          videoElement.style.objectFit = 'cover';
+          videoElement.style.transform = 'scale(1.0)';
+          videoElement.style.transition = 'none';
         }
       });
     };
@@ -320,7 +354,13 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
               height: "auto",
               borderRadius: "12px",
               border: "2px solid #374151",
-              boxShadow: "0 8px 32px rgba(0, 0, 0, 0.3)"
+              boxShadow: "0 8px 32px rgba(0, 0, 0, 0.3)",
+              objectFit: "cover",
+              transform: "scale(1.0)",
+              transition: "none",
+              backfaceVisibility: "hidden", // Prevent flickering
+              WebkitBackfaceVisibility: "hidden",
+              willChange: "auto" // Optimize for performance
             }} 
           />
         </div>
@@ -342,7 +382,13 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
               height: "auto",
               borderRadius: "12px",
               border: "2px solid #374151",
-              boxShadow: "0 8px 32px rgba(0, 0, 0, 0.3)"
+              boxShadow: "0 8px 32px rgba(0, 0, 0, 0.3)",
+              objectFit: "cover",
+              transform: "scale(1.0)",
+              transition: "none",
+              backfaceVisibility: "hidden",
+              WebkitBackfaceVisibility: "hidden",
+              willChange: "auto"
             }} 
           />
         </div>
