@@ -25,7 +25,7 @@ const livekitConfigs = {
       dynacast: false,
       videoCaptureDefaults: {
         resolution: { width: 960, height: 540 },
-        frameRate: 30,
+        frameRate: 15,
         facingMode: 'user',
         advanced: [{ degradationPreference: 'maintain-framerate' }],
       },
