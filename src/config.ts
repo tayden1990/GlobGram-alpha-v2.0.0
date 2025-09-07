@@ -38,7 +38,7 @@ export const CONFIG = {
   // Public URL of your token service (we'll scaffold a Cloudflare Worker endpoint)
     // Public URL of your token service (Cloudflare Worker) ending with /token
     // Example: 'https://globgram-livekit-token.yourname.workers.dev/token'
-    LIVEKIT_TOKEN_ENDPOINT: 'https://globgram-livekit-token.t-ak-sa.workers.dev/token',
+    LIVEKIT_TOKEN_ENDPOINT: 'https://globgram-livekit-signaling.matrus.org/token',
   // Optional: room name prefix to avoid collisions across environments
   LIVEKIT_ROOM_PREFIX: 'globgram',
 }

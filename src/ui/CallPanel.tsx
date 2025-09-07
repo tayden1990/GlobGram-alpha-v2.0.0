@@ -1,4 +1,94 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+// LiveKit scenario-based configs
+const livekitConfigs = {
+  general: {
+    connectOptions: {
+      autoSubscribe: true,
+      maxRetries: 3,
+      peerConnectionTimeout: 15000,
+      rtcConfig: {
+        iceServers: [
+          { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }
+        ],
+        iceTransportPolicy: 'all',
+      },
+    },
+    roomOptions: {
+      adaptiveStream: true,
+      dynacast: true,
+      videoCaptureDefaults: {
+        resolution: { width: 960, height: 540 },
+        frameRate: 30,
+        facingMode: 'user',
+        advanced: [{ degradationPreference: 'maintain-framerate' }],
+      },
+      audioCaptureDefaults: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+      publishDefaults: {
+        red: true,
+        dtx: true,
+        simulcast: true,
+        videoCodec: 'vp8',
+        simulcastLayers: [
+          { rid: 'f', scaleResolutionDownBy: 1.0, maxBitrate: 1_200_000 },
+          { rid: 'h', scaleResolutionDownBy: 2.0, maxBitrate: 600_000 },
+          { rid: 'q', scaleResolutionDownBy: 4.0, maxBitrate: 200_000 },
+        ],
+        videoEncoding: { maxBitrate: 1_500_000, maxFramerate: 30 },
+        screenShareEncoding: { maxBitrate: 3_000_000, maxFramerate: 30 },
+        audioBitrate: 32000,
+        audioStereo: false,
+      },
+      stopMicTrackOnMute: true,
+      disconnectOnPageLeave: false,
+    },
+  },
+  low: {
+    connectOptions: {},
+    roomOptions: {
+      videoCaptureDefaults: { resolution: { width: 640, height: 360 }, frameRate: 15 },
+      publishDefaults: {
+        videoEncoding: { maxBitrate: 400_000, maxFramerate: 15 },
+        screenShareEncoding: { maxBitrate: 800_000, maxFramerate: 15 },
+        audioBitrate: 24000,
+        simulcastLayers: [
+          { rid: 'f', scaleResolutionDownBy: 1.0, maxBitrate: 400_000 },
+          { rid: 'q', scaleResolutionDownBy: 4.0, maxBitrate: 100_000 },
+        ],
+      },
+    },
+  },
+  high: {
+    connectOptions: {},
+    roomOptions: {
+      videoCaptureDefaults: { resolution: { width: 1280, height: 720 }, frameRate: 30 },
+      publishDefaults: {
+        videoCodec: 'vp9',
+        videoEncoding: { maxBitrate: 2_500_000, maxFramerate: 30 },
+        screenShareEncoding: { maxBitrate: 5_000_000, maxFramerate: 30 },
+        audioBitrate: 48000,
+        audioStereo: true,
+      },
+    },
+  },
+  mobile: {
+    connectOptions: {},
+    roomOptions: {
+      videoCaptureDefaults: { resolution: { width: 640, height: 360 }, frameRate: 24 },
+      publishDefaults: {
+        videoEncoding: { maxBitrate: 800_000, maxFramerate: 24 },
+        screenShareEncoding: { maxBitrate: 1_500_000, maxFramerate: 15 },
+      },
+      stopMicTrackOnMute: true,
+      stopCameraTrackOnMute: true,
+    },
+  },
+}
+  // Quality mode selector
+  const [qualityMode, setQualityMode] = useState<'general'|'low'|'high'|'mobile'>('general')
 import { LiveKitRoom, useRoomContext } from '@livekit/components-react'
 import type { Room } from 'livekit-client'
 import { fetchLiveKitToken } from '../livekit/token'
@@ -370,73 +460,91 @@ export function CallPanel({ roomName, identity, open, onClose, onEnded }: Props)
         {!error && !token && (
           <div style={{ padding: 12, color: '#aaa' }}>{status === 'fetching-token' ? 'Fetching token…' : 'Connecting…'}</div>
         )}
+  {/* Quality selector UI */}
   {token && status !== 'error' && (
-          <CallErrorBoundary>
-            <LiveKitRoom
-              token={token}
-              serverUrl={CONFIG.LIVEKIT_WS_URL}
-              connectOptions={{ 
-                autoSubscribe: true,
-                maxRetries: 3,
-                peerConnectionTimeout: 15000,
-              }}
-              options={{
-                adaptiveStream: true,
-                dynacast: false,
-                videoCaptureDefaults: {
-                  resolution: { width: 1280, height: 720 },
-                  facingMode: 'user',
-                },
-                audioCaptureDefaults: {
-                  echoCancellation: true,
-                  noiseSuppression: true,
-                  autoGainControl: true, // Disable AGC to prevent audio affecting video
-                },
-                publishDefaults: {
-                  red: false, // Disable redundancy encoding to prevent track errors
-                  dtx: false, // Disable discontinuous transmission
-                  simulcast: true, // Disable simulcast to prevent video quality switching
-                  videoCodec: 'vp8', // Force consistent codec
-                },
-              }}
-              audio={true}
-              video={true}
-              onConnected={() => {
-                setStatus('connected')
-                addLog('Connected to LiveKit')
-                if (!startedAtRef.current) startedAtRef.current = Date.now()
-                hadConnectedRef.current = true
-              }}
-              onDisconnected={() => {
-                setStatus('disconnected')
-                setLkRoom(null)
-                addLog('Disconnected from LiveKit')
-                if (hadConnectedRef.current) emitEndedOnce('disconnected')
-              }}
-              onError={(e: any) => { 
-                const msg = e?.message || String(e);
-                // Filter out known harmless LiveKit cleanup errors
-                if (msg.includes('removeTrack') || msg.includes('RTCRtpSender')) {
-                  addLog(`LiveKit cleanup warning (ignored): ${msg}`);
-                  return; // Don't treat as fatal error
+    <>
+      <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 10 }}>
+        <label style={{ color: '#fff', fontSize: 13, marginRight: 6 }}>Quality:</label>
+        <select value={qualityMode} onChange={e => setQualityMode(e.target.value as any)} style={{ fontSize: 13, padding: 2 }}>
+          <option value="general">General</option>
+          <option value="low">Low-bandwidth</option>
+          <option value="high">High-quality</option>
+          <option value="mobile">Mobile</option>
+        </select>
+      </div>
+      <CallErrorBoundary>
+        <LiveKitRoom
+          token={token}
+          serverUrl={CONFIG.LIVEKIT_WS_URL}
+          connectOptions={{
+            ...livekitConfigs[qualityMode].connectOptions,
+            // Always include required connect options
+            autoSubscribe: true,
+            maxRetries: 3,
+            peerConnectionTimeout: 15000,
+            rtcConfig: {
+              iceServers: [
+                { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }
+              ],
+              iceTransportPolicy: 'all',
+            },
+          }}
+          options={{
+            ...livekitConfigs[qualityMode].roomOptions,
+            videoCaptureDefaults: livekitConfigs[qualityMode].roomOptions?.videoCaptureDefaults
+              ? {
+                  ...livekitConfigs[qualityMode].roomOptions.videoCaptureDefaults,
+                  facingMode: 'user' as 'user', // ensure correct type
                 }
-                setError(msg); 
-                setStatus('error'); 
-                addLog(`LiveKit error: ${msg}`);
-              }}
-              data-lk-theme="default"
-            >
-              <RoomBinder onReady={setLkRoom} />
-              {/* header / controls remain above */}
-              <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-                <SimpleConference 
-                  roomId={roomName}
-                  onLeave={() => { try { emitEndedOnce('hangup') } catch {} ; onClose() }} 
-                />
-              </div>
-            </LiveKitRoom>
-          </CallErrorBoundary>
-        )}
+              : undefined,
+            publishDefaults: (() => {
+              const pd = livekitConfigs[qualityMode].roomOptions?.publishDefaults;
+              if (!pd) return undefined;
+              const { videoCodec, ...rest } = pd as any;
+              return videoCodec
+                ? { ...rest, videoCodec: videoCodec as 'vp8' | 'vp9' | 'h264' | 'av1' | 'h265' }
+                : rest;
+            })(),
+          }}
+          audio={true}
+          video={true}
+          onConnected={() => {
+            setStatus('connected')
+            addLog('Connected to LiveKit')
+            if (!startedAtRef.current) startedAtRef.current = Date.now()
+            hadConnectedRef.current = true
+          }}
+          onDisconnected={() => {
+            setStatus('disconnected')
+            setLkRoom(null)
+            addLog('Disconnected from LiveKit')
+            if (hadConnectedRef.current) emitEndedOnce('disconnected')
+          }}
+          onError={(e: any) => { 
+            const msg = e?.message || String(e);
+            // Filter out known harmless LiveKit cleanup errors
+            if (msg.includes('removeTrack') || msg.includes('RTCRtpSender')) {
+              addLog(`LiveKit cleanup warning (ignored): ${msg}`);
+              return; // Don't treat as fatal error
+            }
+            setError(msg); 
+            setStatus('error'); 
+            addLog(`LiveKit error: ${msg}`);
+          }}
+          data-lk-theme="default"
+        >
+          <RoomBinder onReady={setLkRoom} />
+          {/* header / controls remain above */}
+          <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+            <SimpleConference 
+              roomId={roomName}
+              onLeave={() => { try { emitEndedOnce('hangup') } catch {} ; onClose() }} 
+            />
+          </div>
+        </LiveKitRoom>
+      </CallErrorBoundary>
+    </>
+  )}
       </div>
     </div>
   )
