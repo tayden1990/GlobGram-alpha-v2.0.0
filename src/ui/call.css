@@ -383,18 +383,75 @@
   transition: all 0.3s ease;
 }
 
-/* Speaking indicator */
+/* Speaking indicator - Optimized to prevent jumping */
 .gg-tile.speaking{
   box-shadow:0 0 0 3px #3b82f6, 0 0 20px rgba(59, 130, 246, 0.4);
-  animation: pulse 2s infinite;
+  /* Use transform instead of box-shadow animation to prevent layout shifts */
+  animation: speaking-pulse 2s infinite;
+  /* Force layer creation to prevent repaints affecting other elements */
+  will-change: transform;
+  transform: translateZ(0); /* Force hardware acceleration */
 }
 
-@keyframes pulse {
+/* Optimized animation that doesn't affect layout */
+@keyframes speaking-pulse {
   0%, 100% {
-    box-shadow:0 0 0 3px #3b82f6, 0 0 20px rgba(59, 130, 246, 0.4);
+    transform: translateZ(0) scale(1);
+    opacity: 1;
   }
   50% {
-    box-shadow:0 0 0 3px #60a5fa, 0 0 30px rgba(96, 165, 250, 0.6);
+    transform: translateZ(0) scale(1.02); /* Very subtle scale instead of box-shadow */
+    opacity: 0.95;
+  }
+}
+
+/* Fallback: disable speaking animation completely if user prefers reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .gg-tile.speaking {
+    animation: none;
+    box-shadow:0 0 0 3px #3b82f6, 0 0 20px rgba(59, 130, 246, 0.4);
+  }
+}
+
+/* Stabilize placeholder user icons - prevent jumping during speaking state changes */
+.gg-placeholder {
+  /* Force stable positioning and dimensions */
+  position: relative;
+  contain: layout style size;
+  transform: translateZ(0); /* Hardware acceleration */
+  will-change: auto; /* Reset will-change after animation */
+  
+  /* Prevent any inherited animations from affecting the icon */
+  transition: none !important;
+  animation: none !important;
+}
+
+/* Ensure IconUser inside placeholder is stable */
+.gg-placeholder svg {
+  transform: translateZ(0);
+  transition: none !important;
+  animation: none !important;
+  
+  /* Lock dimensions to prevent scaling issues */
+  width: var(--icon-size, 48px) !important;
+  height: var(--icon-size, 48px) !important;
+  flex-shrink: 0;
+}
+
+/* Override speaking animation specifically for placeholder icons */
+.gg-tile.speaking .gg-placeholder {
+  /* Use a more subtle animation that doesn't affect layout */
+  animation: placeholder-speaking 2s infinite;
+}
+
+@keyframes placeholder-speaking {
+  0%, 100% {
+    transform: translateZ(0);
+    opacity: 1;
+  }
+  50% {
+    transform: translateZ(0);
+    opacity: 0.8; /* Only fade slightly, no scaling or movement */
   }
 }
 
