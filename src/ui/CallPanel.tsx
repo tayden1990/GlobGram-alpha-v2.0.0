@@ -41,12 +41,18 @@ const livekitConfigs = {
         ],
       },
       audioCaptureDefaults: {
-        echoCancellation: true,
-        noiseSuppression: false,  // Disable to reduce CPU load during speech
-        autoGainControl: false,   // Disable to prevent audio processing interference
-        channelCount: 1,          // Mono to reduce bandwidth
-        sampleRate: 48000,        // Standard rate
+        echoCancellation: false,      // Completely disable to prevent interference
+        noiseSuppression: false,      // Disable to reduce CPU load during speech
+        autoGainControl: false,       // Disable to prevent audio processing interference
+        googEchoCancellation: false,  // Disable Google-specific echo cancellation
+        googAutoGainControl: false,   // Disable Google-specific auto gain
+        googNoiseSuppression: false,  // Disable Google-specific noise suppression
+        googHighpassFilter: false,    // Disable high-pass filter
+        googTypingNoiseDetection: false, // Disable typing noise detection
+        channelCount: 1,              // Mono to reduce bandwidth
+        sampleRate: 48000,            // Standard rate
         sampleSize: 16,
+        latency: 0.01,                // Low latency
       },
       publishDefaults: {
         red: false,               // Disable RED codec to reduce processing
@@ -54,13 +60,17 @@ const livekitConfigs = {
         simulcast: false,         // Keep disabled to prevent layer switching
         videoCodec: 'vp8',
         videoEncoding: { 
-          maxBitrate: 1_500_000,  // Higher bitrate for stable quality
+          maxBitrate: 2_000_000,  // Even higher bitrate for maximum stability
           maxFramerate: 30,       // Consistent 30fps
-          degradationPreference: 'maintain-framerate' // Prioritize smooth video
+          degradationPreference: 'maintain-framerate', // Prioritize smooth video
+          priority: 'high',       // High priority for video encoding
+          // Force constant bitrate mode to prevent jumping
+          cbr: true,
         },
         screenShareEncoding: { maxBitrate: 3_000_000, maxFramerate: 30 },
-        audioBitrate: 64000,      // Higher audio bitrate for better quality
+        audioBitrate: 128000,     // Much higher audio bitrate to prevent competition
         audioStereo: false,
+        audioPreset: 'speech',    // Optimize for speech
       },
       stopMicTrackOnMute: true,
       disconnectOnPageLeave: false,

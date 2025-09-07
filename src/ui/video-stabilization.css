@@ -1,0 +1,62 @@
+/* Video Stabilization CSS - Prevents jumping during speech */
+
+.stable-video {
+  /* Force GPU acceleration for smoother rendering */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  
+  /* Prevent any visual jumps or reflows */
+  will-change: auto !important;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  
+  /* Disable any transitions that could cause jumps */
+  transition: none !important;
+  -webkit-transition: none !important;
+  
+  /* Force consistent rendering */
+  image-rendering: auto;
+  -webkit-image-rendering: auto;
+  
+  /* Prevent browser from changing video properties */
+  object-fit: cover !important;
+  object-position: center !important;
+  
+  /* Force stable dimensions */
+  box-sizing: border-box;
+  
+  /* Optimize for performance */
+  transform-style: flat;
+  -webkit-transform-style: flat;
+  
+  /* Prevent any automatic scaling */
+  image-orientation: none;
+  
+  /* Force consistent pixel rendering */
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+}
+
+/* Additional stabilization for video containers */
+.video-container {
+  /* Contain layout changes */
+  contain: layout style paint;
+  
+  /* Prevent reflows */
+  overflow: hidden;
+  
+  /* Force consistent sizing */
+  box-sizing: border-box;
+  
+  /* Isolate from parent transforms */
+  isolation: isolate;
+}
+
+/* Prevent any CSS animations that might affect video */
+.stable-video,
+.stable-video *,
+.video-container,
+.video-container * {
+  animation: none !important;
+  -webkit-animation: none !important;
+}

@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Room, RemoteParticipant, Track } from "livekit-client";
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, CartesianGrid, ResponsiveContainer } from "recharts";
+import './video-stabilization.css';
+import { stabilizeVideo, VideoStabilizer } from './videoStabilizer';
 
 interface LiveCallProps {
   room: Room;
@@ -19,6 +21,8 @@ const FPS_THRESHOLD = 15; // fps
 const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const localStabilizerRef = useRef<VideoStabilizer | null>(null);
+  const remoteStabilizerRef = useRef<VideoStabilizer | null>(null);
 
   const [statsHistory, setStatsHistory] = useState<StatPoint[]>([]);
   const [alerts, setAlerts] = useState<string[]>([]);
@@ -44,25 +48,68 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
     if (localCamPub && localCamPub.track && localVideoRef.current) {
       localCamPub.track.attach(localVideoRef.current);
       
-      // Apply video stabilization settings
-      const videoElement = localVideoRef.current;
-      videoElement.style.objectFit = 'cover';
-      videoElement.style.transform = 'scale(1.0)'; // Prevent scaling jumps
-      videoElement.style.transition = 'none'; // Remove any CSS transitions that could cause jumps
-      
-      // Set video track constraints for stability
+        // Apply video stabilization settings (more aggressive)
+        const videoElement = localVideoRef.current;
+        videoElement.style.objectFit = 'cover';
+        videoElement.style.transform = 'scale(1.0)'; // Prevent scaling jumps
+        videoElement.style.transition = 'none'; // Remove any CSS transitions that could cause jumps
+        videoElement.style.imageRendering = 'auto';
+        videoElement.style.backfaceVisibility = 'hidden';
+        (videoElement.style as any).webkitBackfaceVisibility = 'hidden';
+        videoElement.style.willChange = 'auto';
+        
+        // Force video element size to prevent jumping
+        videoElement.style.minWidth = '300px';
+        videoElement.style.minHeight = '169px'; // 16:9 ratio
+        videoElement.style.maxWidth = '300px';
+        videoElement.style.maxHeight = '169px';
+        
+        // Add frame stabilization event listeners
+        videoElement.addEventListener('loadedmetadata', () => {
+          console.log('[LiveCall] Video metadata loaded, dimensions:', videoElement.videoWidth, 'x', videoElement.videoHeight);
+        });
+        
+        videoElement.addEventListener('resize', (e) => {
+          console.log('[LiveCall] Video resize detected - preventing jumps');
+          e.preventDefault();
+        });
+        
+        // Apply advanced video stabilization
+        if (localStabilizerRef.current) {
+          localStabilizerRef.current.destroy();
+        }
+        localStabilizerRef.current = stabilizeVideo(videoElement);      // Set video track constraints for maximum stability
       const mediaTrack = (localCamPub.track as any).mediaStreamTrack;
       if (mediaTrack && mediaTrack.applyConstraints) {
-        try {
-          mediaTrack.applyConstraints({
-            width: { ideal: 960, min: 640 },
-            height: { ideal: 540, min: 360 },
-            frameRate: { ideal: 30, min: 15 },
-            aspectRatio: { ideal: 16/9 }
-          });
-        } catch (e) {
-          console.warn('Failed to apply video constraints:', e);
-        }
+        (async () => {
+          try {
+            await mediaTrack.applyConstraints({
+              width: { exact: 960 },           // Force exact resolution
+              height: { exact: 540 },          // Force exact resolution
+              frameRate: { exact: 30 },        // Force exact framerate
+              aspectRatio: { exact: 16/9 },    // Force exact aspect ratio
+              resizeMode: 'none',              // Prevent resizing
+              latency: { max: 0.1 },           // Low latency
+            });
+            
+            // Force video track settings
+            const settings = mediaTrack.getSettings();
+            console.log('[LiveCall] Applied video constraints:', settings);
+            
+          } catch (e) {
+            console.warn('Failed to apply strict video constraints, trying relaxed:', e);
+            try {
+              await mediaTrack.applyConstraints({
+                width: { ideal: 960, min: 640, max: 960 },
+                height: { ideal: 540, min: 360, max: 540 },
+                frameRate: { ideal: 30, min: 30, max: 30 },
+                aspectRatio: { ideal: 16/9 }
+              });
+            } catch (e2) {
+              console.warn('Failed to apply any video constraints:', e2);
+            }
+          }
+        })();
       }
     }
 
@@ -79,6 +126,12 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
         videoElement.style.objectFit = 'cover';
         videoElement.style.transform = 'scale(1.0)';
         videoElement.style.transition = 'none';
+        
+        // Apply advanced stabilization to remote video
+        if (remoteStabilizerRef.current) {
+          remoteStabilizerRef.current.destroy();
+        }
+        remoteStabilizerRef.current = stabilizeVideo(videoElement);
       }
       
       participant.on("trackSubscribed", (track: Track) => {
@@ -90,6 +143,12 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
           videoElement.style.objectFit = 'cover';
           videoElement.style.transform = 'scale(1.0)';
           videoElement.style.transition = 'none';
+          
+          // Re-apply advanced stabilization
+          if (remoteStabilizerRef.current) {
+            remoteStabilizerRef.current.destroy();
+          }
+          remoteStabilizerRef.current = stabilizeVideo(videoElement);
         }
       });
     };
@@ -322,6 +381,16 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
     return () => {
       clearInterval(interval);
       room.off("participantConnected", attachRemoteVideo);
+      
+      // Cleanup video stabilizers
+      if (localStabilizerRef.current) {
+        localStabilizerRef.current.destroy();
+        localStabilizerRef.current = null;
+      }
+      if (remoteStabilizerRef.current) {
+        remoteStabilizerRef.current.destroy();
+        remoteStabilizerRef.current = null;
+      }
     };
   }, [room]);
 
@@ -348,6 +417,7 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
             autoPlay 
             muted 
             playsInline 
+            className="stable-video"
             style={{ 
               width: "100%", 
               maxWidth: "300px",
@@ -356,11 +426,10 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
               border: "2px solid #374151",
               boxShadow: "0 8px 32px rgba(0, 0, 0, 0.3)",
               objectFit: "cover",
-              transform: "scale(1.0)",
+              transform: "translateZ(0)",
               transition: "none",
-              backfaceVisibility: "hidden", // Prevent flickering
-              WebkitBackfaceVisibility: "hidden",
-              willChange: "auto" // Optimize for performance
+              backfaceVisibility: "hidden",
+              willChange: "auto"
             }} 
           />
         </div>
