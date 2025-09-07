@@ -33,9 +33,9 @@ const livekitConfigs = {
         advanced: [{ degradationPreference: 'maintain-resolution' }],
       },
       audioCaptureDefaults: {
-        echoCancellation: false,
-        noiseSuppression: false,
-        autoGainControl: false,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
       },
       publishDefaults: {
         red: true,
