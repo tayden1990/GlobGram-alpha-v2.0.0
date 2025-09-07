@@ -8,7 +8,7 @@ import SimpleConference from './SimpleConference';
 import { CallErrorBoundary } from './CallErrorBoundary';
 import Modal from './Modal';
 import LiveCall from './LiveCall';
-import { disableSpeakingAnimations, enableSpeakingAnimations } from './speakingAnimationDisabler';
+import { disableSpeakingAnimations, enableSpeakingAnimations, emergencyDisableAllAnimations, ultraFreezeVideos } from './speakingAnimationDisabler';
 // LiveKit scenario-based configs
 const livekitConfigs = {
   general: {
@@ -525,19 +525,74 @@ export function CallPanel({ roomName, identity, open, onClose, onEnded }: Props)
   // CRITICAL: Disable all speaking animations when call panel is open to prevent jumping
   useEffect(() => {
     if (open) {
-      console.log('[CallPanel] Disabling all speaking animations to prevent video jumping');
+      console.log('[CallPanel] ULTRA-AGGRESSIVE: Activating maximum anti-jump protection');
       disableSpeakingAnimations();
+      emergencyDisableAllAnimations();
+      ultraFreezeVideos();
+      
+      // NUCLEAR OPTION: Set up immediate video locking
+      const lockAllVideos = () => {
+        ultraFreezeVideos(); // Use the ultra-freeze function
+        
+        // Additional aggressive locking
+        const videos = document.querySelectorAll('video');
+        videos.forEach(video => {
+          if (video instanceof HTMLVideoElement) {
+            const rect = video.getBoundingClientRect();
+            
+            // LOCK EVERYTHING WITH MAXIMUM FORCE
+            video.style.setProperty('animation', 'none', 'important');
+            video.style.setProperty('transform', 'none', 'important');
+            video.style.setProperty('transition', 'none', 'important');
+            video.style.setProperty('will-change', 'auto', 'important');
+            video.style.setProperty('object-fit', 'cover', 'important');
+            video.style.setProperty('position', 'relative', 'important');
+            video.style.setProperty('contain', 'layout style size paint', 'important');
+            
+            if (rect.width > 0 && rect.height > 0) {
+              video.style.setProperty('width', `${rect.width}px`, 'important');
+              video.style.setProperty('height', `${rect.height}px`, 'important');
+            }
+          }
+        });
+        
+        // Also lock all speaking elements
+        const speakingElements = document.querySelectorAll('.speaking, .gg-tile, .gg-placeholder');
+        speakingElements.forEach(el => {
+          if (el instanceof HTMLElement) {
+            el.style.setProperty('animation', 'none', 'important');
+            el.style.setProperty('transform', 'none', 'important');
+            el.style.setProperty('transition', 'none', 'important');
+            el.style.setProperty('will-change', 'auto', 'important');
+          }
+        });
+      };
+      
+      // Lock immediately and then every 50ms for ultra-responsiveness
+      lockAllVideos();
+      const lockInterval = setInterval(lockAllVideos, 50);
+      
+      // Also lock on any DOM mutations with zero delay
+      const observer = new MutationObserver(() => {
+        lockAllVideos(); // Immediate, no setTimeout
+      });
+      
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['style', 'class']
+      });
+      
+      return () => {
+        clearInterval(lockInterval);
+        observer.disconnect();
+        enableSpeakingAnimations();
+      };
     } else {
       console.log('[CallPanel] Re-enabling speaking animations');
       enableSpeakingAnimations();
     }
-    
-    // Cleanup on unmount
-    return () => {
-      if (open) {
-        enableSpeakingAnimations();
-      }
-    };
   }, [open]);
 
   if (!open) return null

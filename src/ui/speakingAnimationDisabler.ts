@@ -56,77 +56,143 @@ export class SpeakingAnimationDisabler {
     this.styleElement = document.createElement('style');
     this.styleElement.id = 'speaking-animation-disabler';
     this.styleElement.textContent = `
-      /* EMERGENCY ANTI-JUMPING CSS - HIGHEST PRIORITY */
+      /* NUCLEAR OPTION - ABSOLUTE ZERO LAYOUT SHIFTS */
+      *,
+      *::before,
+      *::after {
+        animation: none !important;
+        transition: none !important;
+        transform: none !important;
+        will-change: auto !important;
+        animation-duration: 0s !important;
+        animation-delay: 0s !important;
+        transition-duration: 0s !important;
+        transition-delay: 0s !important;
+      }
+      
+      /* ULTRA-AGGRESSIVE SPEAKING PREVENTION */
       .speaking,
       .gg-tile.speaking,
       .gg-tile.speaking *,
       .gg-placeholder.speaking,
       .gg-placeholder.speaking *,
-      [class*="speaking"] {
+      [class*="speaking"],
+      [class*="speaking"] *,
+      .call-panel *,
+      .call-panel-overlay *,
+      .lk-* {
         animation: none !important;
         transform: none !important;
         transition: none !important;
         will-change: auto !important;
         
-        /* Prevent any layout changes */
+        /* FORCE ABSOLUTE STABILITY */
         contain: layout style size paint !important;
-        
-        /* Lock positioning */
         position: relative !important;
-        
-        /* Force stable dimensions */
         box-sizing: border-box !important;
         
-        /* Remove any speaking-related visual effects that could cause shifts */
+        /* PREVENT ANY VISUAL CHANGES */
+        filter: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        opacity: 1 !important;
+        
+        /* LOCK DIMENSIONS */
+        flex-shrink: 0 !important;
+        
+        /* DISABLE PSEUDO-ELEMENTS */
+        content: none !important;
+      }
+      
+      /* COMPLETELY DISABLE ALL KEYFRAME ANIMATIONS */
+      @keyframes speaking-pulse { 0%, 100% { transform: none !important; opacity: 1 !important; } }
+      @keyframes placeholder-speaking { 0%, 100% { transform: none !important; opacity: 1 !important; } }
+      @keyframes fadeIn { 0%, 100% { opacity: 1 !important; transform: none !important; } }
+      @keyframes fadeOut { 0%, 100% { opacity: 1 !important; transform: none !important; } }
+      @keyframes pulse { 0%, 100% { transform: none !important; opacity: 1 !important; } }
+      @keyframes bounce { 0%, 100% { transform: none !important; } }
+      @keyframes shake { 0%, 100% { transform: none !important; } }
+      @keyframes fadeInScale { 0%, 100% { transform: none !important; opacity: 1 !important; } }
+      
+      /* MAXIMUM VIDEO STABILITY */
+      video,
+      .speaking video,
+      .gg-tile video,
+      .gg-tile.speaking video,
+      .call-panel video,
+      .stable-video {
+        animation: none !important;
+        transform: none !important;
+        transition: none !important;
+        will-change: auto !important;
+        
+        /* FORCE EXACT POSITIONING */
+        object-fit: cover !important;
+        object-position: center !important;
+        position: relative !important;
+        
+        /* LOCK ALL DIMENSIONS COMPLETELY */
+        width: 100% !important;
+        height: 100% !important;
+        min-width: 100% !important;
+        min-height: 100% !important;
+        max-width: 100% !important;
+        max-height: 100% !important;
+        
+        /* PREVENT ANY LAYOUT CHANGES */
+        margin: 0 !important;
+        padding: 0 !important;
+        border: none !important;
+        outline: none !important;
+        
+        /* HARDWARE ACCELERATION WITHOUT TRANSFORMS */
+        backface-visibility: hidden !important;
+        -webkit-backface-visibility: hidden !important;
+        
+        /* PREVENT FILTERS THAT COULD CAUSE REFLOWS */
         filter: none !important;
         backdrop-filter: none !important;
         -webkit-backdrop-filter: none !important;
         
-        /* Disable all pseudo-element animations */
+        /* FORCE LAYOUT CONTAINMENT */
+        contain: layout style size paint !important;
       }
       
-      .speaking::before,
-      .speaking::after,
-      .gg-tile.speaking::before,
-      .gg-tile.speaking::after {
-        animation: none !important;
-        transform: none !important;
-        transition: none !important;
-        content: none !important;
-      }
-      
-      /* Override any keyframe animations related to speaking */
-      @keyframes speaking-pulse { 0%, 100% { transform: none; } }
-      @keyframes placeholder-speaking { 0%, 100% { transform: none; opacity: 1; } }
-      @keyframes fadeIn { 0%, 100% { opacity: 1; transform: none; } }
-      @keyframes fadeOut { 0%, 100% { opacity: 1; transform: none; } }
-      @keyframes pulse { 0%, 100% { transform: none; } }
-      @keyframes bounce { 0%, 100% { transform: none; } }
-      @keyframes shake { 0%, 100% { transform: none; } }
-      
-      /* Force video elements to be completely stable */
-      .speaking video,
-      .gg-tile.speaking video {
-        animation: none !important;
-        transform: none !important;
-        transition: none !important;
-        object-fit: cover !important;
-        object-position: center !important;
-        width: 100% !important;
-        height: 100% !important;
-        position: relative !important;
-      }
-      
-      /* Emergency fallback - disable ALL animations on call panels */
+      /* EMERGENCY GLOBAL ANIMATION KILLER */
+      html *,
+      body *,
       .call-panel *,
       .call-panel-overlay *,
       [class*="call"] *,
-      [class*="video"] * {
+      [class*="video"] *,
+      [class*="lk"] *,
+      [class*="participant"] *,
+      [class*="tile"] * {
         animation-duration: 0s !important;
         animation-delay: 0s !important;
         animation-iteration-count: 1 !important;
         transition-duration: 0s !important;
         transition-delay: 0s !important;
+        transform: none !important;
+        will-change: auto !important;
+        
+        /* PREVENT ANY PSEUDO-ELEMENT ANIMATIONS */
+      }
+      
+      /* DISABLE ALL PSEUDO-ELEMENTS GLOBALLY */
+      *::before,
+      *::after {
+        content: none !important;
+        display: none !important;
+        animation: none !important;
+        transform: none !important;
+        transition: none !important;
+      }
+      
+      /* SPEAKING INDICATOR - STATIC ONLY */
+      .gg-tile.speaking {
+        box-shadow: 0 0 0 2px #3b82f6 !important;
+        border: 2px solid #3b82f6 !important;
       }
     `;
 
@@ -172,40 +238,139 @@ export class SpeakingAnimationDisabler {
   private lockElement(element: Element): void {
     if (!(element instanceof HTMLElement)) return;
 
-    // Force immediate style override
-    element.style.animation = 'none';
-    element.style.transform = 'none';
-    element.style.transition = 'none';
-    element.style.willChange = 'auto';
+    // NUCLEAR OPTION: Force immediate style override
+    element.style.setProperty('animation', 'none', 'important');
+    element.style.setProperty('transform', 'none', 'important');
+    element.style.setProperty('transition', 'none', 'important');
+    element.style.setProperty('will-change', 'auto', 'important');
+    element.style.setProperty('contain', 'layout style size paint', 'important');
+    element.style.setProperty('position', 'relative', 'important');
+    element.style.setProperty('box-sizing', 'border-box', 'important');
 
-    // Special handling for video elements
+    // Special ultra-aggressive handling for video elements
     const videos = element.querySelectorAll('video');
     videos.forEach(video => {
       if (video instanceof HTMLVideoElement) {
-        video.style.animation = 'none';
-        video.style.transform = 'none';
-        video.style.transition = 'none';
-        video.style.objectFit = 'cover';
-        video.style.position = 'relative';
+        // LOCK VIDEO COMPLETELY
+        const rect = video.getBoundingClientRect();
+        
+        video.style.setProperty('animation', 'none', 'important');
+        video.style.setProperty('transform', 'none', 'important');
+        video.style.setProperty('transition', 'none', 'important');
+        video.style.setProperty('will-change', 'auto', 'important');
+        video.style.setProperty('object-fit', 'cover', 'important');
+        video.style.setProperty('position', 'relative', 'important');
+        video.style.setProperty('contain', 'layout style size paint', 'important');
+        
+        // If video has dimensions, lock them completely
+        if (rect.width > 0 && rect.height > 0) {
+          video.style.setProperty('width', `${rect.width}px`, 'important');
+          video.style.setProperty('height', `${rect.height}px`, 'important');
+          video.style.setProperty('min-width', `${rect.width}px`, 'important');
+          video.style.setProperty('min-height', `${rect.height}px`, 'important');
+          video.style.setProperty('max-width', `${rect.width}px`, 'important');
+          video.style.setProperty('max-height', `${rect.height}px`, 'important');
+        }
+        
+        // PREVENT ANY VISUAL CHANGES
+        video.style.setProperty('filter', 'none', 'important');
+        video.style.setProperty('backdrop-filter', 'none', 'important');
+        video.style.setProperty('opacity', '1', 'important');
+        video.style.setProperty('margin', '0', 'important');
+        video.style.setProperty('padding', '0', 'important');
+        video.style.setProperty('border', 'none', 'important');
+        video.style.setProperty('outline', 'none', 'important');
       }
     });
 
-    console.log('[SpeakingAnimationDisabler] Locked speaking element:', element.className);
+    // Lock all child elements too
+    const allChildren = element.querySelectorAll('*');
+    allChildren.forEach(child => {
+      if (child instanceof HTMLElement) {
+        child.style.setProperty('animation', 'none', 'important');
+        child.style.setProperty('transform', 'none', 'important');
+        child.style.setProperty('transition', 'none', 'important');
+        child.style.setProperty('will-change', 'auto', 'important');
+      }
+    });
+
+    console.log('[SpeakingAnimationDisabler] ULTRA-LOCKED speaking element:', element.className);
   }
 
   public forceDisableAllAnimations(): void {
-    // Nuclear option - disable ALL animations on the page
+    // NUCLEAR OPTION - disable ALL animations on the page with maximum force
     const allElements = document.querySelectorAll('*');
     allElements.forEach(element => {
       if (element instanceof HTMLElement) {
-        element.style.animationDuration = '0s';
-        element.style.transitionDuration = '0s';
-        element.style.transform = 'none';
-        element.style.animation = 'none';
+        // Use setProperty with important to override everything
+        element.style.setProperty('animation-duration', '0s', 'important');
+        element.style.setProperty('transition-duration', '0s', 'important');
+        element.style.setProperty('transform', 'none', 'important');
+        element.style.setProperty('animation', 'none', 'important');
+        element.style.setProperty('transition', 'none', 'important');
+        element.style.setProperty('will-change', 'auto', 'important');
+        
+        // Special handling for videos
+        if (element.tagName === 'VIDEO') {
+          const rect = element.getBoundingClientRect();
+          element.style.setProperty('object-fit', 'cover', 'important');
+          element.style.setProperty('position', 'relative', 'important');
+          element.style.setProperty('contain', 'layout style size paint', 'important');
+          
+          if (rect.width > 0 && rect.height > 0) {
+            element.style.setProperty('width', `${rect.width}px`, 'important');
+            element.style.setProperty('height', `${rect.height}px`, 'important');
+            element.style.setProperty('min-width', `${rect.width}px`, 'important');
+            element.style.setProperty('min-height', `${rect.height}px`, 'important');
+            element.style.setProperty('max-width', `${rect.width}px`, 'important');
+            element.style.setProperty('max-height', `${rect.height}px`, 'important');
+          }
+        }
       }
     });
 
-    console.log('[SpeakingAnimationDisabler] NUCLEAR OPTION: Disabled ALL animations on page');
+    console.log('[SpeakingAnimationDisabler] NUCLEAR OPTION: Force-disabled ALL animations on page with maximum priority');
+  }
+
+  public ultraFreezeVideos(): void {
+    // ULTRA-SPECIFIC VIDEO FREEZING
+    const videos = document.querySelectorAll('video');
+    videos.forEach(video => {
+      if (video instanceof HTMLVideoElement) {
+        const rect = video.getBoundingClientRect();
+        
+        // MAXIMUM FORCE LOCKING
+        video.style.setProperty('animation', 'none', 'important');
+        video.style.setProperty('transform', 'none', 'important');
+        video.style.setProperty('transition', 'none', 'important');
+        video.style.setProperty('will-change', 'auto', 'important');
+        video.style.setProperty('object-fit', 'cover', 'important');
+        video.style.setProperty('object-position', 'center', 'important');
+        video.style.setProperty('position', 'relative', 'important');
+        video.style.setProperty('contain', 'layout style size paint', 'important');
+        
+        // LOCK DIMENSIONS IF AVAILABLE
+        if (rect.width > 0 && rect.height > 0) {
+          video.style.setProperty('width', `${rect.width}px`, 'important');
+          video.style.setProperty('height', `${rect.height}px`, 'important');
+          video.style.setProperty('min-width', `${rect.width}px`, 'important');
+          video.style.setProperty('min-height', `${rect.height}px`, 'important');
+          video.style.setProperty('max-width', `${rect.width}px`, 'important');
+          video.style.setProperty('max-height', `${rect.height}px`, 'important');
+        }
+        
+        // PREVENT ANY VISUAL EFFECTS
+        video.style.setProperty('filter', 'none', 'important');
+        video.style.setProperty('backdrop-filter', 'none', 'important');
+        video.style.setProperty('opacity', '1', 'important');
+        video.style.setProperty('margin', '0', 'important');
+        video.style.setProperty('padding', '0', 'important');
+        video.style.setProperty('border', 'none', 'important');
+        video.style.setProperty('outline', 'none', 'important');
+      }
+    });
+
+    console.log('[SpeakingAnimationDisabler] ULTRA-FROZEN all video elements');
   }
 }
 
@@ -224,8 +389,14 @@ export function emergencyDisableAllAnimations(): void {
   SpeakingAnimationDisabler.getInstance().forceDisableAllAnimations();
 }
 
+export function ultraFreezeVideos(): void {
+  SpeakingAnimationDisabler.getInstance().ultraFreezeVideos();
+}
+
 // Auto-enable on import if we're in a video call context
 if (typeof window !== 'undefined' && document.querySelector('.call-panel, .call-panel-overlay')) {
   disableSpeakingAnimations();
-  console.log('[SpeakingAnimationDisabler] Auto-enabled for video call context');
+  emergencyDisableAllAnimations();
+  ultraFreezeVideos();
+  console.log('[SpeakingAnimationDisabler] ULTRA-MODE: Auto-enabled maximum freeze for video call context');
 }
