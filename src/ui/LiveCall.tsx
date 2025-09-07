@@ -25,7 +25,17 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
   const [dataSource, setDataSource] = useState<'real' | 'mock' | 'none'>('none');
 
   useEffect(() => {
-    if (!room) return;
+    console.log('[LiveCall] Component mounted with room:', !!room);
+    if (!room) {
+      console.log('[LiveCall] No room provided, component will not function');
+      return;
+    }
+
+    console.log('[LiveCall] Room details:', {
+      state: (room as any).state,
+      localParticipant: !!room.localParticipant,
+      remoteParticipants: (room as any).participants?.size || 0
+    });
 
     // Attach local video (camera)
     const localCamPub = Array.from(room.localParticipant.trackPublications.values()).find(
@@ -59,10 +69,12 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
     room.on("participantConnected", attachRemoteVideo);
 
     // --- WebRTC getStats polling with LiveKit v2.7.6 specific paths ---
+    console.log('[LiveCall] Starting stats polling interval...');
     let lastStats: any = {};
     let statsAttempts = 0;
     const interval = setInterval(async () => {
       statsAttempts++;
+      console.log(`[LiveCall] Stats polling attempt ${statsAttempts} started`);
       
       // LiveKit v2.7.6 specific peer connection detection
       let pc = null;
