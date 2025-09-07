@@ -47,7 +47,7 @@ const livekitConfigs = {
         ],
         videoEncoding: { maxBitrate: 900_000, maxFramerate: 24 },
         screenShareEncoding: { maxBitrate: 3_000_000, maxFramerate: 30 },
-        audioBitrate: 24000,
+        audioBitrate: 12000,
         audioStereo: false,
       },
       stopMicTrackOnMute: true,
