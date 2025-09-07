@@ -1,4 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { LiveKitRoom, useRoomContext } from '@livekit/components-react';
+import type { Room } from 'livekit-client';
+import { fetchLiveKitToken } from '../livekit/token';
+import { CONFIG } from '../config';
+import { emitToast } from './Toast';
+import SimpleConference from './SimpleConference';
+import { CallErrorBoundary } from './CallErrorBoundary';
 // LiveKit scenario-based configs
 const livekitConfigs = {
   general: {
@@ -87,15 +94,8 @@ const livekitConfigs = {
     },
   },
 }
-  // Quality mode selector
-  const [qualityMode, setQualityMode] = useState<'general'|'low'|'high'|'mobile'>('general')
-import { LiveKitRoom, useRoomContext } from '@livekit/components-react'
-import type { Room } from 'livekit-client'
-import { fetchLiveKitToken } from '../livekit/token'
-import { CONFIG } from '../config'
-import { emitToast } from './Toast'
-import SimpleConference from './SimpleConference';
-import { CallErrorBoundary } from './CallErrorBoundary';
+// Quality mode selector
+const [qualityMode, setQualityMode] = useState<'general'|'low'|'high'|'mobile'>('general');
 
 type Props = {
   roomName: string
