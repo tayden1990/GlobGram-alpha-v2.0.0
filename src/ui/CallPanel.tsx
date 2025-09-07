@@ -13,8 +13,17 @@ const livekitConfigs = {
   general: {
     connectOptions: {
       autoSubscribe: true,
-      maxRetries: 3,
-      peerConnectionTimeout: 15000,
+      maxRetries: 5,              // More retries for stability during voice activity
+      peerConnectionTimeout: 20000, // Longer timeout to prevent reconnects during speech
+      publishOnlyMode: false,     // Allow both publish and subscribe
+      // Disable adaptive features that could respond to voice activity
+      adaptiveStream: false,      // Ensure this is disabled at connection level too
+      reconnectPolicy: {
+        maxRetries: 10,           // More reconnection attempts
+        retryDelayMs: 1000,       // Fixed delay between retries
+        maxRetryDelayMs: 5000,    // Cap retry delay
+        backoffFactor: 1.0,       // No exponential backoff to maintain consistency
+      },
       rtcConfig: {
         iceServers: [
           { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }
@@ -28,6 +37,10 @@ const livekitConfigs = {
     roomOptions: {
       adaptiveStream: false,  // Keep disabled to prevent auto quality changes
       dynacast: false,        // Disable to prevent dynamic quality switching
+      // Disable ALL adaptive behaviors that could trigger on voice activity
+      webAudioMix: false,     // Disable web audio processing
+      expWebAudioMix: false,  // Disable experimental web audio
+      expWebOptimizeMode: false, // Disable web optimizations
       videoCaptureDefaults: {
         resolution: { width: 960, height: 540 },
         frameRate: 30,          // Increased for smoother video
@@ -49,6 +62,10 @@ const livekitConfigs = {
         googNoiseSuppression: false,  // Disable Google-specific noise suppression
         googHighpassFilter: false,    // Disable high-pass filter
         googTypingNoiseDetection: false, // Disable typing noise detection
+        // Additional voice activity detection disabling
+        googDAEchoCancellation: false, // Disable digital echo cancellation
+        googNoiseReduction: false,    // Disable noise reduction
+        googVoiceActivityDetection: false, // Explicitly disable VAD
         channelCount: 1,              // Mono to reduce bandwidth
         sampleRate: 48000,            // Standard rate
         sampleSize: 16,
@@ -66,14 +83,28 @@ const livekitConfigs = {
           priority: 'high',       // High priority for video encoding
           // Force constant bitrate mode to prevent jumping
           cbr: true,
+          // Prevent voice activity from affecting video
+          adaptivePtime: false,   // Disable adaptive packet timing
+          networkAdaptation: false, // Disable network adaptation
         },
         screenShareEncoding: { maxBitrate: 3_000_000, maxFramerate: 30 },
-        audioBitrate: 128000,     // Much higher audio bitrate to prevent competition
+        audioBitrate: 64000,      // Lower audio bitrate to reduce competition with video
         audioStereo: false,
-        audioPreset: 'speech',    // Optimize for speech
+        // Remove audioPreset to disable voice activity detection
+        // audioPreset: 'speech' causes VAD which triggers video adjustments
       },
       stopMicTrackOnMute: true,
       disconnectOnPageLeave: false,
+      // Disable voice activity detection and adaptive behaviors
+      e2ee: undefined,            // Make sure e2ee doesn't interfere
+      useSIPEndpoint: false,      // Disable SIP-related features
+      // Completely isolate audio and video processing
+      audioProcessing: {
+        voiceActivityDetection: false, // Explicitly disable VAD
+        autoGainControl: false,
+        echoCancellation: false,
+        noiseSuppression: false,
+      },
     },
   },
   low: {
