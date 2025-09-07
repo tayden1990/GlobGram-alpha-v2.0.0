@@ -94,8 +94,7 @@ const livekitConfigs = {
     },
   },
 }
-// Quality mode selector
-const [qualityMode, setQualityMode] = useState<'general'|'low'|'high'|'mobile'>('general');
+
 
 type Props = {
   roomName: string
@@ -106,7 +105,7 @@ type Props = {
   onEnded?: (info: { startedAt?: number; endedAt?: number; durationMs?: number; identity: string; room: string; reason?: string; hadConnected: boolean; participants?: string[]; leader?: string; iAmLeader?: boolean }) => void
 }
 
-export function CallPanel({ roomName, identity, open, onClose, onEnded }: Props) {
+  
   const room = useMemo(() => {
     const prefix = (CONFIG.LIVEKIT_ROOM_PREFIX || 'globgram').trim()
     return prefix ? `${prefix}-${roomName}` : roomName
