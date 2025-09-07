@@ -50,30 +50,14 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
     let interval: NodeJS.Timeout | undefined;
 
 
-    // Helper to poll local video stats using RTCPeerConnection
+
+    // Use LiveKit's getStats API
     const pollStats = async () => {
-      // Try to access the peer connection (may need to adjust for your SDK)
-      // This is a common pattern for LiveKit JS SDK, but may change in future versions
-  const pc = (room.engine && room.engine.client && (room.engine.client as any)._pc) as RTCPeerConnection | undefined;
-  if (!pc) return;
-  const senders = pc.getSenders();
-  const videoSender = senders.find((s: RTCRtpSender) => s.track && s.track.kind === 'video');
-      if (!videoSender) return;
-      const stats = await videoSender.getStats();
-      let videoBitrate = 0;
-      let fps = 0;
-      stats.forEach((report: any) => {
-        if (report.type === 'outbound-rtp' && report.kind === 'video') {
-          // Bitrate calculation: you may need to calculate delta over time for true bitrate
-          if (typeof report.bytesSent === 'number' && typeof report.timestamp === 'number') {
-            // For demo, just show bytesSent (not true bitrate)
-            videoBitrate = Math.round(report.bytesSent / 1000);
-          }
-          if (typeof report.framesPerSecond === 'number') {
-            fps = Math.round(report.framesPerSecond);
-          }
-        }
-      });
+      if (!room.engine || !(room.engine.client as any).getStats) return;
+      const stats = await (room.engine.client as any).getStats();
+      // Example stats: { outboundVideoBitrate, outboundAudioBitrate, outboundFrameRate }
+      const videoBitrate = Math.round(stats.outboundVideoBitrate ?? 0);
+      const fps = Math.round(stats.outboundFrameRate ?? 0);
       const time = new Date().toLocaleTimeString();
       setStatsHistory(prev => [...prev.slice(-29), { time, videoBitrate, fps }]);
     };
