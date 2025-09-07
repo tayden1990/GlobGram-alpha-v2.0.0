@@ -281,44 +281,199 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
 
   // --- Render UI ---
   return (
-    <div style={{ padding: "20px" }}>
-      <h2>Local Video</h2>
-      <video ref={localVideoRef} autoPlay muted playsInline style={{ width: "300px", border: "1px solid gray" }} />
+    <div style={{ 
+      padding: "24px",
+      background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)",
+      color: "#ffffff",
+      borderRadius: "16px",
+      fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+    }}>
+      {/* Video Section */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "32px" }}>
+        <div>
+          <h2 style={{ 
+            margin: "0 0 12px 0", 
+            fontSize: "18px", 
+            fontWeight: "600",
+            color: "#e2e8f0"
+          }}>Local Video</h2>
+          <video 
+            ref={localVideoRef} 
+            autoPlay 
+            muted 
+            playsInline 
+            style={{ 
+              width: "100%", 
+              maxWidth: "300px",
+              height: "auto",
+              borderRadius: "12px",
+              border: "2px solid #374151",
+              boxShadow: "0 8px 32px rgba(0, 0, 0, 0.3)"
+            }} 
+          />
+        </div>
+        
+        <div>
+          <h2 style={{ 
+            margin: "0 0 12px 0", 
+            fontSize: "18px", 
+            fontWeight: "600",
+            color: "#e2e8f0"
+          }}>Remote Video</h2>
+          <video 
+            ref={remoteVideoRef} 
+            autoPlay 
+            playsInline 
+            style={{ 
+              width: "100%", 
+              maxWidth: "300px",
+              height: "auto",
+              borderRadius: "12px",
+              border: "2px solid #374151",
+              boxShadow: "0 8px 32px rgba(0, 0, 0, 0.3)"
+            }} 
+          />
+        </div>
+      </div>
 
-      <h2>Remote Video</h2>
-      <video ref={remoteVideoRef} autoPlay playsInline style={{ width: "300px", border: "1px solid gray" }} />
-
-      <h3>Live Stats (last 30 points) 
-        <span style={{ 
-          marginLeft: '10px', 
-          fontSize: '14px', 
-          padding: '2px 8px', 
-          borderRadius: '4px',
-          background: dataSource === 'real' ? '#0a5d0a' : dataSource === 'mock' ? '#5d4a0a' : '#444',
-          color: dataSource === 'real' ? '#90ee90' : dataSource === 'mock' ? '#ffd700' : '#ccc'
+      {/* Stats Section */}
+      <div style={{ marginBottom: "24px" }}>
+        <h3 style={{ 
+          margin: "0 0 16px 0", 
+          fontSize: "20px", 
+          fontWeight: "600",
+          color: "#f1f5f9",
+          display: "flex",
+          alignItems: "center",
+          gap: "12px"
         }}>
-          {dataSource === 'real' ? '🟢 Real WebRTC Data' : 
-           dataSource === 'mock' ? '🟡 Mock Data' : '⚪ No Data'}
-        </span>
-      </h3>
-      <ResponsiveContainer width="100%" height={300}>
-        <LineChart data={statsHistory}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="time" />
-          <YAxis />
-          <Tooltip />
-          <Legend />
-          <Line type="monotone" dataKey="videoBitrate" stroke="#8884d8" name="Video Bitrate (kbps)" />
-          <Line type="monotone" dataKey="audioBitrate" stroke="#82ca9d" name="Audio Bitrate (kbps)" />
-          <Line type="monotone" dataKey="fps" stroke="#ff7300" name="FPS" />
-        </LineChart>
-      </ResponsiveContainer>
+          Live Stats (last 30 points)
+          <span style={{ 
+            fontSize: '13px', 
+            padding: '6px 12px', 
+            borderRadius: '20px',
+            fontWeight: "500",
+            background: dataSource === 'real' ? 'linear-gradient(135deg, #059669 0%, #10b981 100%)' : 
+                       dataSource === 'mock' ? 'linear-gradient(135deg, #d97706 0%, #f59e0b 100%)' : 
+                       'linear-gradient(135deg, #6b7280 0%, #9ca3af 100%)',
+            color: '#ffffff',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
+            border: '1px solid rgba(255, 255, 255, 0.1)'
+          }}>
+            {dataSource === 'real' ? '🟢 Real WebRTC Data' : 
+             dataSource === 'mock' ? '🟡 Mock Data' : '⚪ No Data'}
+          </span>
+        </h3>
+        
+        <div style={{
+          background: "rgba(255, 255, 255, 0.05)",
+          borderRadius: "16px",
+          padding: "20px",
+          border: "1px solid rgba(255, 255, 255, 0.1)",
+          backdropFilter: "blur(10px)"
+        }}>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={statsHistory}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.1)" />
+              <XAxis 
+                dataKey="time" 
+                stroke="#94a3b8"
+                fontSize={12}
+                tick={{ fill: '#94a3b8' }}
+              />
+              <YAxis 
+                stroke="#94a3b8"
+                fontSize={12}
+                tick={{ fill: '#94a3b8' }}
+              />
+              <Tooltip 
+                contentStyle={{
+                  background: "rgba(15, 23, 42, 0.95)",
+                  border: "1px solid rgba(255, 255, 255, 0.2)",
+                  borderRadius: "12px",
+                  color: "#ffffff",
+                  backdropFilter: "blur(10px)"
+                }}
+                labelStyle={{ color: "#e2e8f0" }}
+              />
+              <Legend 
+                wrapperStyle={{ color: "#e2e8f0" }}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="videoBitrate" 
+                stroke="#3b82f6" 
+                strokeWidth={3}
+                dot={{ fill: "#3b82f6", strokeWidth: 2, r: 4 }}
+                name="Video Bitrate (kbps)" 
+              />
+              <Line 
+                type="monotone" 
+                dataKey="audioBitrate" 
+                stroke="#10b981" 
+                strokeWidth={3}
+                dot={{ fill: "#10b981", strokeWidth: 2, r: 4 }}
+                name="Audio Bitrate (kbps)" 
+              />
+              <Line 
+                type="monotone" 
+                dataKey="fps" 
+                stroke="#f59e0b" 
+                strokeWidth={3}
+                dot={{ fill: "#f59e0b", strokeWidth: 2, r: 4 }}
+                name="FPS" 
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
 
-      <h3>Alerts</h3>
-      <div style={{ maxHeight: "150px", overflowY: "auto", border: "1px solid #ccc", padding: "10px", background: "#fffbe6" }}>
-        {alerts.map((alert, idx) => (
-          <div key={idx}>{alert}</div>
-        ))}
+      {/* Alerts Section */}
+      <div>
+        <h3 style={{ 
+          margin: "0 0 16px 0", 
+          fontSize: "20px", 
+          fontWeight: "600",
+          color: "#f1f5f9"
+        }}>Alerts</h3>
+        <div style={{ 
+          maxHeight: "200px", 
+          overflowY: "auto", 
+          background: "rgba(239, 68, 68, 0.1)",
+          border: "1px solid rgba(239, 68, 68, 0.3)",
+          borderRadius: "12px",
+          padding: "16px",
+          backdropFilter: "blur(10px)"
+        }}>
+          {alerts.length === 0 ? (
+            <div style={{ 
+              color: "#94a3b8", 
+              fontStyle: "italic",
+              textAlign: "center",
+              padding: "20px"
+            }}>
+              No alerts - call quality is good 📊
+            </div>
+          ) : (
+            alerts.map((alert, idx) => (
+              <div 
+                key={idx} 
+                style={{ 
+                  color: "#fef2f2",
+                  background: "rgba(239, 68, 68, 0.2)",
+                  padding: "10px 14px",
+                  borderRadius: "8px",
+                  marginBottom: idx < alerts.length - 1 ? "8px" : "0",
+                  border: "1px solid rgba(239, 68, 68, 0.4)",
+                  fontSize: "14px",
+                  fontWeight: "500"
+                }}
+              >
+                {alert}
+              </div>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );
