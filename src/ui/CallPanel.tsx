@@ -32,6 +32,23 @@ const livekitConfigs = {
         bundlePolicy: 'max-bundle',     // Bundle all media on single connection
         rtcpMuxPolicy: 'require',       // Multiplex RTP and RTCP for stability
         iceCandidatePoolSize: 10,       // Pre-gather ICE candidates
+        // Advanced stability settings to prevent voice-triggered changes
+        sdpSemantics: 'unified-plan',   // Use unified plan for stability
+        continualGatheringPolicy: 'gather_continually', // Keep gathering candidates
+        // Disable RTCP feedback that could trigger adaptations
+        enableRtpDataChannel: false,    // Disable RTP data channel features
+        enableDtlsSrtp: true,          // Ensure secure transport
+        enableImplicitRollback: false, // Disable automatic rollback
+        // Force stable connection parameters
+        enableCpuOveruseDetection: false, // Disable CPU overuse detection
+        enableDscp: false,             // Disable DSCP marking that could affect QoS
+        enableIpv6: true,              // Enable IPv6 for more connection options
+        enableRtcEventLog: false,      // Disable event logging for performance
+        enableSdpRemoteDescription: true,
+        // Bandwidth management - prevent automatic adjustments
+        maxBitrate: 4000000,           // 4 Mbps max to prevent degradation
+        minBitrate: 500000,            // 500 kbps min to maintain quality
+        startBitrate: 2000000,         // Start at 2 Mbps
       },
     },
     roomOptions: {
@@ -46,11 +63,32 @@ const livekitConfigs = {
         frameRate: 30,          // Increased for smoother video
         facingMode: 'user',
         contentHint: 'motion',
+        // Advanced constraints to prevent browser adaptations
+        resizeMode: 'none',     // Prevent automatic resizing
+        latency: { max: 0.1 },  // Force low latency
+        groupId: '',            // Force specific device group
+        deviceId: '',           // Will be set by device selection
+        // Prevent automatic adjustments during speech
+        exposureMode: 'manual', // Disable auto-exposure that could cause jumps
+        whiteBalanceMode: 'manual', // Disable auto white balance
+        focusMode: 'manual',    // Disable auto-focus adjustments
+        // Advanced video stability constraints
         advanced: [
           { degradationPreference: 'maintain-framerate' }, // Prioritize framerate over resolution
-          { width: { min: 640, ideal: 960, max: 1280 } },
-          { height: { min: 360, ideal: 540, max: 720 } },
-          { frameRate: { min: 15, ideal: 30, max: 30 } }
+          { width: { min: 960, ideal: 960, max: 960 } },   // Lock exact width
+          { height: { min: 540, ideal: 540, max: 540 } },  // Lock exact height
+          { frameRate: { min: 30, ideal: 30, max: 30 } },  // Lock exact framerate
+          { aspectRatio: { exact: 16/9 } },                // Lock exact aspect ratio
+          // Browser-specific stability constraints
+          { googCpuOveruseDetection: false },              // Disable CPU overuse detection
+          { googSuspendBelowMinBitrate: false },           // Never suspend video
+          { googScreencastMinBitrate: 500000 },            // Minimum bitrate for screen
+          { googHighStartBitrate: 2000000 },               // Start with high bitrate
+          { googVeryHighBitrate: 3000000 },                // Maximum bitrate threshold
+          { googTemporalLayeredScreencast: false },        // Disable temporal layers
+          { googNoiseReduction: false },                   // Disable noise reduction
+          { googDnsSuppression: false },                   // Disable DNS suppression
+          { googExperimentalAutoDetectSsrc: false },       // Disable SSRC detection
         ],
       },
       audioCaptureDefaults: {
@@ -77,7 +115,7 @@ const livekitConfigs = {
         simulcast: false,         // Keep disabled to prevent layer switching
         videoCodec: 'vp8',
         videoEncoding: { 
-          maxBitrate: 2_000_000,  // Even higher bitrate for maximum stability
+          maxBitrate: 3_000_000,  // Maximum bitrate to prevent degradation
           maxFramerate: 30,       // Consistent 30fps
           degradationPreference: 'maintain-framerate', // Prioritize smooth video
           priority: 'high',       // High priority for video encoding
@@ -86,6 +124,12 @@ const livekitConfigs = {
           // Prevent voice activity from affecting video
           adaptivePtime: false,   // Disable adaptive packet timing
           networkAdaptation: false, // Disable network adaptation
+          // Advanced WebRTC stability settings
+          scalabilityMode: 'L1T1', // Single layer, single temporal layer
+          hardwareAcceleration: 'prefer-hardware', // Use hardware encoding when available
+          powerEfficient: false,   // Disable power saving that could affect quality
+          latencyMode: 'realtime', // Optimize for real-time communication
+          contentHint: 'motion',   // Optimize for motion content
         },
         screenShareEncoding: { maxBitrate: 3_000_000, maxFramerate: 30 },
         audioBitrate: 64000,      // Lower audio bitrate to reduce competition with video

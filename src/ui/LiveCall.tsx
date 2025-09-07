@@ -3,6 +3,7 @@ import { Room, RemoteParticipant, Track } from "livekit-client";
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, CartesianGrid, ResponsiveContainer } from "recharts";
 import './video-stabilization.css';
 import { stabilizeVideo, VideoStabilizer } from './videoStabilizer';
+import { createVideoQualityMonitor, VideoQualityMonitor, VideoQualityMetrics } from './videoQualityMonitor';
 
 interface LiveCallProps {
   room: Room;
@@ -24,6 +25,8 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const localStabilizerRef = useRef<VideoStabilizer | null>(null);
   const remoteStabilizerRef = useRef<VideoStabilizer | null>(null);
+  const localQualityMonitorRef = useRef<VideoQualityMonitor | null>(null);
+  const remoteQualityMonitorRef = useRef<VideoQualityMonitor | null>(null);
 
   const [statsHistory, setStatsHistory] = useState<StatPoint[]>([]);
   const [alerts, setAlerts] = useState<string[]>([]);
@@ -34,6 +37,13 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
     rtt: number;
     packetLoss: number;
   } | null>(null);
+  
+  // Quality monitoring state
+  const [qualityAlerts, setQualityAlerts] = useState<string[]>([]);
+  const [currentQuality, setCurrentQuality] = useState<{
+    local: VideoQualityMetrics | null;
+    remote: VideoQualityMetrics | null;
+  }>({ local: null, remote: null });
 
   useEffect(() => {
     console.log('[LiveCall] Component mounted with room:', !!room);
@@ -85,39 +95,104 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
         if (localStabilizerRef.current) {
           localStabilizerRef.current.destroy();
         }
-        localStabilizerRef.current = stabilizeVideo(videoElement);      // Set video track constraints for maximum stability
-      const mediaTrack = (localCamPub.track as any).mediaStreamTrack;
-      if (mediaTrack && mediaTrack.applyConstraints) {
-        (async () => {
-          try {
-            await mediaTrack.applyConstraints({
-              width: { exact: 960 },           // Force exact resolution
-              height: { exact: 540 },          // Force exact resolution
-              frameRate: { exact: 30 },        // Force exact framerate
-              aspectRatio: { exact: 16/9 },    // Force exact aspect ratio
-              resizeMode: 'none',              // Prevent resizing
-              latency: { max: 0.1 },           // Low latency
-            });
-            
-            // Force video track settings
-            const settings = mediaTrack.getSettings();
-            console.log('[LiveCall] Applied video constraints:', settings);
-            
-          } catch (e) {
-            console.warn('Failed to apply strict video constraints, trying relaxed:', e);
+        localStabilizerRef.current = stabilizeVideo(videoElement);
+
+        // Advanced constraint monitoring and correction system
+        const mediaTrack = (localCamPub.track as any).mediaStreamTrack;
+        
+        // Set up advanced quality monitoring after mediaTrack is available
+        if (localQualityMonitorRef.current) {
+          localQualityMonitorRef.current.destroy();
+        }
+        
+        if (mediaTrack) {
+          localQualityMonitorRef.current = createVideoQualityMonitor(mediaTrack, {
+            targetWidth: 960,
+            targetHeight: 540,
+            targetFrameRate: 30,
+            minBitrate: 500000,
+            onQualityDegraded: (metrics) => {
+              const time = new Date().toLocaleTimeString();
+              setQualityAlerts(prev => [...prev.slice(-9), 
+                `🚨 Video quality degraded: ${metrics.width}x${metrics.height} @ ${metrics.frameRate}fps (${Math.round(metrics.bitrate/1000)}kbps) at ${time}`
+              ]);
+              console.warn('[LiveCall] Local video quality degraded:', metrics);
+            }
+          });
+          
+          // Get peer connection for advanced monitoring
+          const peerConnection = (localCamPub.track as any)?.sender?.transport?.pc;
+          if (peerConnection) {
+            localQualityMonitorRef.current.setPeerConnection(peerConnection);
+          }
+          
+          localQualityMonitorRef.current.startMonitoring();
+        }
+        if (mediaTrack && mediaTrack.applyConstraints) {
+          // Initial strict constraints
+          (async () => {
             try {
               await mediaTrack.applyConstraints({
-                width: { ideal: 960, min: 640, max: 960 },
-                height: { ideal: 540, min: 360, max: 540 },
-                frameRate: { ideal: 30, min: 30, max: 30 },
-                aspectRatio: { ideal: 16/9 }
+                width: { exact: 960 },           // Force exact resolution
+                height: { exact: 540 },          // Force exact resolution
+                frameRate: { exact: 30 },        // Force exact framerate
+                aspectRatio: { exact: 16/9 },    // Force exact aspect ratio
+                resizeMode: 'none',              // Prevent resizing
+                latency: { max: 0.1 },           // Low latency
+                // Advanced browser-specific constraints
+                googCpuOveruseDetection: false,  // Disable CPU overuse detection
+                googSuspendBelowMinBitrate: false, // Never suspend video
+                googNoiseReduction: false,       // Disable noise reduction
+                googExperimentalAutoDetectSsrc: false, // Disable SSRC detection
               });
-            } catch (e2) {
-              console.warn('Failed to apply any video constraints:', e2);
+              
+              const settings = mediaTrack.getSettings();
+              console.log('[LiveCall] Applied strict video constraints:', settings);
+              
+              // Set up continuous monitoring to prevent changes
+              const monitoringInterval = setInterval(() => {
+                const currentSettings = mediaTrack.getSettings();
+                
+                // Check if dimensions have changed (common cause of jumping)
+                if (currentSettings.width !== 960 || currentSettings.height !== 540) {
+                  console.warn('[LiveCall] Video dimensions changed, correcting:', currentSettings);
+                  
+                  // Immediately reapply constraints
+                  mediaTrack.applyConstraints({
+                    width: { exact: 960 },
+                    height: { exact: 540 },
+                    frameRate: { exact: 30 },
+                    aspectRatio: { exact: 16/9 },
+                  }).catch((e: any) => console.warn('Failed to reapply constraints:', e));
+                }
+                
+                // Check if framerate has changed
+                if (currentSettings.frameRate && currentSettings.frameRate !== 30) {
+                  console.warn('[LiveCall] Framerate changed, correcting:', currentSettings.frameRate);
+                  mediaTrack.applyConstraints({
+                    frameRate: { exact: 30 }
+                  }).catch((e: any) => console.warn('Failed to correct framerate:', e));
+                }
+              }, 500); // Check every 500ms
+              
+              // Cleanup monitoring on component unmount
+              return () => clearInterval(monitoringInterval);
+              
+            } catch (e) {
+              console.warn('Failed to apply strict video constraints, trying relaxed:', e);
+              try {
+                await mediaTrack.applyConstraints({
+                  width: { ideal: 960, min: 640, max: 960 },
+                  height: { ideal: 540, min: 360, max: 540 },
+                  frameRate: { ideal: 30, min: 30, max: 30 },
+                  aspectRatio: { ideal: 16/9 }
+                });
+              } catch (e2) {
+                console.warn('Failed to apply any video constraints:', e2);
+              }
             }
-          }
-        })();
-      }
+          })();
+        }
     }
 
     // Attach remote video for the first participant (if any) with stabilization
@@ -473,6 +548,21 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
         setAlerts((prev) => [...prev, ...newAlerts].slice(-100)); // Keep more alerts for better tracking
       }
 
+      // Update current quality metrics from monitors
+      if (localQualityMonitorRef.current) {
+        const localMetrics = localQualityMonitorRef.current.getCurrentMetrics();
+        if (localMetrics) {
+          setCurrentQuality(prev => ({ ...prev, local: localMetrics }));
+        }
+      }
+      
+      if (remoteQualityMonitorRef.current) {
+        const remoteMetrics = remoteQualityMonitorRef.current.getCurrentMetrics();
+        if (remoteMetrics) {
+          setCurrentQuality(prev => ({ ...prev, remote: remoteMetrics }));
+        }
+      }
+
       // Enhanced debug logging for LiveKit v2.7.6
       if (statsAttempts <= 8) {
         console.log(`[LiveCall Stats ${statsAttempts}]:`, {
@@ -500,6 +590,16 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
       if (remoteStabilizerRef.current) {
         remoteStabilizerRef.current.destroy();
         remoteStabilizerRef.current = null;
+      }
+      
+      // Cleanup quality monitors
+      if (localQualityMonitorRef.current) {
+        localQualityMonitorRef.current.destroy();
+        localQualityMonitorRef.current = null;
+      }
+      if (remoteQualityMonitorRef.current) {
+        remoteQualityMonitorRef.current.destroy();
+        remoteQualityMonitorRef.current = null;
       }
     };
   }, [room]);
@@ -731,6 +831,105 @@ const LiveCall: React.FC<LiveCallProps> = ({ room }) => {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Video Quality Monitoring Section */}
+      {(qualityAlerts.length > 0 || currentQuality.local || currentQuality.remote) && (
+        <div style={{ marginBottom: "24px" }}>
+          <h3 style={{ 
+            margin: "0 0 16px 0", 
+            fontSize: "20px", 
+            fontWeight: "600",
+            color: "#f1f5f9"
+          }}>Video Quality Monitor</h3>
+          
+          {/* Quality Alerts */}
+          {qualityAlerts.length > 0 && (
+            <div style={{
+              background: "rgba(239, 68, 68, 0.1)",
+              border: "1px solid rgba(239, 68, 68, 0.3)",
+              borderRadius: "12px",
+              padding: "16px",
+              marginBottom: "16px"
+            }}>
+              <h4 style={{ 
+                margin: "0 0 12px 0", 
+                fontSize: "16px", 
+                color: "#ef4444",
+                fontWeight: "600"
+              }}>Quality Degradation Alerts</h4>
+              <div style={{ maxHeight: "120px", overflowY: "auto" }}>
+                {qualityAlerts.slice(-5).map((alert, i) => (
+                  <div key={i} style={{ 
+                    fontSize: "14px", 
+                    color: "#fecaca", 
+                    marginBottom: "4px",
+                    fontFamily: "monospace"
+                  }}>
+                    {alert}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Current Quality Metrics */}
+          {(currentQuality.local || currentQuality.remote) && (
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: "16px"
+            }}>
+              {currentQuality.local && (
+                <div style={{
+                  background: "rgba(59, 130, 246, 0.1)",
+                  border: "1px solid rgba(59, 130, 246, 0.3)",
+                  borderRadius: "12px",
+                  padding: "16px"
+                }}>
+                  <h4 style={{ 
+                    margin: "0 0 12px 0", 
+                    fontSize: "16px", 
+                    color: "#3b82f6",
+                    fontWeight: "600"
+                  }}>Local Video Quality</h4>
+                  <div style={{ fontSize: "14px", color: "#e2e8f0", lineHeight: "1.6" }}>
+                    <div><strong>Resolution:</strong> {currentQuality.local.width}x{currentQuality.local.height}</div>
+                    <div><strong>Frame Rate:</strong> {currentQuality.local.frameRate} fps</div>
+                    <div><strong>Bitrate:</strong> {Math.round(currentQuality.local.bitrate / 1000)} kbps</div>
+                    {currentQuality.local.jitter > 0 && (
+                      <div><strong>Jitter:</strong> {currentQuality.local.jitter.toFixed(3)}s</div>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              {currentQuality.remote && (
+                <div style={{
+                  background: "rgba(16, 185, 129, 0.1)",
+                  border: "1px solid rgba(16, 185, 129, 0.3)",
+                  borderRadius: "12px",
+                  padding: "16px"
+                }}>
+                  <h4 style={{ 
+                    margin: "0 0 12px 0", 
+                    fontSize: "16px", 
+                    color: "#10b981",
+                    fontWeight: "600"
+                  }}>Remote Video Quality</h4>
+                  <div style={{ fontSize: "14px", color: "#e2e8f0", lineHeight: "1.6" }}>
+                    <div><strong>Resolution:</strong> {currentQuality.remote.width}x{currentQuality.remote.height}</div>
+                    <div><strong>Frame Rate:</strong> {currentQuality.remote.frameRate} fps</div>
+                    <div><strong>Bitrate:</strong> {Math.round(currentQuality.remote.bitrate / 1000)} kbps</div>
+                    {currentQuality.remote.jitter > 0 && (
+                      <div><strong>Jitter:</strong> {currentQuality.remote.jitter.toFixed(3)}s</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
