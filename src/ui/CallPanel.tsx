@@ -6,6 +6,8 @@ import { CONFIG } from '../config';
 import { emitToast } from './Toast';
 import SimpleConference from './SimpleConference';
 import { CallErrorBoundary } from './CallErrorBoundary';
+import Modal from './Modal';
+import LiveCall from './LiveCall';
 // LiveKit scenario-based configs
 const livekitConfigs = {
   general: {
@@ -119,6 +121,7 @@ export function CallPanel({ roomName, identity, open, onClose, onEnded }: Props)
   const [logs, setLogs] = useState<string[]>([])
   const [showDebug, setShowDebug] = useState(false)
   const [connectKey, setConnectKey] = useState(0) // force remount to reconnect
+  const [showCallStatus, setShowCallStatus] = useState(false);
 
   // Add global error handler for LiveKit WebRTC errors
   useEffect(() => {
@@ -546,8 +549,14 @@ export function CallPanel({ roomName, identity, open, onClose, onEnded }: Props)
       </CallErrorBoundary>
     </>
   )}
+      <button onClick={() => setShowCallStatus(true)} style={{ position: 'absolute', top: 12, right: 12, zIndex: 10 }}>
+        📊 Call Status
+      </button>
+      <Modal open={showCallStatus} onClose={() => setShowCallStatus(false)}>
+        {lkRoom && <LiveCall room={lkRoom} />}
+      </Modal>
       </div>
     </div>
   )
 }
- 
+
