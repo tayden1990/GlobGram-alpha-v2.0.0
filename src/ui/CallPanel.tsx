@@ -8,7 +8,6 @@ import SimpleConference from './SimpleConference';
 import { CallErrorBoundary } from './CallErrorBoundary';
 import Modal from './Modal';
 import LiveCall from './LiveCall';
-import { getGitHubPagesWebRTCConfig, getGitHubPagesMediaConstraints, isGitHubPages } from './githubPagesOptimizations';
 // LiveKit scenario-based configs
 const livekitConfigs = {
   general: {
@@ -26,45 +25,30 @@ const livekitConfigs = {
         backoffFactor: 1.0,       // No exponential backoff to maintain consistency
       },
       rtcConfig: {
-        ...getGitHubPagesWebRTCConfig(),
-        // GitHub Pages specific optimizations will be applied above
-        // Keep deployment-aware configuration
-        ...(isGitHubPages() ? {
-          // Additional GitHub Pages specific settings
-          iceServers: [
-            { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
-            { urls: ['stun:stun2.l.google.com:19302', 'stun:stun3.l.google.com:19302'] },
-            { urls: ['stun:stun4.l.google.com:19302'] }
-          ],
-          iceCandidatePoolSize: 15,      // Increased for GitHub Pages CDN delays
-          iceTransportPolicy: 'all',
-          bundlePolicy: 'max-bundle',
-          rtcpMuxPolicy: 'require',
-        } : {
-          // Local development settings
-          iceServers: [
-            { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }
-          ],
-          iceCandidatePoolSize: 10,
-          iceTransportPolicy: 'all',
-          bundlePolicy: 'max-bundle',
-          rtcpMuxPolicy: 'require',
-        }),
-        // Common settings for both environments
-        sdpSemantics: 'unified-plan',
-        continualGatheringPolicy: 'gather_continually',
-        enableRtpDataChannel: false,
-        enableDtlsSrtp: true,
-        enableImplicitRollback: false,
-        enableCpuOveruseDetection: false,
-        enableDscp: false,
-        enableIpv6: true,
-        enableRtcEventLog: false,
+        iceServers: [
+          { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }
+        ],
+        iceTransportPolicy: 'all',
+        bundlePolicy: 'max-bundle',     // Bundle all media on single connection
+        rtcpMuxPolicy: 'require',       // Multiplex RTP and RTCP for stability
+        iceCandidatePoolSize: 10,       // Pre-gather ICE candidates
+        // Advanced stability settings to prevent voice-triggered changes
+        sdpSemantics: 'unified-plan',   // Use unified plan for stability
+        continualGatheringPolicy: 'gather_continually', // Keep gathering candidates
+        // Disable RTCP feedback that could trigger adaptations
+        enableRtpDataChannel: false,    // Disable RTP data channel features
+        enableDtlsSrtp: true,          // Ensure secure transport
+        enableImplicitRollback: false, // Disable automatic rollback
+        // Force stable connection parameters
+        enableCpuOveruseDetection: false, // Disable CPU overuse detection
+        enableDscp: false,             // Disable DSCP marking that could affect QoS
+        enableIpv6: true,              // Enable IPv6 for more connection options
+        enableRtcEventLog: false,      // Disable event logging for performance
         enableSdpRemoteDescription: true,
-        // Bandwidth management adapted for deployment environment
-        maxBitrate: isGitHubPages() ? 1500000 : 4000000,     // Conservative for GitHub Pages
-        minBitrate: isGitHubPages() ? 300000 : 500000,       // Lower floor for GitHub Pages
-        startBitrate: isGitHubPages() ? 800000 : 2000000,    // Start conservative on GitHub Pages
+        // Bandwidth management - prevent automatic adjustments
+        maxBitrate: 4000000,           // 4 Mbps max to prevent degradation
+        minBitrate: 500000,            // 500 kbps min to maintain quality
+        startBitrate: 2000000,         // Start at 2 Mbps
       },
     },
     roomOptions: {
@@ -75,49 +59,36 @@ const livekitConfigs = {
       expWebAudioMix: false,  // Disable experimental web audio
       expWebOptimizeMode: false, // Disable web optimizations
       videoCaptureDefaults: {
-        // Use GitHub Pages optimized constraints if deployed there
-        ...(isGitHubPages() ? getGitHubPagesMediaConstraints().video : {
-          resolution: { width: 960, height: 540 },
-          frameRate: 30,
-          facingMode: 'user',
-          contentHint: 'motion',
-        }),
-        // Additional deployment-aware settings
-        resizeMode: isGitHubPages() ? 'crop-and-scale' : 'none',
-        latency: { max: isGitHubPages() ? 0.15 : 0.1 },
-        groupId: '',
-        deviceId: '',
-        // Prevent automatic adjustments during speech (less aggressive on GitHub Pages)
-        exposureMode: isGitHubPages() ? 'continuous' : 'manual',
-        whiteBalanceMode: isGitHubPages() ? 'continuous' : 'manual',
-        focusMode: isGitHubPages() ? 'continuous' : 'manual',
-        // Deployment-aware advanced constraints
-        advanced: isGitHubPages() ? [
-          { degradationPreference: 'maintain-framerate' },
-          { width: { min: 480, ideal: 640, max: 960 } },
-          { height: { min: 270, ideal: 360, max: 540 } },
-          { frameRate: { min: 15, ideal: 24, max: 30 } },
-          { aspectRatio: { ideal: 16/9 } },
-          // More permissive for GitHub Pages
-          { googCpuOveruseDetection: false },
-          { googSuspendBelowMinBitrate: false },
-          { googNoiseReduction: false },
-        ] : [
-          { degradationPreference: 'maintain-framerate' },
-          { width: { min: 960, ideal: 960, max: 960 } },
-          { height: { min: 540, ideal: 540, max: 540 } },
-          { frameRate: { min: 30, ideal: 30, max: 30 } },
-          { aspectRatio: { exact: 16/9 } },
-          // Strict settings for local development
-          { googCpuOveruseDetection: false },
-          { googSuspendBelowMinBitrate: false },
-          { googScreencastMinBitrate: 500000 },
-          { googHighStartBitrate: 2000000 },
-          { googVeryHighBitrate: 3000000 },
-          { googTemporalLayeredScreencast: false },
-          { googNoiseReduction: false },
-          { googDnsSuppression: false },
-          { googExperimentalAutoDetectSsrc: false },
+        resolution: { width: 960, height: 540 },
+        frameRate: 30,          // Increased for smoother video
+        facingMode: 'user',
+        contentHint: 'motion',
+        // Advanced constraints to prevent browser adaptations
+        resizeMode: 'none',     // Prevent automatic resizing
+        latency: { max: 0.1 },  // Force low latency
+        groupId: '',            // Force specific device group
+        deviceId: '',           // Will be set by device selection
+        // Prevent automatic adjustments during speech
+        exposureMode: 'manual', // Disable auto-exposure that could cause jumps
+        whiteBalanceMode: 'manual', // Disable auto white balance
+        focusMode: 'manual',    // Disable auto-focus adjustments
+        // Advanced video stability constraints
+        advanced: [
+          { degradationPreference: 'maintain-framerate' }, // Prioritize framerate over resolution
+          { width: { min: 960, ideal: 960, max: 960 } },   // Lock exact width
+          { height: { min: 540, ideal: 540, max: 540 } },  // Lock exact height
+          { frameRate: { min: 30, ideal: 30, max: 30 } },  // Lock exact framerate
+          { aspectRatio: { exact: 16/9 } },                // Lock exact aspect ratio
+          // Browser-specific stability constraints
+          { googCpuOveruseDetection: false },              // Disable CPU overuse detection
+          { googSuspendBelowMinBitrate: false },           // Never suspend video
+          { googScreencastMinBitrate: 500000 },            // Minimum bitrate for screen
+          { googHighStartBitrate: 2000000 },               // Start with high bitrate
+          { googVeryHighBitrate: 3000000 },                // Maximum bitrate threshold
+          { googTemporalLayeredScreencast: false },        // Disable temporal layers
+          { googNoiseReduction: false },                   // Disable noise reduction
+          { googDnsSuppression: false },                   // Disable DNS suppression
+          { googExperimentalAutoDetectSsrc: false },       // Disable SSRC detection
         ],
       },
       audioCaptureDefaults: {
@@ -144,22 +115,21 @@ const livekitConfigs = {
         simulcast: false,         // Keep disabled to prevent layer switching
         videoCodec: 'vp8',
         videoEncoding: { 
-          // Deployment-aware bitrate settings
-          maxBitrate: isGitHubPages() ? 1_200_000 : 3_000_000,  // Conservative for GitHub Pages
-          maxFramerate: isGitHubPages() ? 24 : 30,              // Slightly lower FPS for GitHub Pages
-          degradationPreference: 'maintain-framerate',          // Always prioritize smooth video
-          priority: 'high',                                     // High priority for video encoding
+          maxBitrate: 3_000_000,  // Maximum bitrate to prevent degradation
+          maxFramerate: 30,       // Consistent 30fps
+          degradationPreference: 'maintain-framerate', // Prioritize smooth video
+          priority: 'high',       // High priority for video encoding
           // Force constant bitrate mode to prevent jumping
           cbr: true,
           // Prevent voice activity from affecting video
-          adaptivePtime: false,                                 // Disable adaptive packet timing
-          networkAdaptation: false,                             // Disable network adaptation
+          adaptivePtime: false,   // Disable adaptive packet timing
+          networkAdaptation: false, // Disable network adaptation
           // Advanced WebRTC stability settings
-          scalabilityMode: 'L1T1',                             // Single layer, single temporal layer
-          hardwareAcceleration: isGitHubPages() ? 'prefer-software' : 'prefer-hardware', // Software encoding for GitHub Pages consistency
-          powerEfficient: false,                               // Disable power saving that could affect quality
-          latencyMode: 'realtime',                             // Optimize for real-time communication
-          contentHint: 'motion',                               // Optimize for motion content
+          scalabilityMode: 'L1T1', // Single layer, single temporal layer
+          hardwareAcceleration: 'prefer-hardware', // Use hardware encoding when available
+          powerEfficient: false,   // Disable power saving that could affect quality
+          latencyMode: 'realtime', // Optimize for real-time communication
+          contentHint: 'motion',   // Optimize for motion content
         },
         screenShareEncoding: { maxBitrate: 3_000_000, maxFramerate: 30 },
         audioBitrate: 64000,      // Lower audio bitrate to reduce competition with video

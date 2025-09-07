@@ -143,19 +143,6 @@ self.addEventListener('fetch', (e) => {
     )
     return
   }
-  // Don't cache WebRTC/real-time communication resources
-  const isRealTimeResource = url.pathname.includes('/livekit') || 
-                           url.pathname.includes('/webrtc') ||
-                           url.pathname.includes('/ws') ||
-                           url.pathname.includes('/socket') ||
-                           url.searchParams.has('sid') ||
-                           req.headers.get('upgrade') === 'websocket'
-  
-  if (isRealTimeResource) {
-    e.respondWith(fetch(req))
-    return
-  }
-  
   e.respondWith(
     caches.match(req).then(res => res || fetch(req).then(r => {
       try {
