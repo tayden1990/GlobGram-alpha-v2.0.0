@@ -27,7 +27,7 @@ const livekitConfigs = {
         resolution: { width: 960, height: 540 },
         frameRate: 15,
         facingMode: 'user',
-        advanced: [{ degradationPreference: 'maintain-framerate' }],
+        advanced: [{ degradationPreference: 'balanced' }],
       },
       audioCaptureDefaults: {
         echoCancellation: true,
@@ -37,7 +37,7 @@ const livekitConfigs = {
       publishDefaults: {
         red: true,
         dtx: true,
-        simulcast: true,
+        simulcast: false,
         videoCodec: 'vp8',
         simulcastLayers: [
           { rid: 'f', scaleResolutionDownBy: 1.0, maxBitrate: 1_200_000 },
