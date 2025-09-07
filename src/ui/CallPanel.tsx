@@ -549,8 +549,29 @@ export function CallPanel({ roomName, identity, open, onClose, onEnded }: Props)
       </CallErrorBoundary>
     </>
   )}
-      <button onClick={() => setShowCallStatus(true)} style={{ position: 'absolute', top: 12, right: 12, zIndex: 10 }}>
-        📊 Call Status
+      <button
+        onClick={() => setShowCallStatus(true)}
+        style={{
+          position: 'fixed',
+          top: 24,
+          right: 24,
+          zIndex: 1100,
+          background: '#1976d2',
+          color: '#fff',
+          border: 'none',
+          borderRadius: 6,
+          padding: '10px 22px',
+          fontSize: 18,
+          fontWeight: 600,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+        }}
+      >
+        <span role="img" aria-label="chart">📊</span>
+        <span>Call Status</span>
       </button>
       <Modal open={showCallStatus} onClose={() => setShowCallStatus(false)}>
         {lkRoom && <LiveCall room={lkRoom} />}
